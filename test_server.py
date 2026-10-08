@@ -56,6 +56,28 @@ class JsonStoreTests(unittest.TestCase):
             self.store.write(0, old)
         self.assertEqual(raised.exception.status.value, 400)
 
+    def test_task_presets_round_trip_and_legacy_compatibility(self):
+        first = self.store.write(0, app_data())
+        sample = app_data()
+        sample["taskPresets"] = [{"id": "english", "title": "外教英语课", "startTime": "19:30", "endTime": "20:00", "points": 30}]
+        self.store.write(first["revision"], sample)
+        self.assertEqual(self.store.read()["data"]["taskPresets"], sample["taskPresets"])
+
+    def test_invalid_task_presets_do_not_replace_saved_data(self):
+        saved = app_data("保留")
+        self.store.write(0, saved)
+        preset = {"id": "english", "title": "外教英语课", "startTime": "19:30", "endTime": "20:00", "points": 30}
+        invalid_lists = [None, {}, [None], [preset, preset]]
+        for changes in [{"id": ""}, {"title": " "}, {"title": "课" * 81}, {"startTime": "24:00"}, {"endTime": "19:30"}, {"endTime": "18:00"}, {"points": -1}, {"points": 0.5}, {"points": True}, {"points": "30"}, {"points": 10000}]:
+            invalid_lists.append([{**preset, **changes}])
+        for presets in invalid_lists:
+            with self.subTest(presets=presets):
+                invalid = {**app_data(), "taskPresets": presets}
+                with self.assertRaises(StoreError) as raised:
+                    self.store.write(1, invalid)
+                self.assertEqual(raised.exception.status.value, 400)
+                self.assertEqual(self.store.read()["data"], saved)
+
     def test_recurring_task_cannot_end_before_its_start_date(self):
         invalid = app_data()
         invalid["series"] = [{
