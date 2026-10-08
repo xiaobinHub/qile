@@ -1,0 +1,20 @@
+#!/bin/zsh
+# Finder stopper: unloads only this user's managed service.
+set -u
+
+APP_BIN_DIR="$(cd -- "$(dirname -- "$0")" && pwd)"
+PROJECT_ROOT="$(cd -- "$APP_BIN_DIR/../../.." && pwd)"
+LABEL="com.lele.growth"
+DOMAIN="gui/$(id -u)"
+
+/bin/launchctl bootout "$DOMAIN/$LABEL" >/dev/null 2>&1 || true
+
+# 兼容旧版终端启动方式：只终止属于当前项目的 server.py，不影响其他应用。
+for process_id in $(/usr/sbin/lsof -nP -tiTCP:8787 -sTCP:LISTEN 2>/dev/null); do
+  command_line=$(/bin/ps -p "$process_id" -o command= 2>/dev/null || true)
+  if [[ "$command_line" == *"$PROJECT_ROOT/server.py"* ]]; then
+    /bin/kill "$process_id" >/dev/null 2>&1 || true
+  fi
+done
+
+exit 0

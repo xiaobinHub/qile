@@ -3,11 +3,11 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from server import BACKUP_LIMIT, JsonStore, StoreError
+from server import ACCESS_CODE_LENGTH, BIND_HOST, AccessControl, BACKUP_LIMIT, JsonStore, StoreError, create_server
 
 
 def app_data(label="任务"):
-    return {"schemaVersion": 1, "settings": {"label": label}, "categories": [], "series": [], "exceptions": [], "completions": [], "ledger": []}
+    return {"schemaVersion": 2, "settings": {"label": label}, "categories": [], "series": [], "exceptions": [], "completions": [], "ledger": [], "gifts": [], "operationLog": []}
 
 
 class JsonStoreTests(unittest.TestCase):
@@ -48,6 +48,61 @@ class JsonStoreTests(unittest.TestCase):
             record = self.store.write(revision, app_data(str(index)))
             revision = record["revision"]
         self.assertEqual(len(list(self.store.backup_dir.glob("*.json"))), BACKUP_LIMIT)
+
+    def test_old_app_schema_is_rejected_on_write(self):
+        old = app_data()
+        old["schemaVersion"] = 1
+        with self.assertRaises(StoreError) as raised:
+            self.store.write(0, old)
+        self.assertEqual(raised.exception.status.value, 400)
+
+    def test_recurring_task_cannot_end_before_its_start_date(self):
+        invalid = app_data()
+        invalid["series"] = [{
+            "id": "daily-reading",
+            "title": "阅读",
+            "startDate": "2026-09-21",
+            "recurrence": {"freq": "daily", "interval": 1, "endType": "until", "until": "2026-09-20"},
+        }]
+        with self.assertRaises(StoreError) as raised:
+            self.store.write(0, invalid)
+        self.assertEqual(raised.exception.status.value, 400)
+
+
+class AccessControlTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.root = Path(self.temp.name)
+
+    def tearDown(self):
+        self.temp.cleanup()
+
+    def test_generated_code_persists_until_rotated(self):
+        access = AccessControl(self.root)
+        first = access.code()
+        self.assertEqual(len(first), ACCESS_CODE_LENGTH + 1)
+        self.assertTrue(access.verify_code(first.lower()))
+        self.assertEqual(AccessControl(self.root).code(), first)
+
+        token = access.create_session()
+        self.assertTrue(access.session_is_valid(token))
+        second = access.rotate()
+        self.assertNotEqual(second, first)
+        self.assertFalse(access.session_is_valid(token))
+        self.assertEqual(AccessControl(self.root).code(), second)
+
+
+class ServerConfigurationTests(unittest.TestCase):
+    def test_service_binds_all_local_interfaces(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "index.html").write_text("<!doctype html><title>test</title>", encoding="utf-8")
+            server = create_server(root, 0)
+            try:
+                self.assertEqual(server.server_address[0], BIND_HOST)
+                self.assertTrue(server.RequestHandlerClass.access.code())
+            finally:
+                server.server_close()
 
 
 if __name__ == "__main__":

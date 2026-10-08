@@ -1,3 +1,5 @@
 #!/bin/zsh
 cd -- "$(dirname "$0")"
-exec /usr/bin/env python3 server.py
+echo "正在转由静默后台服务启动乐乐成长计划…"
+echo "今后建议直接双击“启动乐乐成长.app”，无需保持终端窗口打开。"
+open "启动乐乐成长.app"
