@@ -220,17 +220,21 @@ class JsonStore:
         if not isinstance(presets, list):
             raise StoreError(HTTPStatus.BAD_REQUEST, "常用任务配置必须为列表。")
         preset_ids = set()
+        category_ids = {category.get("id") for category in data["categories"]
+                        if isinstance(category, dict) and isinstance(category.get("id"), str)}
         for preset in presets:
             if not isinstance(preset, dict):
                 raise StoreError(HTTPStatus.BAD_REQUEST, "常用任务配置格式不正确。")
             preset_id, title = preset.get("id"), preset.get("title")
             start, end, points = preset.get("startTime"), preset.get("endTime"), preset.get("points")
+            category_id = preset.get("categoryId", "")
             valid_time = lambda value: isinstance(value, str) and re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", value)
             if (not isinstance(preset_id, str) or not re.fullmatch(r"[A-Za-z0-9._:-]{1,100}", preset_id)
                     or preset_id in preset_ids or not isinstance(title, str) or not title.strip() or len(title) > 80
                     or not valid_time(start) or not valid_time(end) or end <= start
-                    or type(points) is not int or not 0 <= points <= 9999):
-                raise StoreError(HTTPStatus.BAD_REQUEST, "常用任务配置的名称、时间、积分或标识不正确。")
+                    or type(points) is not int or not 0 <= points <= 9999
+                    or not isinstance(category_id, str) or (category_id and category_id not in category_ids)):
+                raise StoreError(HTTPStatus.BAD_REQUEST, "常用任务配置的名称、类型、时间、积分或标识不正确。")
             preset_ids.add(preset_id)
         # 前端会做完整校验；服务端额外拦截已知会导致客户端无法加载的
         # 重复任务日期边界，避免错误数据再次落盘。

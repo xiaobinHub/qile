@@ -63,6 +63,23 @@ class JsonStoreTests(unittest.TestCase):
         self.store.write(first["revision"], sample)
         self.assertEqual(self.store.read()["data"]["taskPresets"], sample["taskPresets"])
 
+    def test_task_preset_category_round_trip_and_reference_validation(self):
+        sample = app_data()
+        sample["categories"] = [{"id": "learning", "name": "学习", "color": "#5b8def", "active": True}]
+        preset = {"id": "english", "title": "外教英语课", "categoryId": "learning", "startTime": "19:30", "endTime": "20:00", "points": 30}
+        sample["taskPresets"] = [preset]
+        saved = self.store.write(0, sample)
+        self.assertEqual(JsonStore(Path(self.temp.name)).read()["data"]["taskPresets"][0]["categoryId"], "learning")
+        for category_id in ["missing", None, 1, {}]:
+            with self.subTest(category_id=category_id):
+                invalid = {**sample, "taskPresets": [{**preset, "categoryId": category_id}]}
+                with self.assertRaises(StoreError) as raised:
+                    self.store.write(saved["revision"], invalid)
+                self.assertEqual(raised.exception.status.value, 400)
+                self.assertEqual(self.store.read()["data"], sample)
+        sample["categories"][0]["active"] = False
+        self.store.write(saved["revision"], sample)
+
     def test_invalid_task_presets_do_not_replace_saved_data(self):
         saved = app_data("保留")
         self.store.write(0, saved)
