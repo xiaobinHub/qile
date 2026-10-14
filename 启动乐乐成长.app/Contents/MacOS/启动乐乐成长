@@ -13,6 +13,23 @@ LOG_DIR="$PROJECT_ROOT/data/logs"
 SERVICE_URL="http://127.0.0.1:8787/"
 PYTHON_BIN="$(command -v python3 || true)"
 
+# 使用迁移核验后明确选择的存储方式；配置存在本身不会触发切换。
+if [[ -f "$PROJECT_ROOT/data/storage-mode.json" ]]; then
+  STORAGE_MODE=$(/usr/bin/plutil -extract storage raw -o - "$PROJECT_ROOT/data/storage-mode.json" 2>/dev/null || true)
+else
+  if [[ -f "$PROJECT_ROOT/data/rds-config.json" || -f "$PROJECT_ROOT/data/rds-cutover.json" ]]; then
+    /usr/bin/osascript -e 'display alert "无法启动乐乐成长计划" message "存储方式配置缺失，已停止启动以保护当前数据。" as critical'
+    exit 1
+  fi
+  STORAGE_MODE="json"
+fi
+if [[ "$STORAGE_MODE" == "postgres" ]]; then
+  PYTHON_BIN="$PROJECT_ROOT/.venv/bin/python"
+elif [[ "$STORAGE_MODE" != "json" ]]; then
+  /usr/bin/osascript -e 'display alert "无法启动乐乐成长计划" message "存储方式配置无效，请检查 data/storage-mode.json。" as critical'
+  exit 1
+fi
+
 show_error() {
   /usr/bin/osascript - "$1" <<'APPLESCRIPT'
 on run argv
@@ -21,7 +38,7 @@ end run
 APPLESCRIPT
 }
 
-if [[ -z "$PYTHON_BIN" || ! -f "$PROJECT_ROOT/server.py" || ! -f "$PROJECT_ROOT/index.html" ]]; then
+if [[ -z "$PYTHON_BIN" || ! -x "$PYTHON_BIN" || ! -f "$PROJECT_ROOT/server.py" || ! -f "$PROJECT_ROOT/index.html" ]]; then
   show_error "未找到项目文件或 Python 3。请确认“启动乐乐成长.app”仍在项目目录中。"
   exit 1
 fi
@@ -36,16 +53,19 @@ if [[ -f "$LOG_DIR/launchd.stderr.log" && $(/usr/bin/stat -f%z "$LOG_DIR/launchd
   mv -f "$LOG_DIR/launchd.stderr.log" "$LOG_DIR/launchd.stderr.previous.log"
 fi
 
-/usr/bin/env "$PYTHON_BIN" - "$PROJECT_ROOT" "$PLIST_PATH" "$LOG_DIR" <<'PY'
+/usr/bin/env "$PYTHON_BIN" - "$PROJECT_ROOT" "$PLIST_PATH" "$LOG_DIR" "$STORAGE_MODE" <<'PY'
 import os
 import plistlib
 import sys
 import tempfile
 
-root, destination, log_dir = sys.argv[1:]
+root, destination, log_dir, storage = sys.argv[1:]
+arguments = [sys.executable, os.path.join(root, "server.py"), "--no-browser", "--log-dir", log_dir, "--storage", storage]
+if storage == "postgres":
+    arguments += ["--db-config", os.path.join(root, "data", "rds-config.json")]
 record = {
     "Label": "com.lele.growth",
-    "ProgramArguments": [sys.executable, os.path.join(root, "server.py"), "--no-browser", "--log-dir", log_dir],
+    "ProgramArguments": arguments,
     "WorkingDirectory": root,
     "RunAtLoad": True,
     "KeepAlive": True,

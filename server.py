@@ -26,14 +26,13 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
+from storage import BACKUP_LIMIT, STORE_FORMAT, STORE_VERSION, DataStore, JsonStore, StoreError, resolve_storage_mode
+
 
 LOOPBACK_HOST = "127.0.0.1"
 BIND_HOST = "0.0.0.0"
 PORT = 8787
-STORE_FORMAT = "lele-task-manager-store"
-STORE_VERSION = 1
 MAX_BODY_BYTES = 16 * 1024 * 1024
-BACKUP_LIMIT = 30
 ACCESS_CODE_LENGTH = 10
 SESSION_MAX_AGE_SECONDS = 30 * 24 * 60 * 60
 ACCESS_COOKIE_NAME = "lele_access_session"
@@ -62,12 +61,6 @@ def configure_service_logging(log_dir: str | None) -> None:
 def service_log(message: str) -> None:
     SERVICE_LOGGER.info(message)
 
-
-class StoreError(Exception):
-    def __init__(self, status: HTTPStatus, message: str):
-        super().__init__(message)
-        self.status = status
-        self.message = message
 
 
 def is_loopback(address: str) -> bool:
@@ -174,189 +167,11 @@ class AccessControl:
             return token in self._sessions
 
 
-class JsonStore:
-    def __init__(self, project_root: Path):
-        self.project_root = project_root
-        self.data_dir = project_root / "data"
-        self.data_file = self.data_dir / "lele-task-manager.json"
-        self.backup_dir = self.data_dir / "backups"
-        self.operation_log_file = self.data_dir / "lele-operation-log.jsonl"
-        self._lock = threading.RLock()
-
-    @staticmethod
-    def _empty() -> dict[str, Any]:
-        return {
-            "format": STORE_FORMAT,
-            "version": STORE_VERSION,
-            "revision": 0,
-            "updatedAt": None,
-            "data": None,
-        }
-
-    @staticmethod
-    def _decode(raw: bytes) -> dict[str, Any]:
-        try:
-            record = json.loads(raw.decode("utf-8"))
-        except (UnicodeDecodeError, json.JSONDecodeError) as error:
-            raise StoreError(HTTPStatus.UNPROCESSABLE_ENTITY, "本机数据文件无法解析，未作任何修改。") from error
-        if not isinstance(record, dict):
-            raise StoreError(HTTPStatus.UNPROCESSABLE_ENTITY, "本机数据文件格式不正确，未作任何修改。")
-        if record.get("format") != STORE_FORMAT or record.get("version") != STORE_VERSION:
-            raise StoreError(HTTPStatus.UNPROCESSABLE_ENTITY, "本机数据文件版本不受支持，未作任何修改。")
-        if not isinstance(record.get("revision"), int) or record["revision"] < 0:
-            raise StoreError(HTTPStatus.UNPROCESSABLE_ENTITY, "本机数据文件缺少有效版本号，未作任何修改。")
-        if not isinstance(record.get("data"), dict):
-            raise StoreError(HTTPStatus.UNPROCESSABLE_ENTITY, "本机数据文件缺少任务数据，未作任何修改。")
-        return record
-
-    @staticmethod
-    def _validate_app_data(data: Any) -> dict[str, Any]:
-        if not isinstance(data, dict) or data.get("schemaVersion") != 2:
-            raise StoreError(HTTPStatus.BAD_REQUEST, "提交的数据格式不正确。")
-        required = ("settings", "categories", "series", "exceptions", "completions", "ledger", "gifts", "operationLog")
-        if any(key not in data for key in required) or any(not isinstance(data[key], list) for key in required if key != "settings"):
-            raise StoreError(HTTPStatus.BAD_REQUEST, "提交的数据结构不完整。")
-        presets = data.get("taskPresets", [])
-        if not isinstance(presets, list):
-            raise StoreError(HTTPStatus.BAD_REQUEST, "常用任务配置必须为列表。")
-        preset_ids = set()
-        category_ids = {category.get("id") for category in data["categories"]
-                        if isinstance(category, dict) and isinstance(category.get("id"), str)}
-        for preset in presets:
-            if not isinstance(preset, dict):
-                raise StoreError(HTTPStatus.BAD_REQUEST, "常用任务配置格式不正确。")
-            preset_id, title = preset.get("id"), preset.get("title")
-            start, end, points = preset.get("startTime"), preset.get("endTime"), preset.get("points")
-            category_id = preset.get("categoryId", "")
-            valid_time = lambda value: isinstance(value, str) and re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", value)
-            if (not isinstance(preset_id, str) or not re.fullmatch(r"[A-Za-z0-9._:-]{1,100}", preset_id)
-                    or preset_id in preset_ids or not isinstance(title, str) or not title.strip() or len(title) > 80
-                    or not valid_time(start) or not valid_time(end) or end <= start
-                    or type(points) is not int or not 0 <= points <= 9999
-                    or not isinstance(category_id, str) or (category_id and category_id not in category_ids)):
-                raise StoreError(HTTPStatus.BAD_REQUEST, "常用任务配置的名称、类型、时间、积分或标识不正确。")
-            preset_ids.add(preset_id)
-        # 前端会做完整校验；服务端额外拦截已知会导致客户端无法加载的
-        # 重复任务日期边界，避免错误数据再次落盘。
-        for task in data.get("series", []):
-            if not isinstance(task, dict):
-                continue
-            if not isinstance(task.get("id"), str) or not isinstance(task.get("startDate"), str):
-                raise StoreError(HTTPStatus.BAD_REQUEST, "任务系列缺少有效标识或开始日期。")
-            rule = task.get("recurrence")
-            if not isinstance(rule, dict) or rule.get("endType") != "until":
-                continue
-            start_date, until_date = task.get("startDate"), rule.get("until")
-            if isinstance(start_date, str) and isinstance(until_date, str) and until_date < start_date:
-                raise StoreError(HTTPStatus.BAD_REQUEST, "重复任务的截止日期不能早于开始日期。")
-            revisions = task.get("revisions")
-            if revisions is not None:
-                if not isinstance(revisions, list) or not revisions:
-                    raise StoreError(HTTPStatus.BAD_REQUEST, "任务规则版本不能为空。")
-                last = ""
-                for revision in revisions:
-                    if not isinstance(revision, dict) or not isinstance(revision.get("effectiveFrom"), str):
-                        raise StoreError(HTTPStatus.BAD_REQUEST, "任务规则版本格式不正确。")
-                    if last and revision["effectiveFrom"] <= last:
-                        raise StoreError(HTTPStatus.BAD_REQUEST, "任务规则版本日期必须递增。")
-                    last = revision["effectiveFrom"]
-        try:
-            json.dumps(data, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
-        except (TypeError, ValueError) as error:
-            raise StoreError(HTTPStatus.BAD_REQUEST, "提交的数据无法保存为 JSON。") from error
-        return data
-
-    def read(self) -> dict[str, Any]:
-        with self._lock:
-            if not self.data_file.exists():
-                return self._empty()
-            return self._decode(self.data_file.read_bytes())
-
-    def raw(self) -> bytes:
-        with self._lock:
-            if not self.data_file.exists():
-                raise StoreError(HTTPStatus.NOT_FOUND, "尚未创建本机数据文件。")
-            return self.data_file.read_bytes()
-
-    def _ensure_dirs(self) -> None:
-        self.data_dir.mkdir(parents=True, exist_ok=True)
-        self.backup_dir.mkdir(parents=True, exist_ok=True)
-
-    @staticmethod
-    def _fsync_directory(directory: Path) -> None:
-        if os.name == "posix":
-            descriptor = os.open(directory, os.O_RDONLY)
-            try:
-                os.fsync(descriptor)
-            finally:
-                os.close(descriptor)
-
-    def _atomic_write(self, destination: Path, payload: bytes) -> None:
-        self._ensure_dirs()
-        descriptor, temporary_name = tempfile.mkstemp(prefix=".write-", dir=destination.parent)
-        try:
-            with os.fdopen(descriptor, "wb") as temporary:
-                temporary.write(payload)
-                temporary.flush()
-                os.fsync(temporary.fileno())
-            os.replace(temporary_name, destination)
-            self._fsync_directory(destination.parent)
-        finally:
-            if os.path.exists(temporary_name):
-                os.unlink(temporary_name)
-
-    def _backup_current(self, revision: int, raw: bytes, corrupt: bool = False) -> None:
-        self._ensure_dirs()
-        timestamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")[:-3]
-        label = "corrupt" if corrupt else f"r{revision}"
-        self._atomic_write(self.backup_dir / f"{timestamp}-{label}.json", raw)
-
-    def _prune_backups(self) -> None:
-        backups = sorted(self.backup_dir.glob("*.json"), key=lambda path: path.stat().st_mtime, reverse=True)
-        for backup in backups[BACKUP_LIMIT:]:
-            backup.unlink(missing_ok=True)
-
-    def append_operation_log(self, record: dict[str, Any]) -> None:
-        """记录保存请求的结果；日志不包含完整任务数据。"""
-        self._ensure_dirs()
-        payload = (json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n").encode("utf-8")
-        with self._lock:
-            with self.operation_log_file.open("ab") as log:
-                log.write(payload)
-                log.flush()
-                os.fsync(log.fileno())
-
-    def write(self, expected_revision: int | None, data: Any, repair: bool = False) -> dict[str, Any]:
-        data = self._validate_app_data(data)
-        with self._lock:
-            current_raw = self.data_file.read_bytes() if self.data_file.exists() else None
-            try:
-                current = self._decode(current_raw) if current_raw is not None else self._empty()
-            except StoreError:
-                if not repair:
-                    raise
-                self._backup_current(0, current_raw or b"", corrupt=True)
-                current = self._empty()
-            if expected_revision is None or expected_revision != current["revision"]:
-                raise StoreError(HTTPStatus.CONFLICT, "本机数据已在其他浏览器更新，请刷新后再保存。")
-            if current_raw is not None:
-                self._backup_current(current["revision"], current_raw)
-            next_record = {
-                "format": STORE_FORMAT,
-                "version": STORE_VERSION,
-                "revision": current["revision"] + 1,
-                "updatedAt": datetime.now().astimezone().isoformat(timespec="seconds"),
-                "data": data,
-            }
-            payload = json.dumps(next_record, ensure_ascii=False, indent=2, allow_nan=False).encode("utf-8") + b"\n"
-            self._atomic_write(self.data_file, payload)
-            self._prune_backups()
-            return next_record
 
 
 class AppHandler(BaseHTTPRequestHandler):
     server_version = "LeleTaskManager/1"
-    store: JsonStore
+    store: DataStore
     access: AccessControl
     index_file: Path
 
@@ -431,7 +246,12 @@ class AppHandler(BaseHTTPRequestHandler):
             if path in ("/", "/index.html"):
                 self._serve_index()
             elif path == "/api/health":
-                self._json(HTTPStatus.OK, {"service": "lele-task-manager", "version": STORE_VERSION})
+                is_postgres = not isinstance(self.store, JsonStore)
+                ready = self.store.health() if is_postgres else True
+                self._json(HTTPStatus.OK if ready else HTTPStatus.SERVICE_UNAVAILABLE, {
+                    "service": "lele-task-manager", "version": STORE_VERSION,
+                    "storage": "postgres" if is_postgres else "json", "databaseReady": ready,
+                })
             elif path == "/api/access/status":
                 self._require_access()
                 self._json(HTTPStatus.OK, self._access_status())
@@ -462,6 +282,8 @@ class AppHandler(BaseHTTPRequestHandler):
         request_id = secrets.token_hex(8)
         expected = None
         result = "error"
+        current_revision = None
+        http_status = HTTPStatus.INTERNAL_SERVER_ERROR
         try:
             self._require_access()
             payload = self._read_request_json()
@@ -470,9 +292,12 @@ class AppHandler(BaseHTTPRequestHandler):
                 raise StoreError(HTTPStatus.BAD_REQUEST, "缺少有效的数据版本号。")
             repair = parse_qs(parsed.query).get("repair") == ["1"]
             record = self.store.write(expected, payload.get("data"), repair=repair)
+            current_revision = record["revision"]
+            http_status = HTTPStatus.OK
             self._json(HTTPStatus.OK, record)
             result = "saved"
         except StoreError as error:
+            http_status = error.status
             self._error(error)
             result = f"error:{error.status.value}"
             error_message = error.message
@@ -487,12 +312,13 @@ class AppHandler(BaseHTTPRequestHandler):
                     "at": datetime.now().astimezone().isoformat(timespec="seconds"),
                     "client": self.client_address[0],
                     "expectedRevision": expected,
-                    "currentRevision": self.store.read().get("revision"),
+                    "currentRevision": current_revision,
+                    "httpStatus": http_status.value,
                     "result": result,
                     "error": locals().get("error_message"),
                 })
             except (OSError, StoreError):
-                pass
+                service_log("保存请求日志未能写入；业务结果保持不变。")
 
     def do_POST(self) -> None:  # noqa: N802
         path = urlparse(self.path).path
@@ -526,11 +352,20 @@ def has_running_instance() -> bool:
         return False
 
 
-def create_server(project_root: Path, port: int = PORT) -> ThreadingHTTPServer:
+def create_server(project_root: Path, port: int = PORT, *, storage: str = "json",
+                  config_path: Path | None = None, data_root: Path | None = None) -> ThreadingHTTPServer:
+    root = data_root or project_root
+    if storage == "postgres":
+        from postgres_store import PostgresStore
+        store = PostgresStore(root, config_path=config_path)
+    elif storage == "json":
+        store = JsonStore(root)
+    else:
+        raise StoreError(HTTPStatus.SERVICE_UNAVAILABLE, "不支持的数据存储类型。")
     handler = type(
         "LeleHandler",
         (AppHandler,),
-        {"store": JsonStore(project_root), "access": AccessControl(project_root), "index_file": project_root / "index.html"},
+        {"store": store, "access": AccessControl(root), "index_file": project_root / "index.html"},
     )
     return ThreadingHTTPServer((BIND_HOST, port), handler)
 
@@ -540,11 +375,19 @@ def main() -> int:
     parser.add_argument("--port", type=int, default=PORT)
     parser.add_argument("--no-browser", action="store_true", help="服务就绪后不自动打开浏览器（供后台服务使用）")
     parser.add_argument("--log-dir", help="后台服务日志目录；日志会自动轮转")
+    parser.add_argument("--storage", choices=("json", "postgres"), help="明确选择存储方式；未指定时读取本机配置")
+    parser.add_argument("--db-config", type=Path, help="本机数据库配置文件")
+    parser.add_argument("--data-root", type=Path, help="独立数据根目录（供隔离测试使用）")
     args = parser.parse_args()
     configure_service_logging(args.log_dir)
     root = Path(__file__).resolve().parent
     try:
-        server = create_server(root, args.port)
+        args.storage = resolve_storage_mode(root, args.storage)
+        server = create_server(root, args.port, storage=args.storage,
+                               config_path=args.db_config, data_root=args.data_root)
+    except StoreError as error:
+        service_log(error.message)
+        return 1
     except OSError as error:
         if args.port == PORT and has_running_instance():
             service_log("乐乐成长计划已经在运行。")
@@ -562,7 +405,7 @@ def main() -> int:
             service_log(f"  {lan_url}")
     else:
         service_log("暂未检测到局域网地址；连接 Wi-Fi 后重新启动可显示访问地址。")
-    service_log(f"局域网访问口令：{server.RequestHandlerClass.access.code()}")
+    service_log("局域网访问口令可在本机页面“设置 → 局域网共享”查看。")
     service_log("口令会持续有效，直到在设置中手动刷新。")
     if not args.no_browser:
         threading.Timer(0.35, lambda: webbrowser.open(url)).start()
