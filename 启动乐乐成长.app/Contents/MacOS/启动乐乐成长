@@ -109,8 +109,8 @@ done
 }
 /bin/launchctl kickstart -k "$DOMAIN/$LABEL" >/dev/null 2>&1 || true
 
-for attempt in {1..30}; do
-  if /usr/bin/curl --silent --fail --max-time 1 "${SERVICE_URL}api/health" >/dev/null 2>&1; then
+for attempt in {1..20}; do
+  if /usr/bin/curl --silent --fail --max-time 3 "${SERVICE_URL}api/health" >/dev/null 2>&1; then
     /usr/bin/open "$SERVICE_URL"
     exit 0
   fi
