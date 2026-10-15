@@ -9,3 +9,4 @@ data/
 .playwright-cli/
 
 output/playwright/
+node_modules/

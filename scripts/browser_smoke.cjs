@@ -1,0 +1,93 @@
+/* Browser regression against disposable local lele_test_browser only. */
+const {chromium}=require('playwright');
+const {spawn,execFileSync}=require('node:child_process');
+const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto');
+const assert=require('node:assert/strict');
+const root=path.resolve(__dirname,'..'),python=path.join(root,'.venv/bin/python');
+const runtime=path.join(root,'data/development'),out=path.join(root,'output/playwright');
+const passwords={admin:crypto.randomBytes(20).toString('hex'),adminNew:crypto.randomBytes(20).toString('hex'),initial:crypto.randomBytes(20).toString('hex'),dad:crypto.randomBytes(20).toString('hex'),mom:crypto.randomBytes(20).toString('hex')};
+const setup=`
+import json,sys,os
+from pathlib import Path
+import psycopg
+from psycopg import sql
+from child_service import initialize,bootstrap,load_config
+root=Path.cwd();base=load_config(root/'data/development/config.json');assert base['environment']=='development'
+params={**base['_connect'],'dbname':'postgres'}
+with psycopg.connect(**params,autocommit=True) as c:
+ if not c.execute('SELECT 1 FROM pg_database WHERE datname=%s',('lele_test_browser',)).fetchone():c.execute(sql.SQL('CREATE DATABASE {}').format(sql.Identifier('lele_test_browser')))
+config={'environment':'development','database':{**base['database'],'dbname':'lele_test_browser'},'parent_origin':'http://127.0.0.1:18887','admin_origin':'http://127.0.0.1:18888'}
+p=root/'data/development/browser-config.json';p.write_text(json.dumps(config));p.chmod(0o600)
+params={**base['_connect'],'dbname':'lele_test_browser'}
+with psycopg.connect(**params) as c:c.execute('DROP SCHEMA IF EXISTS lele CASCADE')
+initialize(p);bootstrap(p,'qaadmin','测试管理员',json.load(sys.stdin)['admin'])
+`;
+fs.mkdirSync(out,{recursive:true});
+execFileSync(python,['-c',setup],{cwd:root,input:JSON.stringify(passwords),stdio:['pipe','pipe','pipe']});
+const children=[];
+function start(surface,port){const fd=fs.openSync(path.join(runtime,'browser-'+surface+'.log'),'a');const proc=spawn(python,['-m','uvicorn','accounts_app:create_from_env','--factory','--host','127.0.0.1','--port',String(port),'--no-proxy-headers'],{cwd:root,env:{...process.env,LELE_ACCOUNTS_CONFIG:path.join(runtime,'browser-config.json'),LELE_SURFACE:surface},stdio:['ignore',fd,fd]});fs.closeSync(fd);children.push(proc)}
+async function ready(port){for(let n=0;n<60;n++){try{const r=await fetch(`http://127.0.0.1:${port}/api/health`);if(r.ok)return}catch{}await new Promise(r=>setTimeout(r,150))}throw Error('local QA service did not start')}
+const failures=[];let browser;
+async function login(page,port,name,password){await page.goto(`http://127.0.0.1:${port}/`);await page.locator('#loginName').fill(name);await page.locator('#loginPassword').fill(password);await page.locator('#loginForm button').click()}
+async function parentPassword(page,newPassword){await page.locator('#passwordCurrent').fill(passwords.initial);await page.locator('#passwordNew').fill(newPassword);await page.locator('#passwordRepeat').fill(newPassword);await page.locator('#passwordForm button').click();await page.locator('#loginName').waitFor()}
+async function waitForStore(page,id,predicate){for(let n=0;n<200;n++){const value=await page.evaluate(async child=>(await fetch(`/api/children/${child}/data`)).json(),id);if(predicate(value))return value;await page.waitForTimeout(50)}throw Error('Persisted business result not reached')}
+async function createParent(admin,loginName,nickname){await admin.locator('#createLogin').fill(loginName);await admin.locator('#createNickname').fill(nickname);await admin.locator('#createPassword').fill(passwords.initial);await admin.locator('#createUser button').click();await admin.getByText(nickname,{exact:true}).waitFor()}
+(async()=>{try{
+ start('parent',18887);start('admin',18888);await Promise.all([ready(18887),ready(18888)]);
+ browser=await chromium.launch({headless:true});
+ const ac=await browser.newContext(),dc=await browser.newContext(),mc=await browser.newContext();
+ const admin=await ac.newPage(),dad=await dc.newPage(),mom=await mc.newPage();
+ for(const page of [admin,dad,mom]){page.on('pageerror',e=>failures.push(e.message));page.on('dialog',d=>d.accept())}
+ await login(admin,18888,'qaadmin',passwords.admin);
+ await admin.locator('#currentPassword').fill(passwords.admin);await admin.locator('#newPassword').fill(passwords.adminNew);await admin.locator('#repeatPassword').fill(passwords.adminNew);await admin.locator('#changePassword button').click();await admin.locator('#loginName').waitFor();
+ await login(admin,18888,'qaadmin',passwords.adminNew);await admin.locator('#createLogin').waitFor();
+ await createParent(admin,'qadad','测试爸爸');await createParent(admin,'qamom','测试妈妈');
+ await admin.screenshot({path:path.join(out,'admin-accounts.png'),fullPage:true});
+ await login(dad,18887,'qadad',passwords.initial);await parentPassword(dad,passwords.dad);await login(dad,18887,'qadad',passwords.dad);await dad.locator('#newChildName').fill('测试哥哥');await dad.locator('#createChildForm button').click();await dad.locator('#childSwitch').waitFor();
+ const firstId=await dad.locator('#childSwitch').inputValue();
+ // Create a task using the existing calendar editor.
+ await dad.getByRole('button',{name:'新建任务',exact:true}).click();await dad.locator('#taskTitle').fill('浏览器阅读任务');await dad.locator('#taskDate').click();await dad.locator('[data-picker-today]').click();await dad.locator('#taskStart').click();await dad.locator('[data-picker-hour="18"]').click();await dad.locator('[data-picker-minute="00"]').click();await dad.locator('#taskEnd').click();await dad.locator('[data-picker-hour="18"]').click();await dad.locator('[data-picker-minute="30"]').click();await dad.locator('#taskPoints').fill('10');await dad.locator('#taskForm button[type="submit"]').click();await dad.locator('#taskDialog').waitFor({state:'hidden'});
+ let store=await dad.evaluate(async(id)=>(await fetch(`/api/children/${id}/data`)).json(),firstId);assert.equal(store.data.series.length,1);const key=store.data.series[0].id+'@'+store.data.series[0].startDate;
+ // Open own child management and send a specific-child invitation.
+ await dad.getByRole('button',{name:'设置',exact:true}).click();await dad.locator('#openChildManagement').click();await dad.locator('#inviteLogin').fill('qamom');await dad.locator('#inviteParentForm button').click();await dad.locator('#childManageError').waitFor();
+ await login(mom,18887,'qamom',passwords.initial);await parentPassword(mom,passwords.mom);await login(mom,18887,'qamom',passwords.mom);await mom.locator('[data-accept-invite]').click();await mom.locator('[data-open-child]').click();await mom.locator('#childSwitch').waitFor();assert.equal(await mom.locator('#childSwitch option').count(),1);
+ // Add another child, keeping the first child's browser tab independent.
+ await dad.locator('#accountHome').click();await dad.locator('#newChildName').fill('测试妹妹');await dad.locator('#createChildForm button').click();await dad.waitForFunction(()=>document.querySelectorAll('[data-open-child]').length===2);
+ const secondButton=dad.locator('[data-open-child]').last();const secondId=await secondButton.getAttribute('data-open-child');await secondButton.click();await dad.locator('#childSwitch').waitFor();assert.notEqual(secondId,firstId);
+ const second=await dad.evaluate(async(id)=>(await fetch(`/api/children/${id}/data`)).json(),secondId);assert.equal(second.data.series.length,0);
+ const forbidden=await mom.evaluate(async(id)=>(await fetch(`/api/children/${id}/data`)).status,secondId);assert.equal(forbidden,403);
+ // Two tabs retain their selected child; changing one does not alter the other.
+ const other=await dc.newPage();other.on('pageerror',e=>failures.push(e.message));other.on('dialog',d=>d.accept());await other.goto(`http://127.0.0.1:18887/children/${firstId}`);await other.locator('#childSwitch').waitFor();assert.equal(await other.locator('#childSwitch').inputValue(),firstId);assert.equal(await dad.locator('#childSwitch').inputValue(),secondId);
+ // Browser history invalidates the previous child immediately, even on a slow list response.
+ await dad.route('**/api/children',async route=>{await new Promise(r=>setTimeout(r,600));await route.continue()});await dad.evaluate(()=>history.back());await dad.waitForFunction(()=>!document.querySelector('#childSwitch'));assert.equal(await dad.locator('.task-chip').count(),0);await dad.locator('#newChildName').waitFor();await dad.unroute('**/api/children');await dad.locator(`[data-open-child="${secondId}"]`).click();await dad.locator('#childSwitch').waitFor();
+ // Complete via actual card control in the first child's page.
+ await other.locator(`[data-month-occ="${key}"]`).first().click();await other.locator(`[data-toggle-occ="${key}"]`).first().click();await other.locator('#closeDrawer').click();await waitForStore(other,firstId,p=>p.data.ledger.reduce((s,x)=>s+x.amount,0)===10);
+ store=await other.evaluate(async(id)=>(await fetch(`/api/children/${id}/data`)).json(),firstId);assert.equal(store.data.ledger.length,1);
+ // Deliver an old read after a newer successful command; the rendered state must not regress.
+ let releaseRead,capturedRead;const captured=new Promise(r=>capturedRead=r),release=new Promise(r=>releaseRead=r);
+ await other.route(`**/api/children/${firstId}/data`,async route=>{const response=await route.fetch();capturedRead();await release;await route.fulfill({response})},{times:1});
+ await other.locator('#refreshData').click();await captured;
+ await other.locator(`[data-month-occ="${key}"]`).first().click();await other.locator(`[data-toggle-occ="${key}"]`).first().click();
+ await other.waitForFunction(k=>!document.querySelector(`[data-month-occ="${k}"]`).classList.contains('done'),key);await other.locator('#closeDrawer').click();releaseRead();
+ await other.getByText('已读取最新数据',{exact:true}).waitFor();assert.equal(await other.locator(`[data-month-occ="${key}"]`).evaluate(e=>e.classList.contains('done')),false);
+ await other.locator(`[data-month-occ="${key}"]`).first().click();await other.locator(`[data-toggle-occ="${key}"]`).first().click();
+ await other.waitForFunction(k=>document.querySelector(`[data-month-occ="${k}"]`).classList.contains('done'),key);await other.locator('#closeDrawer').click();
+ await other.getByRole('button',{name:'积分商城',exact:true}).click();await other.locator('#manageGifts').click();await other.locator('#addGiftBtn').click();await other.locator('#giftName').fill('测试绘本');await other.locator('#giftPoints').fill('5');await other.locator('#saveGiftBtn').click();await other.locator('#giftEditorDialog').waitFor({state:'hidden'});await other.locator('#giftManagerDialog [data-close]').click();await other.locator('[data-redeem-gift]').click();await other.locator('#confirmGiftRedeem').click();await other.locator('#giftRedeemDialog').waitFor({state:'hidden'});await other.locator('[data-store-tab="redeemed"]').click();await other.locator('[data-undo-gift]').click();await waitForStore(other,firstId,p=>p.data.gifts[0]?.status==='available'&&p.data.ledger.reduce((s,x)=>s+x.amount,0)===10&&p.data.ledger.some(x=>x.kind==='gift-reversal'));
+ // Legacy backup images are untrusted display data, including malformed attribute content.
+ const restored=await other.evaluate(async id=>{const pkg=await(await fetch(`/api/children/${id}/data`)).json(),me=await(await fetch('/api/auth/me')).json();pkg.data.gifts[0].imageData='data:image/png;base64,x"><div id="injected-ui">untrusted</div><img src="';return(await fetch(`/api/children/${id}/data/restore`,{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':me.csrfToken},body:JSON.stringify({expectedRevision:pkg.revision,membershipVersion:pkg.context.membershipVersion,operationId:crypto.randomUUID(),data:pkg.data})})).status},firstId);assert.equal(restored,200);
+ await other.locator('#refreshData').click();await other.locator('[data-store-tab="available"]').click();await other.locator('[data-redeem-gift]').waitFor();assert.equal(await other.locator('#injected-ui').count(),0);
+ await other.locator('#manageGifts').click();await other.locator('[data-edit-gift]').click();assert.equal(await other.locator('#injected-ui').count(),0);await other.locator('#giftEditorDialog [data-close]').first().click();await other.locator('#giftManagerDialog [data-close]').click();
+ await other.getByRole('button',{name:'设置',exact:true}).click();await other.locator('#openBackupSettings').click();assert.equal(await other.locator('#importBtn').isEnabled(),true);await other.locator('#backupDialog [data-close]').click();
+ await mom.getByRole('button',{name:'设置',exact:true}).click();await mom.locator('#openBackupSettings').click();assert.equal(await mom.locator('#importBtn').isDisabled(),true);await mom.locator('#backupDialog [data-close]').click();
+ await other.getByRole('button',{name:'日历',exact:true}).click();await other.locator('#printBtn').click();await other.evaluate(()=>{window.print=()=>{}});await other.locator('#printConfirmBtn').click();assert.match(await other.locator('#printPages h1').first().innerText(),/测试哥哥/);await other.screenshot({path:path.join(out,'parent-calendar.png'),fullPage:true});await other.setViewportSize({width:390,height:844});await other.screenshot({path:path.join(out,'parent-mobile.png'),fullPage:true});
+ const overflow=await other.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1);assert.equal(overflow,false);
+ // Leave and confirm the old child URL no longer exposes data.
+ await mom.locator('#openChildManagement').click();await mom.locator('#leaveChild').click();await mom.locator('#newChildName').waitFor();assert.equal(await mom.locator('[data-open-child]').count(),0);
+ const denied=await mom.evaluate(async(id)=>(await fetch(`/api/children/${id}/data`)).status,firstId);assert.equal(denied,403);
+ // Logout also clears the page before the delayed server response completes.
+ await dad.locator('#allChildren').click();await dad.locator('#accountLogout').waitFor();await dad.route('**/api/auth/logout',async route=>{await new Promise(r=>setTimeout(r,600));await route.continue()});await dad.locator('#accountLogout').click();assert.equal(await dad.locator('[data-open-child]').count(),0);await dad.locator('#loginName').waitFor();
+ assert.deepEqual(failures,[]);
+ console.log(JSON.stringify({passed:true,scenarios:['admin login/password/create','parent forced password','task create/complete','gift redeem/reverse','specific-child invite','multiple child isolation','two-tab context','slow history/logout invalidation','out-of-order read monotonicity','legacy image HTML escaping','child print title','restore permissions','member self-leave','mobile layout'],pageErrors:failures,screenshots:3}));
+ }catch(error){console.error(error.stack);if(browser){const page=browser.contexts()[1]?.pages().at(-1);if(page){await page.screenshot({path:path.join(out,'failure.png'),fullPage:true});console.error((await page.locator('body').innerText()).slice(0,2000))}}process.exitCode=1}
+ finally{if(browser)await browser.close();for(const child of children)child.kill('SIGTERM')}
+})();

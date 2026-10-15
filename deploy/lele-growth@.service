@@ -1,0 +1,21 @@
+[Unit]
+Description=Lele Growth %i
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=lele
+Group=lele
+WorkingDirectory=/opt/lele-growth/current
+EnvironmentFile=/etc/lele-growth/production.env
+Environment=LELE_SURFACE=%i
+ExecStart=/opt/lele-growth/current/.venv/bin/python deploy/run.py
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+UMask=0077
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

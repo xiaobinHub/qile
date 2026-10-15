@@ -1,0 +1,389 @@
+"""Integration tests require an explicit isolated local PostgreSQL app config.
+
+LELE_TEST_CONFIG=data/development/test-config.json .venv/bin/python -m unittest test_child_backend -v
+The suite refuses any database not named lele_test*. Never uses production config.
+"""
+import concurrent.futures
+import copy
+import os
+import json
+import tempfile
+import unittest
+import uuid
+from pathlib import Path
+from fastapi.testclient import TestClient
+from accounts_app import create_app
+from child_service import ChildService, initialize, bootstrap, import_child, ApiError, canonical_bytes
+
+CONFIG=os.environ.get('LELE_TEST_CONFIG')
+PASSWORD='Local-test-password-123!'
+NEW_PASSWORD='Local-new-password-456!'
+
+@unittest.skipUnless(CONFIG,'Set LELE_TEST_CONFIG to an isolated local test database')
+class ChildBackendTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.service=ChildService(CONFIG)
+        if cls.service.config['environment']!='development' or not cls.service.config['_connect']['dbname'].startswith('lele_test'):
+            raise RuntimeError('Test database must be explicit local lele_test*')
+        initialize(CONFIG)
+        cls.service.transaction(lambda c:c.execute('TRUNCATE lele.users,lele.login_limits CASCADE'),exclusive=True)
+        bootstrap(CONFIG,'testadmin','Admin',PASSWORD)
+        cls.parent_app=create_app(CONFIG,'parent'); cls.admin_app=create_app(CONFIG,'admin')
+        cls.admin=TestClient(cls.admin_app,base_url=cls.service.config['admin_origin'])
+        cls.login(cls.admin,'testadmin',PASSWORD)
+        cls.call(cls.admin,'POST','/api/account/password',{'currentPassword':PASSWORD,'newPassword':NEW_PASSWORD})
+        cls.login(cls.admin,'testadmin',NEW_PASSWORD)
+        cls.a,cls.au=cls.new_parent('parenta')
+        cls.b,cls.bu=cls.new_parent('parentb')
+        cls.outsider,cls.ou=cls.new_parent('outsider')
+
+    @classmethod
+    def login(cls,client,login,password):
+        r=client.post('/api/auth/login',json={'loginName':login,'password':password},headers={'Origin':str(client.base_url).rstrip('/')})
+        if r.status_code==200: client.headers['X-CSRF-Token']=r.json()['csrfToken']
+        return r
+
+    @classmethod
+    def call(cls,client,method,path,body=None):
+        return client.request(method,path,json=body,headers={'Origin':str(client.base_url).rstrip('/')})
+
+    @classmethod
+    def new_parent(cls,name):
+        r=cls.call(cls.admin,'POST','/api/admin/users',{'loginName':name,'nickname':name,'password':PASSWORD})
+        assert r.status_code==200,r.text
+        user=r.json()['user']
+        client=TestClient(cls.parent_app,base_url=cls.service.config['parent_origin'])
+        assert cls.login(client,name,PASSWORD).status_code==200
+        assert cls.call(client,'POST','/api/account/password',{'currentPassword':PASSWORD,'newPassword':NEW_PASSWORD}).status_code==200
+        assert cls.login(client,name,NEW_PASSWORD).status_code==200
+        return client,user
+
+    def child(self):
+        r=self.call(self.a,'POST','/api/children',{'name':'测试孩子'})
+        self.assertEqual(r.status_code,200,r.text)
+        return r.json()['child']
+
+    def data(self,child,client=None):
+        r=(client or self.a).get('/api/children/'+child['id']+'/data')
+        self.assertEqual(r.status_code,200,r.text)
+        return r.json()
+
+    def operation(self,child,data=None,operation_id=None):
+        data=data or self.data(child)
+        return dict(expectedRevision=data['revision'],membershipVersion=data['context']['membershipVersion'],operationId=operation_id or str(uuid.uuid4()),kind='ledger.manual',payload={'amount':1,'reason':'test','date':'2026-10-15'})
+
+    def invite(self,child,client=None,target='parentb'):
+        r=self.call(client or self.a,'POST','/api/children/'+child['id']+'/invitations',{'loginName':target})
+        self.assertEqual(r.status_code,200,r.text)
+        return r.json()['invitation']['id']
+
+    def join(self,child):
+        invite=self.invite(child)
+        r=self.call(self.b,'POST','/api/invitations/'+invite+'/accept',{})
+        self.assertEqual(r.status_code,200,r.text)
+
+    def test_access_isolation_and_admin_separation(self):
+        child=self.child()
+        self.assertEqual(self.outsider.get('/api/children/'+child['id']+'/data').status_code,403)
+        self.assertEqual(self.admin.get('/api/children').status_code,403)
+        self.assertEqual(self.a.get('/api/admin/users').status_code,403)
+        self.assertEqual(self.a.get('/data/development/config.json').status_code,404)
+        self.assertEqual(self.a.put('/api/data',json={}).status_code,403)
+        unauth=TestClient(self.parent_app)
+        self.assertEqual(unauth.get('/api/children').status_code,401)
+
+    def test_csrf_origin_and_persistent_session(self):
+        missing=self.a.post('/api/children',json={'name':'Denied'})
+        self.assertEqual(missing.status_code,403)
+        wrong=self.a.post('/api/children',json={'name':'Denied'},headers={'Origin':self.service.config['parent_origin'],'X-CSRF-Token':'bad'})
+        self.assertEqual(wrong.status_code,403)
+        renewed=TestClient(create_app(CONFIG,'parent'),base_url=self.service.config['parent_origin'])
+        renewed.cookies.update(self.a.cookies)
+        self.assertEqual(renewed.get('/api/auth/me').status_code,200)
+        badlogin=renewed.post('/api/auth/login',json={'loginName':'parenta','password':NEW_PASSWORD},headers={'Origin':self.service.config['admin_origin']})
+        self.assertEqual(badlogin.status_code,403)
+
+    def test_forced_password_revokes_sessions_and_login_normalization(self):
+        name='force'+uuid.uuid4().hex[:8]
+        r=self.call(self.admin,'POST','/api/admin/users',{'loginName':name.upper(),'nickname':'Forced','password':PASSWORD})
+        self.assertEqual(r.status_code,200,r.text)
+        client=TestClient(self.parent_app,base_url=self.service.config['parent_origin'])
+        self.assertEqual(self.login(client,name.upper(),PASSWORD).status_code,200)
+        old=TestClient(self.parent_app,base_url=self.service.config['parent_origin']);old.cookies.update(client.cookies)
+        self.assertEqual(client.get('/api/children').json()['kind'],'password_change_required')
+        self.assertEqual(self.call(client,'POST','/api/account/password',{'currentPassword':PASSWORD,'newPassword':NEW_PASSWORD}).status_code,200)
+        self.assertEqual(old.get('/api/auth/me').status_code,401)
+
+    def test_idempotency_and_revision_conflicts(self):
+        child=self.child(); body=self.operation(child); path='/api/children/'+child['id']+'/operations'
+        first=self.call(self.a,'POST',path,body)
+        self.assertEqual(first.status_code,200,first.text)
+        repeated=self.call(self.a,'POST',path,body)
+        self.assertEqual(repeated.status_code,200,repeated.text)
+        self.assertEqual(first.json()['revision'],repeated.json()['revision'])
+        changed={**body,'payload':{'amount':2,'reason':'changed','date':'2026-10-15'}}
+        self.assertEqual(self.call(self.a,'POST',path,changed).status_code,409)
+        stale={**body,'operationId':str(uuid.uuid4())}
+        self.assertEqual(self.call(self.a,'POST',path,stale).json()['kind'],'revision_conflict')
+
+    def test_concurrent_same_revision_only_one_write(self):
+        child=self.child(); base=self.data(child)
+        bodies=[self.operation(child,base),self.operation(child,base)]
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+            results=list(executor.map(lambda b:self.call(self.a,'POST','/api/children/'+child['id']+'/operations',b),bodies))
+        self.assertEqual(sorted(r.status_code for r in results),[200,409])
+        self.assertEqual(self.data(child)['revision'],base['revision']+1)
+
+    def test_concurrent_duplicate_is_exactly_once(self):
+        child=self.child(); body=self.operation(child)
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+            results=list(executor.map(lambda _:self.call(self.a,'POST','/api/children/'+child['id']+'/operations',body),range(2)))
+        self.assertEqual([r.status_code for r in results],[200,200])
+        self.assertEqual(self.data(child)['revision'],1)
+
+    def test_revocation_and_rejoin_invalidates_old_context(self):
+        child=self.child();self.join(child)
+        old=self.data(child,self.b)
+        self.assertEqual(self.call(self.a,'DELETE','/api/children/'+child['id']+'/members/'+self.bu['id']).status_code,200)
+        self.assertEqual(self.b.get('/api/children/'+child['id']+'/data').status_code,403)
+        self.join(child)
+        new=self.data(child,self.b)
+        self.assertNotEqual(old['context']['membershipVersion'],new['context']['membershipVersion'])
+        body=self.operation(child,old)
+        r=self.call(self.b,'POST','/api/children/'+child['id']+'/operations',body)
+        self.assertEqual(r.json()['kind'],'membership_changed')
+
+    def test_archive_transfer_and_owner_only_restore(self):
+        child=self.child(); self.join(child)
+        current=self.data(child)
+        restore=dict(expectedRevision=current['revision'],membershipVersion=self.data(child,self.b)['context']['membershipVersion'],operationId=str(uuid.uuid4()),data=current['data'])
+        self.assertEqual(self.call(self.b,'POST','/api/children/'+child['id']+'/data/restore',restore).status_code,403)
+        self.assertEqual(self.call(self.a,'PATCH','/api/children/'+child['id'],{'archived':True}).status_code,200)
+        self.assertEqual(self.b.get('/api/children/'+child['id']+'/data').status_code,200)
+        self.assertEqual(self.call(self.a,'POST','/api/children/'+child['id']+'/operations',self.operation(child)).json()['kind'],'archived')
+        self.assertEqual(self.call(self.b,'PATCH','/api/children/'+child['id'],{'archived':False}).status_code,403)
+        self.assertEqual(self.call(self.a,'PATCH','/api/children/'+child['id'],{'archived':False}).status_code,200)
+        self.assertEqual(self.call(self.a,'POST','/api/children/'+child['id']+'/transfer',{'userId':self.bu['id']}).status_code,200)
+        self.assertEqual(self.call(self.a,'PATCH','/api/children/'+child['id'],{'name':'No'}).status_code,403)
+        self.assertEqual(self.call(self.b,'PATCH','/api/children/'+child['id'],{'name':'New name'}).status_code,200)
+
+    def test_restore_retains_target_name_and_backup_is_child_scoped(self):
+        child=self.child(); other=self.child(); current=self.data(child)
+        data=copy.deepcopy(current['data']); data['settings']['childName']='Backup Name'
+        body=dict(expectedRevision=current['revision'],membershipVersion=current['context']['membershipVersion'],operationId=str(uuid.uuid4()),data=data)
+        result=self.call(self.a,'POST','/api/children/'+child['id']+'/data/restore',body)
+        self.assertEqual(result.status_code,200,result.text)
+        self.assertEqual(result.json()['data']['settings']['childName'],child['name'])
+        self.assertEqual(self.data(other)['revision'],0)
+        exported=self.a.get('/api/children/'+child['id']+'/data/export').json()
+        self.assertNotIn('context',exported)
+        snapshots=self.service.transaction(lambda c:(c.execute('SELECT child_id,snapshot_json FROM lele.data_snapshots WHERE child_id=%s',(child['id'],)),c.fetchall())[1])
+        self.assertEqual(snapshots[0][1]['revision'],current['revision'])
+
+    def test_invitation_target_expiry_reject_revoke(self):
+        child=self.child(); invite=self.invite(child)
+        self.assertEqual(self.call(self.outsider,'POST','/api/invitations/'+invite+'/accept',{}).status_code,404)
+        self.assertEqual(self.call(self.b,'POST','/api/invitations/'+invite+'/reject',{}).status_code,200)
+        invite=self.invite(child)
+        self.assertEqual(self.call(self.a,'DELETE','/api/children/'+child['id']+'/invitations/'+invite).status_code,200)
+        self.assertEqual(self.call(self.b,'POST','/api/invitations/'+invite+'/accept',{}).status_code,409)
+        invite=self.invite(child)
+        self.service.transaction(lambda c:c.execute("UPDATE lele.invitations SET expires_at=now()-interval '1 second' WHERE id=%s",(invite,)),exclusive=True)
+        self.assertEqual(self.call(self.b,'POST','/api/invitations/'+invite+'/accept',{}).status_code,409)
+
+    def test_admin_disable_and_reset_revoke_sessions(self):
+        client,user=self.new_parent('reset'+uuid.uuid4().hex[:8])
+        self.assertEqual(self.call(self.admin,'PATCH','/api/admin/users/'+user['id']+'/status',{'status':'disabled'}).status_code,200)
+        self.assertEqual(client.get('/api/auth/me').status_code,401)
+        self.assertEqual(self.login(client,user['loginName'],NEW_PASSWORD).status_code,401)
+        self.call(self.admin,'PATCH','/api/admin/users/'+user['id']+'/status',{'status':'active'})
+        self.assertEqual(self.login(client,user['loginName'],NEW_PASSWORD).status_code,200)
+        self.call(self.admin,'POST','/api/admin/users/'+user['id']+'/password',{'password':PASSWORD})
+        self.assertEqual(client.get('/api/auth/me').status_code,401)
+        self.assertTrue(self.login(client,user['loginName'],PASSWORD).json()['user']['mustChangePassword'])
+
+    def test_import_exact_roundtrip_and_schema_idempotence(self):
+        child=self.child(); raw=self.a.get('/api/children/'+child['id']+'/data/export').json()
+        raw['revision']=123;raw['extraStore']={'keep':None};raw['data']['customData']={'unknown':'retained'}
+        imported=import_child(CONFIG,self.au['id'],raw)
+        read=self.a.get('/api/children/'+imported['id']+'/data/export').json()
+        self.assertEqual(canonical_bytes(read),canonical_bytes(raw))
+        with self.assertRaises(ApiError):import_child(CONFIG,self.au['id'],raw)
+        self.assertEqual(initialize(CONFIG),{'initialized':False,'version':2})
+
+    def test_backup_retention_and_actor_audit(self):
+        child=self.child()
+        for _ in range(32):
+            result=self.call(self.a,'POST','/api/children/'+child['id']+'/operations',self.operation(child))
+            self.assertEqual(result.status_code,200,result.text)
+        def inspect(cur):
+            cur.execute('SELECT count(*),min(revision),max(revision) FROM lele.data_snapshots WHERE child_id=%s',(child['id'],))
+            backups=cur.fetchone()
+            cur.execute("SELECT DISTINCT actor_id FROM lele.audit_events WHERE child_id=%s AND action='operation.ledger.manual'",(child['id'],))
+            return backups,cur.fetchall()
+        backups,actors=self.service.transaction(inspect)
+        self.assertEqual(backups,(30,2,31))
+        self.assertEqual(actors,[(self.au['id'],)])
+        data=self.data(child)['data']
+        self.assertEqual(sum(r['amount'] for r in data['ledger']),32)
+        self.assertTrue(all(r['actorUserId']==self.au['id'] for r in data['operationLog']))
+
+    def test_malformed_and_arbitrary_full_put_rejected(self):
+        child=self.child()
+        response=self.a.post('/api/children',content='{"name":NaN}',headers={'Origin':self.service.config['parent_origin'],'Content-Type':'application/json'})
+        self.assertEqual(response.status_code,400)
+        self.assertEqual(self.call(self.a,'POST','/api/children',[]).status_code,400)
+        self.assertEqual(self.call(self.a,'PUT','/api/children/'+child['id']+'/data',{'data':self.data(child)['data']}).status_code,404)
+        body=self.operation(child);body['kind']='replace_all';body['payload']={'data':{}}
+        self.assertEqual(self.call(self.a,'POST','/api/children/'+child['id']+'/operations',body).status_code,400)
+        self.assertEqual(self.data(child)['revision'],0)
+
+    def test_forged_child_context_and_permissions_rejected(self):
+        child=self.child();other=self.child()
+        body=self.operation(child)
+        self.assertEqual(self.call(self.a,'POST','/api/children/'+other['id']+'/operations',body).json()['kind'],'membership_changed')
+        body=self.operation(child);body['actorUserId']=self.bu['id']
+        self.assertEqual(self.call(self.a,'POST','/api/children/'+child['id']+'/operations',body).status_code,400)
+        current=self.data(child)
+        data=copy.deepcopy(current['data']);data['memberships']=[{'userId':self.bu['id'],'role':'owner'}]
+        restore=dict(expectedRevision=current['revision'],membershipVersion=current['context']['membershipVersion'],operationId=str(uuid.uuid4()),data=data)
+        self.assertEqual(self.call(self.a,'POST','/api/children/'+child['id']+'/data/restore',restore).status_code,400)
+        self.assertEqual(self.data(child)['revision'],0)
+
+    def test_profile_rename_keeps_invitation_target_id(self):
+        name='rename'+uuid.uuid4().hex[:8]
+        client,user=self.new_parent(name)
+        child=self.child();invite=self.invite(child,target=name)
+        self.assertEqual(self.call(client,'PATCH','/api/account/profile',{'nickname':'Nickname only'}).status_code,200)
+        renamed=name+'x'
+        self.assertEqual(self.call(client,'PATCH','/api/account/profile',{'loginName':renamed}).status_code,403)
+        response=self.call(client,'PATCH','/api/account/profile',{'loginName':renamed,'nickname':'Renamed','currentPassword':NEW_PASSWORD})
+        self.assertEqual(response.status_code,200,response.text)
+        self.assertEqual(self.call(client,'POST','/api/invitations/'+invite+'/accept',{}).status_code,200)
+        self.assertEqual(client.get('/api/children/'+child['id']+'/data').status_code,200)
+
+    def test_surface_session_expiry_cookie_and_lightweight_health(self):
+        def inspect(cur):
+            cur.execute('SELECT surface,extract(epoch FROM expires_at-created_at)::integer FROM lele.sessions')
+            return cur.fetchall()
+        for surface,seconds in self.service.transaction(inspect):
+            self.assertEqual(seconds,30*24*3600 if surface=='parent' else 8*3600)
+        client=TestClient(self.parent_app,base_url=self.service.config['parent_origin'])
+        response=self.login(client,'parenta',NEW_PASSWORD)
+        cookie=response.headers['set-cookie']
+        self.assertIn('Max-Age=2592000',cookie)
+        self.assertIn('HttpOnly',cookie);self.assertIn('SameSite=strict',cookie)
+        admin=TestClient(self.admin_app,base_url=self.service.config['admin_origin'])
+        response=self.login(admin,'testadmin',NEW_PASSWORD)
+        self.assertIn('Max-Age=28800',response.headers['set-cookie'])
+        unauth=TestClient(self.parent_app)
+        health=unauth.get('/api/health')
+        self.assertEqual(health.status_code,200)
+        self.assertEqual(health.json()['service'],'lele-task-manager')
+        self.assertTrue(health.json()['databaseReady'])
+        self.assertNotIn('data',health.json())
+
+    def test_member_self_leave_and_former_owner_leave_preserve_data(self):
+        child=self.child();self.join(child)
+        current=self.data(child)
+        base='/api/children/'+child['id']
+        owner_path=base+'/members/'+self.au['id']
+        member_path=base+'/members/'+self.bu['id']
+        self.assertEqual(self.call(self.a,'DELETE',owner_path).status_code,400)
+        self.assertEqual(self.call(self.b,'DELETE',owner_path).status_code,403)
+        self.assertEqual(self.call(self.b,'DELETE',member_path).status_code,200)
+        self.assertEqual(self.b.get(base+'/data').status_code,403)
+        self.assertEqual(self.data(child),current)
+        self.join(child)
+        self.assertEqual(self.call(self.a,'POST',base+'/transfer',{'userId':self.bu['id']}).status_code,200)
+        self.assertEqual(self.call(self.a,'DELETE',owner_path).status_code,200)
+        self.assertEqual(self.a.get(base+'/data').status_code,403)
+        remaining=self.data(child,self.b)
+        self.assertEqual(remaining['data'],current['data'])
+        self.assertEqual(remaining['revision'],current['revision'])
+        self.assertEqual(self.call(self.b,'DELETE',member_path).status_code,400)
+
+    def test_archived_nonowner_can_leave_but_cannot_remove_others(self):
+        child=self.child();self.join(child)
+        base='/api/children/'+child['id']
+        self.assertEqual(self.call(self.a,'PATCH',base,{'archived':True}).status_code,200)
+        self.assertEqual(self.call(self.a,'DELETE',base+'/members/'+self.bu['id']).status_code,409)
+        self.assertEqual(self.call(self.b,'DELETE',base+'/members/'+self.bu['id']).status_code,200)
+        self.assertEqual(self.b.get(base+'/data').status_code,403)
+        self.assertEqual(self.data(child)['revision'],0)
+
+    def test_import_whitespace_child_name_preserved_and_operations_succeed(self):
+        child=self.child()
+        raw=self.a.get('/api/children/'+child['id']+'/data/export').json()
+        raw['data']['settings']['childName']='  测试孩子  '
+        imported=import_child(CONFIG,self.au['id'],raw)
+        self.assertEqual(imported['name'],'测试孩子')
+        self.assertEqual(self.a.get('/api/children/'+imported['id']+'/data/export').json(),raw)
+        result=self.call(self.a,'POST','/api/children/'+imported['id']+'/operations',self.operation(imported))
+        self.assertEqual(result.status_code,200,result.text)
+        self.assertEqual(result.json()['data']['settings']['childName'],'  测试孩子  ')
+        self.assertEqual(result.json()['revision'],raw['revision']+1)
+        self.assertEqual(sum(r['amount'] for r in result.json()['data']['ledger']),1)
+
+    def test_invite_pending_account_requires_password_change_before_accept(self):
+        name='pending'+uuid.uuid4().hex[:8]
+        opened=self.call(self.admin,'POST','/api/admin/users',{'loginName':name,'nickname':'Pending','password':PASSWORD})
+        self.assertEqual(opened.status_code,200,opened.text)
+        child=self.child();invite=self.invite(child,target=name)
+        client=TestClient(self.parent_app,base_url=self.service.config['parent_origin'])
+        self.assertEqual(self.login(client,name,PASSWORD).status_code,200)
+        accept='/api/invitations/'+invite+'/accept'
+        self.assertEqual(self.call(client,'POST',accept,{}).json()['kind'],'password_change_required')
+        self.assertEqual(self.call(client,'POST','/api/account/password',{'currentPassword':PASSWORD,'newPassword':NEW_PASSWORD}).status_code,200)
+        self.assertEqual(self.login(client,name,NEW_PASSWORD).status_code,200)
+        self.assertEqual(self.call(client,'POST',accept,{}).status_code,200)
+        self.assertEqual(client.get('/api/children/'+child['id']+'/data').status_code,200)
+
+    def test_context_is_lightweight_and_authorized(self):
+        child=self.child();path='/api/children/'+child['id']+'/context'
+        context=self.a.get(path)
+        self.assertEqual(context.status_code,200,context.text)
+        self.assertEqual(context.json(),{'child':child,'revision':0})
+        self.assertNotIn('data',context.json())
+        self.assertEqual(self.outsider.get(path).status_code,403)
+        self.join(child)
+        member=self.b.get(path).json()
+        self.assertEqual(member['child']['role'],'parent')
+        self.assertNotEqual(member['child']['membershipVersion'],child['membershipVersion'])
+        self.assertEqual(self.call(self.a,'POST','/api/children/'+child['id']+'/operations',self.operation(child)).status_code,200)
+        self.assertEqual(self.b.get(path).json()['revision'],1)
+        self.assertEqual(self.call(self.b,'DELETE','/api/children/'+child['id']+'/members/'+self.bu['id']).status_code,200)
+        self.assertEqual(self.b.get(path).json()['kind'],'membership_revoked')
+
+    def test_z_database_backed_login_rate_limit(self):
+        client=TestClient(self.parent_app,base_url=self.service.config['parent_origin'])
+        statuses=[self.login(client,'missingname','incorrect-pass-long').status_code for _ in range(12)]
+        self.assertIn(429,statuses)
+        recreated=TestClient(create_app(CONFIG,'parent'),base_url=self.service.config['parent_origin'])
+        self.assertEqual(self.login(recreated,'missingname','incorrect-pass-long').status_code,429)
+
+
+class ConfigGuardTests(unittest.TestCase):
+    def test_implicit_config_forbidden(self):
+        with self.assertRaises(ApiError):ChildService('/missing-explicit-config.json')
+
+    def test_environment_guards_and_explicit_production_ssl_waiver(self):
+        from child_service import load_config
+        base={'environment':'development','database':{'host':'127.0.0.1','port':55432,'dbname':'lele_test_guard','user':'dev','sslmode':'disable','allow_unencrypted':True},'parent_origin':'http://127.0.0.1:18801','admin_origin':'http://127.0.0.1:18802'}
+        with tempfile.TemporaryDirectory() as directory:
+            path=Path(directory)/'config.json'
+            for host in ('localhost','192.168.1.2','example.com'):
+                candidate=copy.deepcopy(base);candidate['database']['host']=host
+                path.write_text(json.dumps(candidate))
+                with self.assertRaises(ApiError):load_config(path)
+            candidate=copy.deepcopy(base);candidate['database']['dbname']='production'
+            path.write_text(json.dumps(candidate))
+            with self.assertRaises(ApiError):load_config(path)
+            candidate=copy.deepcopy(base);candidate['environment']='production';candidate['parent_origin']='https://parent.example.com';candidate['admin_origin']='https://admin.example.com'
+            path.write_text(json.dumps(candidate))
+            self.assertEqual(load_config(path)['_connect']['sslmode'],'disable')
+            candidate['database'].pop('allow_unencrypted');path.write_text(json.dumps(candidate))
+            with self.assertRaises(ApiError):load_config(path)
+
+if __name__=='__main__':unittest.main()

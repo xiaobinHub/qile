@@ -1,0 +1,14 @@
+{
+  "environment": "production",
+  "database": {
+    "host": "REPLACE_WITH_RDS_HOST",
+    "port": 5432,
+    "dbname": "lele_growth_v2",
+    "user": "REPLACE_WITH_DATABASE_USER",
+    "password": "REPLACE_LOCALLY_DO_NOT_COMMIT",
+    "sslmode": "disable",
+    "allow_unencrypted": true
+  },
+  "parent_origin": "https://growth.example.com",
+  "admin_origin": "https://admin.growth.example.com"
+}
