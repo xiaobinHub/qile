@@ -4,6 +4,7 @@ const {spawn,execFileSync}=require('node:child_process');
 const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto');
 const assert=require('node:assert/strict');
 const {exerciseAdminUI}=require('./admin_ui_smoke.cjs');
+const {exerciseParentLoginUI}=require('./parent_login_smoke.cjs');
 const root=path.resolve(__dirname,'..'),python=path.join(root,'.venv/bin/python');
 const runtime=path.join(root,'data/development'),out=path.join(root,'output/playwright');
 // Exercise the minimum password length throughout the account flows.
@@ -41,6 +42,7 @@ async function createParent(admin,loginName,nickname){await admin.locator('#open
  const ac=await browser.newContext(),dc=await browser.newContext(),mc=await browser.newContext();
  const admin=await ac.newPage(),dad=await dc.newPage(),mom=await mc.newPage();
  for(const page of [admin,dad,mom]){page.on('pageerror',e=>failures.push(e.message));page.on('dialog',d=>d.accept())}
+ if(!process.argv.includes('--admin-only'))await exerciseParentLoginUI({page:dad,port:18887,out});
  await login(admin,18888,'qaadmin',passwords.admin);
  await checkPasswordInput(admin,'#newPassword');await checkPasswordInput(admin,'#repeatPassword');
  await admin.locator('#currentPassword').fill(passwords.admin);await admin.locator('#newPassword').fill(passwords.adminNew);await admin.locator('#repeatPassword').fill(passwords.adminNew);await admin.locator('#changePassword button[type="submit"]').click();await admin.locator('#loginName').waitFor();
@@ -100,8 +102,8 @@ async function createParent(admin,loginName,nickname){await admin.locator('#open
  }
  await exerciseAdminUI({admin,browser,port:18888,passwords,out,createParent});
  assert.deepEqual(failures,[]);
- const scenarios=['admin login/password/create','parent forced password','task create/complete','gift redeem/reverse','specific-child invite','multiple child isolation','two-tab context','slow history/logout invalidation','out-of-order read monotonicity','legacy image HTML escaping','child print title','restore permissions','member self-leave','mobile layout','admin search/status/refresh','admin disable/enable/cancel','admin password reset','admin dialog keyboard/focus','admin mobile layout','admin profile/logout/stale save'];
- console.log(JSON.stringify({passed:true,scenarios:process.argv.includes('--admin-only')?scenarios.filter(s=>s.startsWith('admin ')):scenarios,pageErrors:failures,screenshots:process.argv.includes('--admin-only')?4:6}));
+ const scenarios=['admin login/password/create','parent login responsive/feedback','parent forced password','task create/complete','gift redeem/reverse','specific-child invite','multiple child isolation','two-tab context','slow history/logout invalidation','out-of-order read monotonicity','legacy image HTML escaping','child print title','restore permissions','member self-leave','mobile layout','admin search/status/refresh','admin disable/enable/cancel','admin password reset','admin dialog keyboard/focus','admin mobile layout','admin profile/logout/stale save'];
+ console.log(JSON.stringify({passed:true,scenarios:process.argv.includes('--admin-only')?scenarios.filter(s=>s.startsWith('admin ')):scenarios,pageErrors:failures,screenshots:process.argv.includes('--admin-only')?4:8}));
  }catch(error){console.error(error.stack);if(browser){for(const [i,context] of browser.contexts().entries()){const page=context.pages().at(-1);if(page){await page.screenshot({path:path.join(out,`failure-${i}.png`),fullPage:true});console.error(`Context ${i}: `+(await page.locator('body').innerText()).slice(0,2000))}}}process.exitCode=1}
  finally{if(browser)await browser.close();for(const child of children)child.kill('SIGTERM')}
 })();

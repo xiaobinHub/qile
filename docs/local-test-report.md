@@ -42,6 +42,17 @@
 
 UI 改造前回滚点为 `79d7757`；完整方案与步骤见 `docs/superpowers/specs/2026-10-16-admin-shadcn-design.md` 和 `docs/superpowers/plans/2026-10-16-admin-shadcn.md`。
 
+## 家长登录页样式验收（2026-10-16）
+
+沿用家长端的品牌图标、暖橙色主按钮、中性色、圆角与输入框规范，重构为居中的品牌区和登录卡片。新样式仅作用于 `.parent-login`，不改变孩子业务页面与账号设置的样式。补充密码显隐、提交等待状态、错误提示与原表单卸载后的状态保护；登录接口、会话和权限逻辑保持现有行为。
+
+- 815×954 和 390×844 均无不必要的横向或纵向滚动；390×600 矮屏可以正常滚动到提交按钮。
+- 验证密码显隐不会提交、Enter 提交、等待期间按钮锁定、实际登录失败提示及恢复、成功登录与首次改密；完整浏览器回归 21 组场景通过，页面脚本错误 0。
+- JavaScript 语法及 Git 空白检查通过。当前本地浏览器已刷新确认；测试记录只写入 `lele_test_browser`，未修改现有开发业务数据或发布阿里云。
+- 截图：`output/playwright/parent-login-desktop.png`、`output/playwright/parent-login-mobile.png`，均不提交 Git。
+
+本次登录页改造前回滚版本为 `3917cfd`。
+
 ## 开发数据副本
 
 指定源文件：本机 `data/lele-task-manager.json`，只读导入本机 `lele_dev`，归属账号 `lele` 下的孩子“乐乐”。

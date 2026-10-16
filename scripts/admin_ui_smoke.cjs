@@ -75,7 +75,7 @@ async function exerciseAdminUI({admin, browser, port, passwords, out, createPare
     await parent.goto(`http://127.0.0.1:${port-1}/`);
     await parent.locator('#loginName').fill('qaextra');
     await parent.locator('#loginPassword').fill('Q7test');
-    await parent.locator('#loginForm button').click();
+    await parent.locator('#loginForm button[type="submit"]').click();
     await parent.locator('#passwordNew').waitFor();
   } finally {await context.close()}
 
