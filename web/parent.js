@@ -574,7 +574,7 @@
     function wireGiftControls(){$('#giftEditorForm').addEventListener('submit',saveGift);$('#addGiftBtn').onclick=()=>openGiftEditor();$('#chooseGiftImage').onclick=()=>$('#giftImageInput').click();$('#removeGiftImage').onclick=()=>{giftDraftImage='';updateGiftImagePreview()};$('#giftImageInput').onchange=handleGiftImage;$('#confirmGiftRedeem').onclick=confirmGiftRedemption;$('#giftEditorDialog').addEventListener('close',()=>{$('#giftImageInput').value='';$('#giftEditorError').textContent=''})}
     async function boot(){wire();wireGiftControls();wireTaskPresetControls();if(SELFTEST){data=defaults();runSelfTests();return}if(location.protocol==='file:'){renderFileLaunch();return}$('#root').innerHTML='<section class="recovery"><h1>正在连接数据服务…</h1></section>';try{data=await Store.load();render()}catch(error){data=null;storageIssue=storageErrorMessage(error);if(error.kind==='unauthorized')renderAccessGate();else if(error.kind==='corrupt')renderRecovery();else renderConnectionError()}}
     // Account and child context. Every in-flight request is tied to this generation.
-    let authUser=null,csrfToken='',childList=[],currentChild=null,uiGeneration=0,pendingOperation=null;
+    let authUser=null,csrfToken='',childList=[],currentChild=null,uiGeneration=0,pendingOperation=null,childrenDialogSession=null;
     const parentApi=async(path,method='GET',body,requestCsrf=csrfToken)=>{
       const generation=uiGeneration,headers={};
       if(body!==undefined)headers['Content-Type']='application/json';
@@ -595,6 +595,7 @@
     function clearContext(signout=false){
       uiGeneration++;currentChild=null;pendingOperation=null;data=null;persistedData=null;saveBusy=false;refreshBusy=false;
       storageMeta.revision=0;storageMeta.updatedAt=null;
+      closeChildrenDialog();
       document.querySelectorAll('dialog[open]').forEach(d=>d.close());
       $('#dayDrawer')?.remove();$('#drawerBackdrop')?.remove();
       resetPrintPdf();const pages=$('#printPages');if(pages)pages.innerHTML='';
@@ -655,6 +656,95 @@
         for(const action of ['accept','reject'])$$(`[data-${action}-invite]`).forEach(b=>b.onclick=async()=>{try{await parentApi(`/api/invitations/${b.dataset[action+'Invite']}/${action}`,'POST',{});await showChildren()}catch(error){toast(error.message)}});
       }catch(error){if(error.kind!=='unauthorized'&&error.kind!=='stale')$('#root').innerHTML=accountShell('连接未完成',`<p>${esc(error.message)}</p>`);bindAccountNav()}
     }
+    function childInitial(name){return Array.from(String(name||'').trim())[0]||'孩'}
+    function childrenDialogActive(session){return !!session&&childrenDialogSession===session&&$('#childrenDialog').open&&session.generation===uiGeneration&&session.childId===currentChild?.id&&!!authUser}
+    function childContextBusy(){
+      if(saveBusy||refreshBusy){toast('正在保存或刷新，请稍候。');return true}
+      if(pendingOperation){toast('上一项保存结果尚未确认，请先刷新核对。');return true}
+      return false;
+    }
+    function closeChildrenDialog(restoreFocus=false){
+      const session=childrenDialogSession,dialog=$('#childrenDialog');childrenDialogSession=null;
+      $('#childrenDialogBody').replaceChildren();$('#closeChildrenDialog').disabled=false;dialog.removeAttribute('aria-busy');
+      const trigger=$('#openChildrenDialog');trigger?.setAttribute('aria-expanded','false');
+      if(dialog.open)dialog.close();
+      if(restoreFocus&&session&&session.generation===uiGeneration&&session.childId===currentChild?.id&&trigger?.dataset.childId===session.childId)trigger.focus();
+    }
+    function syncChildrenDialogBusy(session){
+      if(!childrenDialogActive(session))return;
+      const busy=!!session.mutation||session.loading;
+      $('#childrenDialog').setAttribute('aria-busy',String(busy));
+      $('#closeChildrenDialog').disabled=!!session.mutation;
+      $$('#childrenDialogBody button,#childrenDialogBody input').forEach(control=>{control.disabled=busy||(session.needsRefresh&&control.matches('[data-open-child],[data-accept-invite],[data-reject-invite],#createChildForm button'))});
+    }
+    function renderChildrenDialog(session){
+      if(!childrenDialogActive(session))return;
+      const body=$('#childrenDialogBody');
+      if(session.loading&&!session.ready){body.innerHTML='<div class="children-dialog-state" role="status">正在读取孩子与邀请…</div>';syncChildrenDialogBusy(session);return}
+      const error=session.error?`<div class="children-dialog-feedback"><p class="account-error" id="childrenDialogError" role="alert">${esc(session.error)}</p><button class="btn" type="button" id="retryChildrenDialog">刷新列表</button></div>`:'<p id="childrenDialogError" class="account-error" role="alert"></p>';
+      body.innerHTML=`<p class="children-dialog-intro">每个孩子的任务、积分和礼品分别记录，点击卡片进入。</p>${error}${session.ready?`
+        <section class="children-dialog-section" aria-labelledby="childrenListTitle"><h3 id="childrenListTitle">已有孩子</h3><div class="children-dialog-cards">${session.children.map(child=>{const active=child.id===session.childId;return `<button type="button" class="children-dialog-card${active?' is-current':''}" data-open-child="${esc(child.id)}" aria-label="${esc(child.name)}，${active?'当前孩子':child.archived?'查看归档':'进入孩子页面'}"><span class="child-avatar" aria-hidden="true">${esc(childInitial(child.name))}</span><span class="children-dialog-card-copy"><strong>${esc(child.name)}</strong><span class="children-dialog-card-meta"><span>${child.role==='owner'?'负责人':'共同管理'}</span>${active?'<span class="children-current-status">当前孩子</span>':''}${child.archived?'<span class="children-archived-status">已归档 · 只读</span>':''}</span></span><span class="children-card-arrow" aria-hidden="true">${active?'✓':'›'}</span></button>`}).join('')||'<p class="children-dialog-empty">暂无可进入的孩子，可以创建孩子或接受邀请。</p>'}</div></section>
+        <section class="children-dialog-section" aria-labelledby="childrenInvitesTitle"><h3 id="childrenInvitesTitle">待处理邀请${session.invitations.length?`<span class="children-section-count">${session.invitations.length}</span>`:''}</h3><div class="children-dialog-invitations">${session.invitations.map(invitation=>`<article class="children-invite-card"><span class="child-avatar" aria-hidden="true">${esc(childInitial(invitation.childName))}</span><div class="children-invite-copy"><strong>${esc(invitation.childName||'孩子')}</strong><p>邀请你共同管理，接受后即可进入</p></div><div class="children-invite-actions"><button class="btn primary" type="button" data-accept-invite="${esc(invitation.id)}">接受</button><button class="btn" type="button" data-reject-invite="${esc(invitation.id)}">拒绝</button></div></article>`).join('')||'<p class="children-dialog-empty">暂无待处理邀请</p>'}</div></section>
+        <section class="children-dialog-create"><button class="btn children-create-toggle" type="button" id="showCreateChild" aria-expanded="${session.createExpanded}" aria-controls="childrenCreatePanel"><span aria-hidden="true">${session.createExpanded?'−':'＋'}</span> 创建孩子</button><div id="childrenCreatePanel"${session.createExpanded?'':' hidden'}>${session.createExpanded?`<form id="createChildForm" class="children-create-form"><div class="field"><label for="newChildName">孩子姓名或昵称</label><input id="newChildName" name="childName" placeholder="输入孩子的昵称" value="${esc(session.createName)}" required maxlength="40" autocomplete="off"></div><button class="btn primary" type="submit">创建孩子</button></form>`:''}</div></section>`:''}`;
+      $('#retryChildrenDialog')?.addEventListener('click',()=>{if(!session.mutation&&!session.loading)loadChildrenDialog(session)});
+      $$('#childrenDialogBody [data-open-child]').forEach(button=>button.onclick=()=>{
+        if(!childrenDialogActive(session)||session.mutation||session.loading||session.needsRefresh||childContextBusy())return;
+        if(button.dataset.openChild===currentChild.id){closeChildrenDialog(true);return}
+        closeChildrenDialog();selectChild(button.dataset.openChild);
+      });
+      for(const action of ['accept','reject'])$$(`#childrenDialogBody [data-${action}-invite]`).forEach(button=>button.onclick=()=>mutateChildrenDialog(session,`/api/invitations/${button.dataset[action+'Invite']}/${action}`,{},action==='accept'?'已接受邀请，可以点击孩子卡片进入。':'已拒绝邀请。'));
+      $('#showCreateChild')?.addEventListener('click',()=>{
+        if(!childrenDialogActive(session)||session.mutation||session.loading)return;
+        session.createExpanded=!session.createExpanded;renderChildrenDialog(session);
+        if(session.createExpanded)$('#newChildName')?.focus();else $('#showCreateChild')?.focus();
+      });
+      if($('#createChildForm')){
+        $('#newChildName').oninput=event=>{session.createName=event.target.value};
+        $('#createChildForm').onsubmit=event=>{event.preventDefault();const name=$('#newChildName').value.trim();if(!name){$('#childrenDialogError').textContent='请输入孩子姓名或昵称。';$('#newChildName').focus();return}mutateChildrenDialog(session,'/api/children',{name},'孩子已创建，点击卡片即可进入。',true)};
+      }
+      syncChildrenDialogBusy(session);
+    }
+    async function loadChildrenDialog(session){
+      if(!childrenDialogActive(session))return;
+      const request=++session.readSequence;session.loading=true;session.error='';renderChildrenDialog(session);
+      try{
+        const [listed,invites]=await Promise.all([parentApi('/api/children'),parentApi('/api/invitations')]);
+        if(!childrenDialogActive(session)||request!==session.readSequence)return;
+        childList=listed.children;session.children=listed.children;session.invitations=invites.invitations||[];session.ready=true;session.needsRefresh=false;
+      }catch(error){
+        if(childrenDialogActive(session)&&request===session.readSequence&&error.kind!=='stale'&&error.kind!=='unauthorized'){session.error=error.message;session.needsRefresh=true}
+      }finally{
+        if(childrenDialogActive(session)&&request===session.readSequence){session.loading=false;renderChildrenDialog(session)}
+      }
+    }
+    async function mutateChildrenDialog(session,path,body,message,created=false){
+      if(!childrenDialogActive(session)||session.mutation||session.loading||session.needsRefresh||childContextBusy())return;
+      const mutation={};session.mutation=mutation;session.error='';$('#childrenDialogError').textContent='';syncChildrenDialogBusy(session);
+      try{
+        await parentApi(path,'POST',body);
+        if(!childrenDialogActive(session)||session.mutation!==mutation)return;
+        if(created){session.createName='';session.createExpanded=false}
+        await loadChildrenDialog(session);
+        if(childrenDialogActive(session))toast(message);
+      }catch(error){
+        if(childrenDialogActive(session)&&session.mutation===mutation&&error.kind!=='stale'&&error.kind!=='unauthorized'){
+          session.error=error.message;session.needsRefresh=!error.status||error.status>=500;
+          if(session.needsRefresh)session.error+=' 请先刷新列表核对结果，再继续操作。';
+          renderChildrenDialog(session);
+        }
+      }finally{if(childrenDialogActive(session)&&session.mutation===mutation){session.mutation=null;syncChildrenDialogBusy(session)}}
+    }
+    function openChildrenDialog(){
+      if(!currentChild||!data||!authUser||childrenDialogSession||childContextBusy())return;
+      const session={generation:uiGeneration,childId:currentChild.id,readSequence:0,ready:false,loading:false,mutation:null,needsRefresh:false,error:'',children:[],invitations:[],createExpanded:false,createName:''};
+      childrenDialogSession=session;$('#childrenDialog').showModal();$('#openChildrenDialog')?.setAttribute('aria-expanded','true');loadChildrenDialog(session);
+    }
+    function wireChildrenDialog(){
+      $('#closeChildrenDialog').onclick=()=>{if(!childrenDialogSession?.mutation)closeChildrenDialog(true)};
+      $('#childrenDialog').addEventListener('cancel',event=>{event.preventDefault();if(!childrenDialogSession?.mutation)closeChildrenDialog(true)},true);
+      $('#childrenDialog').addEventListener('keydown',event=>{if(event.key==='Escape'&&childrenDialogSession?.mutation){event.preventDefault();event.stopPropagation()}},true);
+      $('#childrenDialog').addEventListener('close',()=>{if(!$('#childrenDialog').open)closeChildrenDialog()});
+    }
     async function selectChild(id,replace=true){
       const selected=childList.find(c=>c.id===id);if(!selected)return;
       clearContext();currentChild=selected;state.view='calendar';
@@ -686,7 +776,7 @@
       finally{if(generation===uiGeneration)saveBusy=false}
     }
     const oldRender=render;
-    render=function(){oldRender();if(!data||!currentChild)return;const strip=document.createElement('div');strip.className='account-strip';strip.innerHTML=`${location.hostname==='127.0.0.1'?'<span class="dev-badge">本地测试</span>':''}<span class="child-context">当前孩子</span><select id="childSwitch" aria-label="切换孩子">${childList.map(c=>`<option value="${esc(c.id)}" ${c.id===currentChild.id?'selected':''}>${esc(c.name)}${c.archived?'（已归档）':''}</option>`).join('')}</select><button class="btn" id="allChildren">我的孩子</button><span class="account-name">${esc(authUser?.nickname||'')}</span>${currentChild.archived?'<span>已归档 · 只读</span>':''}`;$('#main').before(strip);$('#childSwitch').onchange=e=>selectChild(e.target.value);$('#allChildren').onclick=()=>showChildren();};
+    render=function(){oldRender();if(!data||!currentChild)return;const trigger=document.createElement('button');trigger.id='openChildrenDialog';trigger.type='button';trigger.className='child-profile';trigger.dataset.childId=currentChild.id;trigger.setAttribute('aria-haspopup','dialog');trigger.setAttribute('aria-expanded',String(!!childrenDialogSession));trigger.setAttribute('aria-controls','childrenDialog');trigger.setAttribute('aria-label',`${currentChild.name}，打开我的孩子${currentChild.archived?'，已归档，只读':''}`);trigger.innerHTML=`<span class="child-avatar" aria-hidden="true">${esc(childInitial(currentChild.name))}</span><span class="child-profile-copy"><strong>${esc(currentChild.name)}</strong>${currentChild.archived||location.hostname==='127.0.0.1'?`<span class="child-profile-meta">${currentChild.archived?'<span class="children-archived-status">已归档 · 只读</span>':''}${location.hostname==='127.0.0.1'?'<span class="child-profile-local">本地测试</span>':''}</span>`:''}</span><span class="child-profile-chevron" aria-hidden="true">⌄</span>`;$('.topbar').append(trigger);trigger.onclick=openChildrenDialog;};
     storageErrorMessage=function(error){return error?.message||'连接暂时中断，请刷新核对。'};
     refreshPageData=async function(){if(saveBusy||refreshBusy)return;refreshBusy=true;try{data=await Store.load();pendingOperation=null;render();toast('已读取最新数据')}catch(error){if(error.kind==='forbidden'){await showChildren()}if(error.kind!=='stale')toast(error.message)}finally{refreshBusy=false}};
     function showProfile(forced=false){
@@ -735,7 +825,7 @@
     downloadBackup=function(){download({...backup(),sourceChild:{id:currentChild.id,name:currentChild.name}},`${currentChild.name}-成长备份-${dateStr(new Date())}.json`);toast('当前孩子备份已导出')};
     importFile=async function(file){const target=currentChild,generation=uiGeneration;try{if(!target||target.role!=='owner'||target.archived)throw new Error('只有未归档孩子的负责人可以恢复数据。');const pkg=JSON.parse(await file.text());if(generation!==uiGeneration)return;const next=pkg.format==='lele-task-manager-store'?validateData(migrateData(pkg.data)):validateBackup(pkg);if(!confirm(`将此备份恢复到“${target.name}”。\n任务系列：${next.series.length}\n积分流水：${next.ledger.length}\n当前业务数据将被替换，孩子姓名和家长权限保持不变。确认恢复？`))return;if(saveBusy)throw new Error('请等待当前操作保存完成。');saveBusy=true;const result=await parentApi(`/api/children/${target.id}/data/restore`,'POST',{expectedRevision:storageMeta.revision,membershipVersion:target.membershipVersion,operationId:uid(),data:next});loadPackage(result);render();toast('当前孩子数据已恢复')}catch(error){if(error.kind!=='stale')alert('导入失败：'+error.message)}finally{if(generation===uiGeneration)saveBusy=false;$('#importInput').value=''}};
     renderAccessGate=renderLogin;
-    boot=async function(){wire();wireGiftControls();wireTaskPresetControls();if(SELFTEST){data=defaults();runSelfTests();return}$('#root').innerHTML='<section class="auth-screen"><h1>正在连接…</h1></section>';try{const session=await parentApi('/api/auth/me');authUser=session.user;csrfToken=session.csrfToken;await enterAccount()}catch(error){if(error.kind==='unauthorized')renderLogin();else renderLogin(error.message)}};
+    boot=async function(){wire();wireGiftControls();wireTaskPresetControls();wireChildrenDialog();if(SELFTEST){data=defaults();runSelfTests();return}$('#root').innerHTML='<section class="auth-screen"><h1>正在连接…</h1></section>';try{const session=await parentApi('/api/auth/me');authUser=session.user;csrfToken=session.csrfToken;await enterAccount()}catch(error){if(error.kind==='unauthorized')renderLogin();else renderLogin(error.message)}};
     window.addEventListener('popstate',()=>{if(authUser)enterAccount()});
     const authBroadcast=typeof BroadcastChannel==='function'?new BroadcastChannel('lele-parent-auth'):null;
     if(authBroadcast)authBroadcast.onmessage=event=>{if(event.data==='logout'){clearContext(true);history.replaceState(null,'','/');renderLogin('账号已在其他页面退出或修改密码，请重新登录。')}};
