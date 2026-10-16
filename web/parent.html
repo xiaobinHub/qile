@@ -104,10 +104,6 @@
     /* 登录页复用家长端色彩和控件规范，样式不影响业务页面与账号设置。 */
     html:has(.parent-login){overflow-y:auto;scrollbar-gutter:auto}
     .auth-screen.parent-login{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:26px;min-height:100vh;min-height:100svh;max-width:none;margin:0;padding:42px 24px;border:0;border-radius:0;background:radial-gradient(ellipse at 50% 12%,#fff6ee 0,transparent 55%),var(--bg)}
-    .parent-login .login-brand{display:flex;align-items:center;gap:12px}
-    .parent-login .login-brand img{display:block;width:44px;height:44px;object-fit:cover;border-radius:13px}
-    .parent-login .login-brand strong{display:block;font-size:18px;font-weight:750;letter-spacing:.02em}
-    .parent-login .login-brand small{display:block;margin-top:2px;color:var(--muted);font-size:12px}
     .parent-login .login-card{width:100%;max-width:416px;overflow:hidden;border:1px solid var(--line);border-radius:20px;background:var(--paper);box-shadow:0 12px 42px -18px rgba(65,48,28,.16)}
     .parent-login .login-card-body{padding:32px}
     .parent-login .login-heading{margin-bottom:27px}
@@ -137,9 +133,8 @@
     .parent-login .login-help{display:flex;align-items:flex-start;gap:8px;padding:17px 25px;border-top:1px solid #edf0ea;background:#fafbf9}
     .parent-login .login-help>svg{flex:0 0 auto;width:15px;height:15px;margin-top:3px;color:#829082}
     .parent-login .login-help p{margin:0;color:var(--muted);font-size:12px;line-height:1.85}
-    .parent-login .login-footer{margin:0;color:#929990;font-size:12px;letter-spacing:.05em}
     @keyframes login-spin{to{transform:rotate(360deg)}}
-    @media(max-width:480px){.auth-screen.parent-login{gap:23px;padding:30px 20px}.parent-login .login-card-body{padding:27px 24px}.parent-login h1{font-size:25px}.parent-login .login-input input{font-size:16px}.parent-login .login-help{padding:16px 21px}.parent-login .login-footer{font-size:11px}}
+    @media(max-width:480px){.auth-screen.parent-login{gap:23px;padding:30px 20px}.parent-login .login-card-body{padding:27px 24px}.parent-login h1{font-size:25px}.parent-login .login-input input{font-size:16px}.parent-login .login-help{padding:16px 21px}}
     @media(max-height:660px){.auth-screen.parent-login{justify-content:flex-start;gap:18px;padding-block:24px}}
     @media(prefers-reduced-motion:reduce){.parent-login .login-submit .login-spinner{animation:none}.parent-login input{transition:none}}
   </style>
