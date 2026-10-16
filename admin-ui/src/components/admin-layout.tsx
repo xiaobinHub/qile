@@ -28,10 +28,10 @@ export function AdminLayout({ page, onNavigate, children }: { page: Page; onNavi
   }
   const title = locked ? "密码设置" : page === "users" ? "账号管理" : "我的账号"
   return <div className="min-h-svh bg-background">
-    <aside className="fixed inset-y-0 left-0 z-30 hidden w-[216px] border-r bg-card md:block">{sidebar()}</aside>
-    <div className="min-w-0 md:ml-[216px]">
+    <aside className="fixed inset-y-0 left-0 z-30 hidden w-[216px] border-r bg-card lg:block">{sidebar()}</aside>
+    <div className="min-w-0 lg:ml-[216px]">
       <header className="flex h-16 items-center justify-between gap-4 border-b bg-card/90 px-5 sm:px-8">
-        <div className="flex min-w-0 items-center gap-3"><Sheet open={mobileOpen} onOpenChange={setMobileOpen}><SheetTrigger asChild><Button type="button" variant="ghost" size="icon-sm" aria-label="打开导航" className="-ml-2 md:hidden"><Menu /></Button></SheetTrigger><SheetContent side="left" className="w-[264px] gap-0 p-0"><SheetTitle className="sr-only">后台导航</SheetTitle><SheetDescription className="sr-only">账号管理和个人账号设置</SheetDescription>{sidebar(true)}</SheetContent></Sheet><LayoutGrid className="hidden size-4 text-muted-foreground/70 sm:block" /><div className="flex items-center gap-2 text-xs sm:gap-3"><span className="text-muted-foreground">管理后台</span><ChevronRight className="size-3 text-muted-foreground/60" /><span className="font-medium">{title}</span></div></div>
+        <div className="flex min-w-0 items-center gap-3"><Sheet open={mobileOpen} onOpenChange={setMobileOpen}><SheetTrigger asChild><Button type="button" variant="ghost" size="icon-sm" aria-label="打开导航" className="-ml-2 lg:hidden"><Menu /></Button></SheetTrigger><SheetContent side="left" className="w-[264px] gap-0 p-0"><SheetTitle className="sr-only">后台导航</SheetTitle><SheetDescription className="sr-only">账号管理和个人账号设置</SheetDescription>{sidebar(true)}</SheetContent></Sheet><LayoutGrid className="hidden size-4 text-muted-foreground/70 sm:block" /><div className="flex items-center gap-2 text-xs sm:gap-3"><span className="text-muted-foreground">管理后台</span><ChevronRight className="size-3 text-muted-foreground/60" /><span className="font-medium">{title}</span></div></div>
         <div className="flex shrink-0 items-center gap-1.5 rounded-full border border-border/80 bg-muted/30 px-2.5 py-1 text-[10px] text-muted-foreground"><span className="size-1.5 rounded-full bg-primary" /><span>管理员工作台</span></div>
       </header>
       <main id="mainContent" className="mx-auto w-full max-w-[1360px] px-5 py-7 sm:px-8 sm:py-8">{children}</main>
