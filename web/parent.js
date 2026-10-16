@@ -681,14 +681,24 @@
       const body=$('#childrenDialogBody');
       if(session.loading&&!session.ready){body.innerHTML='<div class="children-dialog-state" role="status">正在读取孩子列表…</div>';syncChildrenDialogBusy(session);return}
       const error=session.error?`<div class="children-dialog-feedback"><p class="account-error" id="childrenDialogError" role="alert">${esc(session.error)}</p><button class="btn" type="button" id="retryChildrenDialog">刷新列表</button></div>`:'<p id="childrenDialogError" class="account-error" role="alert"></p>';
-      body.innerHTML=`<p class="children-dialog-intro">选择一个孩子，查看和管理成长记录。</p>${error}${session.ready?`
-        <div class="children-dialog-cards">${session.children.map(child=>{const active=child.id===session.childId;return `<button type="button" class="children-dialog-card${active?' is-current':''}" data-open-child="${esc(child.id)}" aria-label="${esc(child.name)}，${active?'当前孩子':child.archived?'查看归档':'进入孩子页面'}"><span class="child-avatar" aria-hidden="true">${esc(childInitial(child.name))}</span><span class="children-dialog-card-copy"><strong>${esc(child.name)}</strong><span class="children-dialog-card-meta"><span>${child.role==='owner'?'负责人':'共同管理'}</span>${active?'<span class="children-current-status">当前孩子</span>':''}${child.archived?'<span class="children-archived-status">已归档 · 只读</span>':''}</span></span><span class="children-card-arrow" aria-hidden="true">${active?'✓':'›'}</span></button>`}).join('')||'<p class="children-dialog-empty">暂无可切换的孩子。</p>'}</div>`:''}`;
+      body.innerHTML=`${error}${session.ready?`
+        <div class="children-dialog-cards" role="group" aria-label="选择孩子">${session.children.map(child=>{const active=child.id===session.childId;return `<button type="button" class="children-dialog-card${active?' is-current':''}" data-open-child="${esc(child.id)}"${active?' aria-current="true"':''} aria-label="${esc(child.name)}，${active?'当前孩子':child.archived?'查看归档':'进入孩子页面'}"><span class="children-card-status">${active?'<span class="children-current-status"><span aria-hidden="true">✓</span> 当前孩子</span>':child.archived?'<span class="children-archived-status">已归档 · 只读</span>':''}</span><span class="children-card-avatar" aria-hidden="true">${esc(childInitial(child.name))}</span><span class="children-dialog-card-copy"><strong>${esc(child.name)}</strong><span class="children-dialog-card-meta">${child.role==='owner'?'负责人':'共同管理'}${active&&child.archived?' · 已归档，只读':''}</span></span><span class="children-card-enter">${active?'正在查看':child.archived?'查看成长记录':'进入成长计划'}<span aria-hidden="true">${active?'✓':'↗'}</span></span></button>`}).join('')||'<p class="children-dialog-empty">暂无可切换的孩子。</p>'}</div>${session.children.length>1?'<p class="children-switch-hint">点击卡牌切换 · 左右滑动查看更多</p>':''}`:''}`;
       $('#retryChildrenDialog')?.addEventListener('click',()=>{if(!session.loading)loadChildrenDialog(session)});
       $$('#childrenDialogBody [data-open-child]').forEach(button=>button.onclick=()=>{
         if(!childrenDialogActive(session)||session.loading||session.needsRefresh||childContextBusy())return;
         if(button.dataset.openChild===currentChild.id){closeChildrenDialog(true);return}
         closeChildrenDialog();selectChild(button.dataset.openChild);
       });
+      const cards=$('#childrenDialogBody .children-dialog-cards');
+      if(cards){
+        cards.onkeydown=event=>{
+          if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;
+          const buttons=$$('#childrenDialogBody [data-open-child]:not(:disabled)'),index=buttons.indexOf(event.target);if(index<0)return;
+          event.preventDefault();const next=event.key==='Home'?0:event.key==='End'?buttons.length-1:Math.max(0,Math.min(buttons.length-1,index+(event.key==='ArrowRight'?1:-1)));
+          buttons[next].focus({preventScroll:true});buttons[next].scrollIntoView({block:'nearest',inline:'center'});
+        };
+        const current=cards.querySelector('.is-current');if(current)cards.scrollLeft=current.offsetLeft-(cards.clientWidth-current.offsetWidth)/2;
+      }
       syncChildrenDialogBusy(session);
     }
     async function loadChildrenDialog(session){
@@ -712,6 +722,7 @@
     function wireChildrenDialog(){
       $('#closeChildrenDialog').onclick=()=>closeChildrenDialog(true);
       $('#childrenDialog').addEventListener('cancel',event=>{event.preventDefault();closeChildrenDialog(true)},true);
+      $('#childrenDialog').addEventListener('click',event=>{if(event.target===$('#childrenDialog'))closeChildrenDialog(true)});
       $('#childrenDialog').addEventListener('close',()=>{if(!$('#childrenDialog').open)closeChildrenDialog()});
     }
     async function selectChild(id,replace=true){

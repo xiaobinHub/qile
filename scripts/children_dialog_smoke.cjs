@@ -29,11 +29,20 @@ async function exerciseChildrenDialog({browser,admin,dad,firstId,secondId,passwo
     assert.equal(await page.locator('.account-strip').count(),0);
     const initialInvitationReads=invitationReads;
     await trigger.click();
+    const singleCard=dialog.locator(`[data-open-child="${ownId}"]`);
+    await singleCard.waitFor();
+    const singleBox=await singleCard.boundingBox(),singleDialog=await dialog.boundingBox();
+    assert.ok(Math.abs(singleBox.x+singleBox.width/2-singleDialog.x-singleDialog.width/2)<3,'A single child card is centered');
+    assert.ok(singleBox.height>singleBox.width*1.25,'Children are shown as portrait cards');
+    assert.equal(await dialog.locator('.modal,.modal-head').count(),0,'The switcher has no conventional modal frame');
+    await page.screenshot({path:path.join(out,'parent-children-single.png')});
     await dialog.locator(`[data-open-child="${ownId}"]`).click();
     await closed();await focusReturned();
     assert.equal(invitationReads,initialInvitationReads,'Switching does not read invitations');
     assert.equal(page.url(),originalUrl);
     assert.equal(await page.locator('#calendarTitle').innerText(),calendarTitle);
+    await trigger.click();await singleCard.waitFor();
+    await page.mouse.click(10,10);await closed();await focusReturned();
 
     // Prepare pending invitations without granting access until the user accepts.
     const invites=await dad.evaluate(async ids=>{
@@ -72,16 +81,38 @@ async function exerciseChildrenDialog({browser,admin,dad,firstId,secondId,passwo
     await dialog.locator(`[data-open-child="${newId}"]`).waitFor();
     assert.equal(await dialog.locator('[data-open-child]').count(),3);
     assert.equal(await dialog.locator('[data-accept-invite],[data-reject-invite],#createChildForm').count(),0);
-    await page.screenshot({path:path.join(out,'parent-children-desktop.png'),fullPage:true});
+    const cards=dialog.locator('[data-open-child]'),firstBox=await cards.nth(0).boundingBox(),secondBox=await cards.nth(1).boundingBox();
+    assert.ok(secondBox.x>firstBox.x+firstBox.width-5&&Math.abs(secondBox.y-firstBox.y)<30,'Desktop cards are side by side');
+    await page.screenshot({path:path.join(out,'parent-children-desktop.png')});
+    await cards.first().focus();await page.keyboard.press('ArrowRight');
+    assert.equal(await page.evaluate(()=>document.activeElement?.dataset.openChild),await cards.nth(1).getAttribute('data-open-child'));
+    await page.keyboard.press('End');
+    assert.equal(await page.evaluate(()=>document.activeElement?.dataset.openChild),await cards.last().getAttribute('data-open-child'));
+    await page.keyboard.press('Home');
+    assert.equal(await page.evaluate(()=>document.activeElement?.dataset.openChild),await cards.first().getAttribute('data-open-child'));
+    assert.equal(await trigger.getAttribute('data-child-id'),firstId,'Moving card focus does not switch the child');
     await dialog.locator(`[data-open-child="${newId}"]`).click();await waitChild(newId);await closed();
     await page.setViewportSize({width:815,height:954});
+    await trigger.click();await dialog.locator(`[data-open-child="${newId}"]`).waitFor();
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false);
+    await page.keyboard.press('Escape');await closed();
     await page.setViewportSize({width:390,height:844});
     await trigger.click();await dialog.locator(`[data-open-child="${newId}"]`).waitFor();
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false);
     const box=await dialog.boundingBox();
     assert.ok(box.x>=0&&box.x+box.width<=391&&box.y>=0&&box.y+box.height<=845,'Dialog fits the phone viewport');
-    await page.screenshot({path:path.join(out,'parent-children-mobile.png'),fullPage:true});
+    const activeCard=await dialog.locator(`[data-open-child="${newId}"]`).boundingBox();
+    assert.ok(activeCard.x>=box.x&&activeCard.x+activeCard.width<=box.x+box.width,'The current card is visible when the switcher opens');
+    assert.equal(await dialog.locator('.children-dialog-cards').evaluate(element=>element.scrollWidth>element.clientWidth),true,'Multiple cards can scroll horizontally on phones');
+    // A dialog is anchored to the viewport; a full-page capture temporarily resizes it.
+    await page.screenshot({path:path.join(out,'parent-children-mobile.png')});
+    const capturedCard=await dialog.locator(`[data-open-child="${newId}"]`).boundingBox();
+    assert.ok(capturedCard.x>=box.x&&capturedCard.x+capturedCard.width<=box.x+box.width,'Capturing the phone view preserves the current card');
+    const scrollBefore=await dialog.locator('.children-dialog-cards').evaluate(element=>element.scrollLeft);
+    assert.ok(scrollBefore>0);
+    await dialog.locator('.children-dialog-cards').hover();await page.mouse.wheel(-700,0);
+    await page.waitForFunction(before=>document.querySelector('#childrenDialog .children-dialog-cards').scrollLeft<before,scrollBefore);
+    assert.equal(await trigger.getAttribute('data-child-id'),newId,'Scrolling card choices does not change the current child');
     await page.keyboard.press('Escape');await closed();await focusReturned();
 
     await page.route('**/api/children',async route=>route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({error:'测试列表暂不可用'})}),{times:1});
