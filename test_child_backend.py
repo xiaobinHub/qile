@@ -13,11 +13,23 @@ import uuid
 from pathlib import Path
 from fastapi.testclient import TestClient
 from accounts_app import create_app
-from child_service import ChildService, initialize, bootstrap, import_child, ApiError, canonical_bytes
+from child_service import ChildService, initialize, bootstrap, import_child, ApiError, canonical_bytes, password_value
 
 CONFIG=os.environ.get('LELE_TEST_CONFIG')
 PASSWORD='Local-test-password-123!'
 NEW_PASSWORD='Local-new-password-456!'
+
+class PasswordPolicyTests(unittest.TestCase):
+    def test_accepts_six_characters_and_optional_symbols(self):
+        for value in ('abc123', 'A1b2C3', 'A1!234', 'A1'+'x'*126):
+            with self.subTest(value=value):
+                self.assertEqual(password_value(value), value)
+
+    def test_rejects_short_or_missing_letters_or_digits(self):
+        for value in ('ab123', 'abcdef', '123456', 'abc!@#', '123!@#', '中文密码12', 'A1'+'x'*127, '', None, 123456):
+            with self.subTest(value=value):
+                with self.assertRaises(ApiError):
+                    password_value(value)
 
 @unittest.skipUnless(CONFIG,'Set LELE_TEST_CONFIG to an isolated local test database')
 class ChildBackendTests(unittest.TestCase):
@@ -114,6 +126,28 @@ class ChildBackendTests(unittest.TestCase):
         self.assertEqual(client.get('/api/children').json()['kind'],'password_change_required')
         self.assertEqual(self.call(client,'POST','/api/account/password',{'currentPassword':PASSWORD,'newPassword':NEW_PASSWORD}).status_code,200)
         self.assertEqual(old.get('/api/auth/me').status_code,401)
+
+    def test_six_character_password_create_change_and_reset(self):
+        name='policy'+uuid.uuid4().hex[:8]
+        path='/api/admin/users'
+        for invalid in ('abc12', 'abcdef', '123456'):
+            self.assertEqual(self.call(self.admin,'POST',path,{'loginName':name,'nickname':'Policy','password':invalid}).status_code,400)
+        created=self.call(self.admin,'POST',path,{'loginName':name,'nickname':'Policy','password':'Abc123'})
+        self.assertEqual(created.status_code,200,created.text)
+        client=TestClient(self.parent_app,base_url=self.service.config['parent_origin'])
+        self.assertEqual(self.login(client,name,'Abc123').status_code,200)
+        for invalid in ('abc12', 'abcdef', '123456'):
+            self.assertEqual(self.call(client,'POST','/api/account/password',{'currentPassword':'Abc123','newPassword':invalid}).status_code,400)
+        self.assertEqual(self.call(client,'POST','/api/account/password',{'currentPassword':'Abc123','newPassword':'Def456'}).status_code,200)
+        self.assertEqual(self.login(client,name,'Def456').status_code,200)
+        reset_path=path+'/'+created.json()['user']['id']+'/password'
+        for invalid in ('abc12', 'abcdef', '123456'):
+            self.assertEqual(self.call(self.admin,'POST',reset_path,{'password':invalid}).status_code,400)
+        self.assertEqual(client.get('/api/auth/me').status_code,200)
+        self.assertEqual(self.call(self.admin,'POST',reset_path,{'password':'Ghi789'}).status_code,200)
+        self.assertEqual(client.get('/api/auth/me').status_code,401)
+        self.assertEqual(self.login(client,name,'Ghi789').status_code,200)
+        self.assertEqual(client.get('/api/children').json()['kind'],'password_change_required')
 
     def test_idempotency_and_revision_conflicts(self):
         child=self.child(); body=self.operation(child); path='/api/children/'+child['id']+'/operations'

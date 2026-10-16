@@ -5,7 +5,8 @@ const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypt
 const assert=require('node:assert/strict');
 const root=path.resolve(__dirname,'..'),python=path.join(root,'.venv/bin/python');
 const runtime=path.join(root,'data/development'),out=path.join(root,'output/playwright');
-const passwords={admin:crypto.randomBytes(20).toString('hex'),adminNew:crypto.randomBytes(20).toString('hex'),initial:crypto.randomBytes(20).toString('hex'),dad:crypto.randomBytes(20).toString('hex'),mom:crypto.randomBytes(20).toString('hex')};
+// Exercise the minimum password length throughout the account flows.
+const passwords=Object.fromEntries(['admin','adminNew','initial','dad','mom'].map((key,index)=>[key,String.fromCharCode(65+index)+'7'+crypto.randomBytes(2).toString('hex')]));
 const setup=`
 import json,sys,os
 from pathlib import Path
@@ -29,7 +30,8 @@ function start(surface,port){const fd=fs.openSync(path.join(runtime,'browser-'+s
 async function ready(port){for(let n=0;n<60;n++){try{const r=await fetch(`http://127.0.0.1:${port}/api/health`);if(r.ok)return}catch{}await new Promise(r=>setTimeout(r,150))}throw Error('local QA service did not start')}
 const failures=[];let browser;
 async function login(page,port,name,password){await page.goto(`http://127.0.0.1:${port}/`);await page.locator('#loginName').fill(name);await page.locator('#loginPassword').fill(password);await page.locator('#loginForm button').click()}
-async function parentPassword(page,newPassword){await page.locator('#passwordCurrent').fill(passwords.initial);await page.locator('#passwordNew').fill(newPassword);await page.locator('#passwordRepeat').fill(newPassword);await page.locator('#passwordForm button').click();await page.locator('#loginName').waitFor()}
+async function checkPasswordInput(page,selector){for(const [value,valid] of [['abc123',true],['abcdef',false],['123456',false],['ab123',false]]){await page.locator(selector).fill(value);assert.equal(await page.locator(selector).evaluate(el=>el.checkValidity()),valid,selector+' password policy')}}
+async function parentPassword(page,newPassword){await checkPasswordInput(page,'#passwordNew');await checkPasswordInput(page,'#passwordRepeat');await page.locator('#passwordCurrent').fill(passwords.initial);await page.locator('#passwordNew').fill(newPassword);await page.locator('#passwordRepeat').fill(newPassword);await page.locator('#passwordForm button').click();await page.locator('#loginName').waitFor()}
 async function waitForStore(page,id,predicate){for(let n=0;n<200;n++){const value=await page.evaluate(async child=>(await fetch(`/api/children/${child}/data`)).json(),id);if(predicate(value))return value;await page.waitForTimeout(50)}throw Error('Persisted business result not reached')}
 async function createParent(admin,loginName,nickname){await admin.locator('#createLogin').fill(loginName);await admin.locator('#createNickname').fill(nickname);await admin.locator('#createPassword').fill(passwords.initial);await admin.locator('#createUser button').click();await admin.getByText(nickname,{exact:true}).waitFor()}
 (async()=>{try{
@@ -39,9 +41,12 @@ async function createParent(admin,loginName,nickname){await admin.locator('#crea
  const admin=await ac.newPage(),dad=await dc.newPage(),mom=await mc.newPage();
  for(const page of [admin,dad,mom]){page.on('pageerror',e=>failures.push(e.message));page.on('dialog',d=>d.accept())}
  await login(admin,18888,'qaadmin',passwords.admin);
+ await checkPasswordInput(admin,'#newPassword');await checkPasswordInput(admin,'#repeatPassword');
  await admin.locator('#currentPassword').fill(passwords.admin);await admin.locator('#newPassword').fill(passwords.adminNew);await admin.locator('#repeatPassword').fill(passwords.adminNew);await admin.locator('#changePassword button').click();await admin.locator('#loginName').waitFor();
  await login(admin,18888,'qaadmin',passwords.adminNew);await admin.locator('#createLogin').waitFor();
+ await checkPasswordInput(admin,'#createPassword');
  await createParent(admin,'qadad','测试爸爸');await createParent(admin,'qamom','测试妈妈');
+ await admin.locator('[data-reset]').first().click();await checkPasswordInput(admin,'#resetValue');await admin.locator('#cancelReset').click();
  await admin.screenshot({path:path.join(out,'admin-accounts.png'),fullPage:true});
  await login(dad,18887,'qadad',passwords.initial);await parentPassword(dad,passwords.dad);await login(dad,18887,'qadad',passwords.dad);await dad.locator('#newChildName').fill('测试哥哥');await dad.locator('#createChildForm button').click();await dad.locator('#childSwitch').waitFor();
  const firstId=await dad.locator('#childSwitch').inputValue();

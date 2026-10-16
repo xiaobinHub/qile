@@ -95,8 +95,8 @@ def setup(source=None):
         accounts = json.loads(accounts_path.read_text())
     else:
         accounts = {'environment': 'development', 'parentUrl': config['parent_origin'], 'adminUrl': config['admin_origin'],
-                    'admin': {'loginName': 'admin', 'password': secrets.token_urlsafe(22)},
-                    'lele': {'loginName': 'lele', 'password': secrets.token_urlsafe(22), 'mustChangePassword': True},
+                    'admin': {'loginName': 'admin', 'password': (secrets.token_urlsafe(22) + 'A7')},
+                    'lele': {'loginName': 'lele', 'password': (secrets.token_urlsafe(22) + 'A7'), 'mustChangePassword': True},
                     'source': str(Path(source).resolve()) if source else None}
         private_json(accounts_path, accounts)
     if accounts.get('initialChildId'):
@@ -109,7 +109,7 @@ def setup(source=None):
                               None, None, config['admin_origin'], 'admin', '127.0.0.1')
     if session['user']['mustChangePassword']:
         # Complete the bootstrap gate for the generated development administrator.
-        new_password = secrets.token_urlsafe(22)
+        new_password = (secrets.token_urlsafe(22) + 'A7')
         service.request('POST', 'account/password', {'currentPassword': admin_password, 'newPassword': new_password},
                         session['_cookie'], session['csrfToken'], config['admin_origin'], 'admin', '127.0.0.1')
         accounts['admin']['password'] = new_password
@@ -197,7 +197,7 @@ def reset_admin(login_name):
     from child_service import ChildService, PASSWORDS, login_value, password_value, require
     service = ChildService(CONFIG)
     require(service.config['environment'] == 'development', 403, '只允许重置本机开发账号。')
-    password = password_value(getpass.getpass('新的管理员初始密码（15–128 字符）：'))
+    password = password_value(getpass.getpass('新的管理员初始密码（6–128 位，须含字母和数字）：'))
     require(password == getpass.getpass('再次输入密码：'), 400, '两次密码不一致。')
     encoded = PASSWORDS.hash(password)
     def run(cursor):

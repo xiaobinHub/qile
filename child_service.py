@@ -57,7 +57,10 @@ def login_value(value):
 
 
 def password_value(value):
-    require(isinstance(value, str) and 15 <= len(value) <= 128, message='密码需为 15 至 128 个字符。')
+    require(isinstance(value, str) and 6 <= len(value) <= 128
+            and re.search(r'[A-Za-z]', value) is not None
+            and re.search(r'[0-9]', value) is not None,
+            message='密码至少 6 位，且必须同时包含字母和数字（最多 128 位）。')
     return value
 
 
@@ -520,7 +523,7 @@ def main():
         if args.command=='initialize':
             result=initialize(args.config)
         elif args.command=='bootstrap':
-            password=getpass.getpass('初始管理员密码（15–128 字符）：')
+            password=getpass.getpass('初始管理员密码（6–128 位，须含字母和数字）：')
             require(password==getpass.getpass('再次输入密码：'),400,'两次密码不一致。')
             result=bootstrap(args.config,args.login_name,args.nickname,password)
         else:
