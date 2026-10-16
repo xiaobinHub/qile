@@ -46,7 +46,16 @@ brew install postgresql@16
 .venv/bin/python dev.py reset-admin --login-name admin
 ```
 
-浏览器回归使用额外的 `lele_test_browser` 隔离库和临时端口 18887/18888，覆盖账号开通、首次改密、多孩子隔离、邀请、任务、礼品、备份权限及退出。Node.js 仅用于开发测试，生产服务不需要 Node.js：
+管理后台源码在 `admin-ui/`，使用 React、TypeScript、Tailwind 和 shadcn/ui。构建需要 Node.js 22.12+（本机使用 22.23.2）。构建文件在 `web/admin-dist/`，由现有 Python 管理服务同源提供，不依赖 CDN，日常运行不需要额外启动前端服务。修改后台源码后先执行构建，再刷新页面；后台 Python 路由变更时还需重启本机服务。
+
+```sh
+npm ci
+npm run build:admin
+```
+
+`npm run check:admin` 只检查 TypeScript 类型。后台构建产物纳入 Git，后续部署使用同一份已验证的产物；服务器运行服务不需要 Node.js。新增生产发布前需先在本机重新构建并测试。
+
+浏览器回归使用额外的 `lele_test_browser` 隔离库和临时端口 18887/18888，覆盖后台操作弹窗、搜索筛选、账号资料、窄屏，以及账号开通、首次改密、多孩子隔离、邀请、任务、礼品、备份权限及退出：
 
 ```sh
 npm ci
@@ -82,6 +91,8 @@ npm run test:browser
 
 改造前回滚基线为 `df70724`，原 RDS 工作版本为 `dcd0cc9`。本次保留 `server.py`、`postgres_store.py`、`index.html`、旧建表文件和旧启动器，正式配置未切换。
 
-新入口为 `accounts_app.py`，事务与授权为 `child_service.py`，孩子存储为 `child_store.py`，业务命令为 `business_operations.py`，前端为 `web/parent.*` 和 `web/admin.*`，新结构为 `db/schema_v2.sql`。
+新入口为 `accounts_app.py`，事务与授权为 `child_service.py`，孩子存储为 `child_store.py`，业务命令为 `business_operations.py`，家长前端为 `web/parent.*`，后台源码为 `admin-ui/`，后台运行产物为 `web/admin-dist/`，新结构为 `db/schema_v2.sql`。
+
+本次后台重构前回滚点为 `79d7757`。后台只调整界面与静态资源提供方式，不改变账号、授权或孩子业务表结构。
 
 停止本地新版即可继续使用原入口。不要把旧版程序指向新版多孩子数据库，也不要用旧备份覆盖已产生新业务的数据库。

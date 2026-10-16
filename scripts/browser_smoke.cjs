@@ -3,6 +3,7 @@ const {chromium}=require('playwright');
 const {spawn,execFileSync}=require('node:child_process');
 const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto');
 const assert=require('node:assert/strict');
+const {exerciseAdminUI}=require('./admin_ui_smoke.cjs');
 const root=path.resolve(__dirname,'..'),python=path.join(root,'.venv/bin/python');
 const runtime=path.join(root,'data/development'),out=path.join(root,'output/playwright');
 // Exercise the minimum password length throughout the account flows.
@@ -29,11 +30,11 @@ const children=[];
 function start(surface,port){const fd=fs.openSync(path.join(runtime,'browser-'+surface+'.log'),'a');const proc=spawn(python,['-m','uvicorn','accounts_app:create_from_env','--factory','--host','127.0.0.1','--port',String(port),'--no-proxy-headers'],{cwd:root,env:{...process.env,LELE_ACCOUNTS_CONFIG:path.join(runtime,'browser-config.json'),LELE_SURFACE:surface},stdio:['ignore',fd,fd]});fs.closeSync(fd);children.push(proc)}
 async function ready(port){for(let n=0;n<60;n++){try{const r=await fetch(`http://127.0.0.1:${port}/api/health`);if(r.ok)return}catch{}await new Promise(r=>setTimeout(r,150))}throw Error('local QA service did not start')}
 const failures=[];let browser;
-async function login(page,port,name,password){await page.goto(`http://127.0.0.1:${port}/`);await page.locator('#loginName').fill(name);await page.locator('#loginPassword').fill(password);await page.locator('#loginForm button').click()}
+async function login(page,port,name,password){await page.goto(`http://127.0.0.1:${port}/`);await page.locator('#loginName').fill(name);await page.locator('#loginPassword').fill(password);await page.locator('#loginForm button:not([type="button"])').click()}
 async function checkPasswordInput(page,selector){for(const [value,valid] of [['abc123',true],['abcdef',false],['123456',false],['ab123',false]]){await page.locator(selector).fill(value);assert.equal(await page.locator(selector).evaluate(el=>el.checkValidity()),valid,selector+' password policy')}}
 async function parentPassword(page,newPassword){await checkPasswordInput(page,'#passwordNew');await checkPasswordInput(page,'#passwordRepeat');await page.locator('#passwordCurrent').fill(passwords.initial);await page.locator('#passwordNew').fill(newPassword);await page.locator('#passwordRepeat').fill(newPassword);await page.locator('#passwordForm button').click();await page.locator('#loginName').waitFor()}
 async function waitForStore(page,id,predicate){for(let n=0;n<200;n++){const value=await page.evaluate(async child=>(await fetch(`/api/children/${child}/data`)).json(),id);if(predicate(value))return value;await page.waitForTimeout(50)}throw Error('Persisted business result not reached')}
-async function createParent(admin,loginName,nickname){await admin.locator('#createLogin').fill(loginName);await admin.locator('#createNickname').fill(nickname);await admin.locator('#createPassword').fill(passwords.initial);await admin.locator('#createUser button').click();await admin.getByText(nickname,{exact:true}).waitFor()}
+async function createParent(admin,loginName,nickname){await admin.locator('#openCreateUser').click();await admin.locator('#createLogin').fill(loginName);await admin.locator('#createNickname').fill(nickname);await admin.locator('#createPassword').fill(passwords.initial);await admin.locator('#createUser button[type="submit"]').click();await admin.getByRole('dialog').waitFor({state:'hidden'});await admin.getByText(nickname,{exact:true}).waitFor()}
 (async()=>{try{
  start('parent',18887);start('admin',18888);await Promise.all([ready(18887),ready(18888)]);
  browser=await chromium.launch({headless:true});
@@ -42,12 +43,17 @@ async function createParent(admin,loginName,nickname){await admin.locator('#crea
  for(const page of [admin,dad,mom]){page.on('pageerror',e=>failures.push(e.message));page.on('dialog',d=>d.accept())}
  await login(admin,18888,'qaadmin',passwords.admin);
  await checkPasswordInput(admin,'#newPassword');await checkPasswordInput(admin,'#repeatPassword');
- await admin.locator('#currentPassword').fill(passwords.admin);await admin.locator('#newPassword').fill(passwords.adminNew);await admin.locator('#repeatPassword').fill(passwords.adminNew);await admin.locator('#changePassword button').click();await admin.locator('#loginName').waitFor();
- await login(admin,18888,'qaadmin',passwords.adminNew);await admin.locator('#createLogin').waitFor();
+ await admin.locator('#currentPassword').fill(passwords.admin);await admin.locator('#newPassword').fill(passwords.adminNew);await admin.locator('#repeatPassword').fill(passwords.adminNew);await admin.locator('#changePassword button[type="submit"]').click();await admin.locator('#loginName').waitFor();
+ await login(admin,18888,'qaadmin',passwords.adminNew);await admin.locator('#openCreateUser').waitFor();
+ await admin.locator('#openCreateUser').click();
  await checkPasswordInput(admin,'#createPassword');
+ await admin.locator('#cancelCreate').click();
+ await admin.getByRole('dialog').waitFor({state:'hidden'});
+ await admin.waitForFunction(()=>document.querySelector('#openCreateUser')===document.activeElement);
  await createParent(admin,'qadad','测试爸爸');await createParent(admin,'qamom','测试妈妈');
- await admin.locator('[data-reset]').first().click();await checkPasswordInput(admin,'#resetValue');await admin.locator('#cancelReset').click();
+ await admin.locator('[data-actions]').first().click();await admin.locator('[data-reset]').first().click();await checkPasswordInput(admin,'#resetValue');await admin.locator('#cancelReset').click();
  await admin.screenshot({path:path.join(out,'admin-accounts.png'),fullPage:true});
+ if(!process.argv.includes('--admin-only')){
  await login(dad,18887,'qadad',passwords.initial);await parentPassword(dad,passwords.dad);await login(dad,18887,'qadad',passwords.dad);await dad.locator('#newChildName').fill('测试哥哥');await dad.locator('#createChildForm button').click();await dad.locator('#childSwitch').waitFor();
  const firstId=await dad.locator('#childSwitch').inputValue();
  // Create a task using the existing calendar editor.
@@ -91,8 +97,11 @@ async function createParent(admin,loginName,nickname){await admin.locator('#crea
  const denied=await mom.evaluate(async(id)=>(await fetch(`/api/children/${id}/data`)).status,firstId);assert.equal(denied,403);
  // Logout also clears the page before the delayed server response completes.
  await dad.locator('#allChildren').click();await dad.locator('#accountLogout').waitFor();await dad.route('**/api/auth/logout',async route=>{await new Promise(r=>setTimeout(r,600));await route.continue()});await dad.locator('#accountLogout').click();assert.equal(await dad.locator('[data-open-child]').count(),0);await dad.locator('#loginName').waitFor();
+ }
+ await exerciseAdminUI({admin,browser,port:18888,passwords,out,createParent});
  assert.deepEqual(failures,[]);
- console.log(JSON.stringify({passed:true,scenarios:['admin login/password/create','parent forced password','task create/complete','gift redeem/reverse','specific-child invite','multiple child isolation','two-tab context','slow history/logout invalidation','out-of-order read monotonicity','legacy image HTML escaping','child print title','restore permissions','member self-leave','mobile layout'],pageErrors:failures,screenshots:3}));
- }catch(error){console.error(error.stack);if(browser){const page=browser.contexts()[1]?.pages().at(-1);if(page){await page.screenshot({path:path.join(out,'failure.png'),fullPage:true});console.error((await page.locator('body').innerText()).slice(0,2000))}}process.exitCode=1}
+ const scenarios=['admin login/password/create','parent forced password','task create/complete','gift redeem/reverse','specific-child invite','multiple child isolation','two-tab context','slow history/logout invalidation','out-of-order read monotonicity','legacy image HTML escaping','child print title','restore permissions','member self-leave','mobile layout','admin search/status/refresh','admin disable/enable/cancel','admin password reset','admin dialog keyboard/focus','admin mobile layout','admin profile/logout/stale save'];
+ console.log(JSON.stringify({passed:true,scenarios:process.argv.includes('--admin-only')?scenarios.filter(s=>s.startsWith('admin ')):scenarios,pageErrors:failures,screenshots:process.argv.includes('--admin-only')?4:6}));
+ }catch(error){console.error(error.stack);if(browser){for(const [i,context] of browser.contexts().entries()){const page=context.pages().at(-1);if(page){await page.screenshot({path:path.join(out,`failure-${i}.png`),fullPage:true});console.error(`Context ${i}: `+(await page.locator('body').innerText()).slice(0,2000))}}}process.exitCode=1}
  finally{if(browser)await browser.close();for(const child of children)child.kill('SIGTERM')}
 })();

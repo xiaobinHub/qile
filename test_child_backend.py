@@ -7,6 +7,7 @@ import concurrent.futures
 import copy
 import os
 import json
+import re
 import tempfile
 import unittest
 import uuid
@@ -104,6 +105,22 @@ class ChildBackendTests(unittest.TestCase):
         self.assertEqual(self.a.put('/api/data',json={}).status_code,403)
         unauth=TestClient(self.parent_app)
         self.assertEqual(unauth.get('/api/children').status_code,401)
+
+    def test_admin_built_assets_are_surface_scoped(self):
+        response=self.admin.get('/')
+        self.assertEqual(response.status_code,200)
+        script=re.search(r'src="(/admin-assets/[^"/]+\.js)"',response.text)
+        stylesheet=re.search(r'href="(/admin-assets/[^"/]+\.css)"',response.text)
+        self.assertIsNotNone(script,'Admin must serve its locally built JavaScript')
+        self.assertIsNotNone(stylesheet,'Admin must serve its locally built stylesheet')
+        for asset,content_type in ((script.group(1),'javascript'),(stylesheet.group(1),'text/css')):
+            served=self.admin.get(asset)
+            self.assertEqual(served.status_code,200)
+            self.assertIn(content_type,served.headers['content-type'])
+            self.assertEqual(self.a.get(asset).status_code,404)
+        for path in ('/admin-assets/index.html','/admin-assets/../child_service.py','/admin-assets/%2e%2e%2fchild_service.py','/admin-assets/index.js.map','/static/admin.js','/static/parent.js','/admin-ui/src/App.tsx'):
+            with self.subTest(path=path):
+                self.assertEqual(self.admin.get(path).status_code,404)
 
     def test_csrf_origin_and_persistent_session(self):
         missing=self.a.post('/api/children',json={'name':'Denied'})

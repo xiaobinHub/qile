@@ -6,6 +6,7 @@ Set LELE_ACCOUNTS_CONFIG to an explicit config and LELE_SURFACE=parent|admin.
 from __future__ import annotations
 import json
 import os
+import re
 from pathlib import Path
 
 from fastapi import FastAPI, Request
@@ -92,7 +93,7 @@ def create_app(config_path, surface='parent'):
 
     web_root=Path(__file__).resolve().parent/'web'
     def page():
-        file=web_root/(surface+'.html')
+        file=web_root/'admin-dist'/'index.html' if surface=='admin' else web_root/'parent.html'
         if not file.is_file(): raise ApiError(503,'页面尚未准备好。')
         return FileResponse(file)
 
@@ -102,11 +103,22 @@ def create_app(config_path, surface='parent'):
 
     @app.get('/static/{asset}')
     def static(asset:str):
-        if asset != surface+'.js':
+        if surface!='parent' or asset!='parent.js':
             raise ApiError(404,'文件不存在。')
         file=web_root/asset
         if not file.is_file(): raise ApiError(404,'文件不存在。')
         return FileResponse(file)
+
+    if surface=='admin':
+        @app.get('/admin-assets/{asset}')
+        def admin_asset(asset:str):
+            if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.-]*\.(?:js|css)',asset):
+                raise ApiError(404,'文件不存在。')
+            root=(web_root/'admin-dist').resolve()
+            file=(root/asset).resolve()
+            if file.parent!=root or not file.is_file():
+                raise ApiError(404,'文件不存在。')
+            return FileResponse(file)
     return app
 
 
