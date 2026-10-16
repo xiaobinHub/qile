@@ -672,77 +672,46 @@
     }
     function syncChildrenDialogBusy(session){
       if(!childrenDialogActive(session))return;
-      const busy=!!session.mutation||session.loading;
+      const busy=session.loading;
       $('#childrenDialog').setAttribute('aria-busy',String(busy));
-      $('#closeChildrenDialog').disabled=!!session.mutation;
-      $$('#childrenDialogBody button,#childrenDialogBody input').forEach(control=>{control.disabled=busy||(session.needsRefresh&&control.matches('[data-open-child],[data-accept-invite],[data-reject-invite],#createChildForm button'))});
+      $$('#childrenDialogBody button').forEach(control=>{control.disabled=busy||(session.needsRefresh&&control.matches('[data-open-child]'))});
     }
     function renderChildrenDialog(session){
       if(!childrenDialogActive(session))return;
       const body=$('#childrenDialogBody');
-      if(session.loading&&!session.ready){body.innerHTML='<div class="children-dialog-state" role="status">正在读取孩子与邀请…</div>';syncChildrenDialogBusy(session);return}
+      if(session.loading&&!session.ready){body.innerHTML='<div class="children-dialog-state" role="status">正在读取孩子列表…</div>';syncChildrenDialogBusy(session);return}
       const error=session.error?`<div class="children-dialog-feedback"><p class="account-error" id="childrenDialogError" role="alert">${esc(session.error)}</p><button class="btn" type="button" id="retryChildrenDialog">刷新列表</button></div>`:'<p id="childrenDialogError" class="account-error" role="alert"></p>';
-      body.innerHTML=`<p class="children-dialog-intro">每个孩子的任务、积分和礼品分别记录，点击卡片进入。</p>${error}${session.ready?`
-        <section class="children-dialog-section" aria-labelledby="childrenListTitle"><h3 id="childrenListTitle">已有孩子</h3><div class="children-dialog-cards">${session.children.map(child=>{const active=child.id===session.childId;return `<button type="button" class="children-dialog-card${active?' is-current':''}" data-open-child="${esc(child.id)}" aria-label="${esc(child.name)}，${active?'当前孩子':child.archived?'查看归档':'进入孩子页面'}"><span class="child-avatar" aria-hidden="true">${esc(childInitial(child.name))}</span><span class="children-dialog-card-copy"><strong>${esc(child.name)}</strong><span class="children-dialog-card-meta"><span>${child.role==='owner'?'负责人':'共同管理'}</span>${active?'<span class="children-current-status">当前孩子</span>':''}${child.archived?'<span class="children-archived-status">已归档 · 只读</span>':''}</span></span><span class="children-card-arrow" aria-hidden="true">${active?'✓':'›'}</span></button>`}).join('')||'<p class="children-dialog-empty">暂无可进入的孩子，可以创建孩子或接受邀请。</p>'}</div></section>
-        <section class="children-dialog-section" aria-labelledby="childrenInvitesTitle"><h3 id="childrenInvitesTitle">待处理邀请${session.invitations.length?`<span class="children-section-count">${session.invitations.length}</span>`:''}</h3><div class="children-dialog-invitations">${session.invitations.map(invitation=>`<article class="children-invite-card"><span class="child-avatar" aria-hidden="true">${esc(childInitial(invitation.childName))}</span><div class="children-invite-copy"><strong>${esc(invitation.childName||'孩子')}</strong><p>邀请你共同管理，接受后即可进入</p></div><div class="children-invite-actions"><button class="btn primary" type="button" data-accept-invite="${esc(invitation.id)}">接受</button><button class="btn" type="button" data-reject-invite="${esc(invitation.id)}">拒绝</button></div></article>`).join('')||'<p class="children-dialog-empty">暂无待处理邀请</p>'}</div></section>
-        <section class="children-dialog-create"><button class="btn children-create-toggle" type="button" id="showCreateChild" aria-expanded="${session.createExpanded}" aria-controls="childrenCreatePanel"><span aria-hidden="true">${session.createExpanded?'−':'＋'}</span> 创建孩子</button><div id="childrenCreatePanel"${session.createExpanded?'':' hidden'}>${session.createExpanded?`<form id="createChildForm" class="children-create-form"><div class="field"><label for="newChildName">孩子姓名或昵称</label><input id="newChildName" name="childName" placeholder="输入孩子的昵称" value="${esc(session.createName)}" required maxlength="40" autocomplete="off"></div><button class="btn primary" type="submit">创建孩子</button></form>`:''}</div></section>`:''}`;
-      $('#retryChildrenDialog')?.addEventListener('click',()=>{if(!session.mutation&&!session.loading)loadChildrenDialog(session)});
+      body.innerHTML=`<p class="children-dialog-intro">选择一个孩子，查看和管理成长记录。</p>${error}${session.ready?`
+        <div class="children-dialog-cards">${session.children.map(child=>{const active=child.id===session.childId;return `<button type="button" class="children-dialog-card${active?' is-current':''}" data-open-child="${esc(child.id)}" aria-label="${esc(child.name)}，${active?'当前孩子':child.archived?'查看归档':'进入孩子页面'}"><span class="child-avatar" aria-hidden="true">${esc(childInitial(child.name))}</span><span class="children-dialog-card-copy"><strong>${esc(child.name)}</strong><span class="children-dialog-card-meta"><span>${child.role==='owner'?'负责人':'共同管理'}</span>${active?'<span class="children-current-status">当前孩子</span>':''}${child.archived?'<span class="children-archived-status">已归档 · 只读</span>':''}</span></span><span class="children-card-arrow" aria-hidden="true">${active?'✓':'›'}</span></button>`}).join('')||'<p class="children-dialog-empty">暂无可切换的孩子。</p>'}</div>`:''}`;
+      $('#retryChildrenDialog')?.addEventListener('click',()=>{if(!session.loading)loadChildrenDialog(session)});
       $$('#childrenDialogBody [data-open-child]').forEach(button=>button.onclick=()=>{
-        if(!childrenDialogActive(session)||session.mutation||session.loading||session.needsRefresh||childContextBusy())return;
+        if(!childrenDialogActive(session)||session.loading||session.needsRefresh||childContextBusy())return;
         if(button.dataset.openChild===currentChild.id){closeChildrenDialog(true);return}
         closeChildrenDialog();selectChild(button.dataset.openChild);
       });
-      for(const action of ['accept','reject'])$$(`#childrenDialogBody [data-${action}-invite]`).forEach(button=>button.onclick=()=>mutateChildrenDialog(session,`/api/invitations/${button.dataset[action+'Invite']}/${action}`,{},action==='accept'?'已接受邀请，可以点击孩子卡片进入。':'已拒绝邀请。'));
-      $('#showCreateChild')?.addEventListener('click',()=>{
-        if(!childrenDialogActive(session)||session.mutation||session.loading)return;
-        session.createExpanded=!session.createExpanded;renderChildrenDialog(session);
-        if(session.createExpanded)$('#newChildName')?.focus();else $('#showCreateChild')?.focus();
-      });
-      if($('#createChildForm')){
-        $('#newChildName').oninput=event=>{session.createName=event.target.value};
-        $('#createChildForm').onsubmit=event=>{event.preventDefault();const name=$('#newChildName').value.trim();if(!name){$('#childrenDialogError').textContent='请输入孩子姓名或昵称。';$('#newChildName').focus();return}mutateChildrenDialog(session,'/api/children',{name},'孩子已创建，点击卡片即可进入。',true)};
-      }
       syncChildrenDialogBusy(session);
     }
     async function loadChildrenDialog(session){
       if(!childrenDialogActive(session))return;
       const request=++session.readSequence;session.loading=true;session.error='';renderChildrenDialog(session);
       try{
-        const [listed,invites]=await Promise.all([parentApi('/api/children'),parentApi('/api/invitations')]);
+        const listed=await parentApi('/api/children');
         if(!childrenDialogActive(session)||request!==session.readSequence)return;
-        childList=listed.children;session.children=listed.children;session.invitations=invites.invitations||[];session.ready=true;session.needsRefresh=false;
+        childList=listed.children;session.children=listed.children;session.ready=true;session.needsRefresh=false;
       }catch(error){
         if(childrenDialogActive(session)&&request===session.readSequence&&error.kind!=='stale'&&error.kind!=='unauthorized'){session.error=error.message;session.needsRefresh=true}
       }finally{
         if(childrenDialogActive(session)&&request===session.readSequence){session.loading=false;renderChildrenDialog(session)}
       }
     }
-    async function mutateChildrenDialog(session,path,body,message,created=false){
-      if(!childrenDialogActive(session)||session.mutation||session.loading||session.needsRefresh||childContextBusy())return;
-      const mutation={};session.mutation=mutation;session.error='';$('#childrenDialogError').textContent='';syncChildrenDialogBusy(session);
-      try{
-        await parentApi(path,'POST',body);
-        if(!childrenDialogActive(session)||session.mutation!==mutation)return;
-        if(created){session.createName='';session.createExpanded=false}
-        await loadChildrenDialog(session);
-        if(childrenDialogActive(session))toast(message);
-      }catch(error){
-        if(childrenDialogActive(session)&&session.mutation===mutation&&error.kind!=='stale'&&error.kind!=='unauthorized'){
-          session.error=error.message;session.needsRefresh=!error.status||error.status>=500;
-          if(session.needsRefresh)session.error+=' 请先刷新列表核对结果，再继续操作。';
-          renderChildrenDialog(session);
-        }
-      }finally{if(childrenDialogActive(session)&&session.mutation===mutation){session.mutation=null;syncChildrenDialogBusy(session)}}
-    }
     function openChildrenDialog(){
       if(!currentChild||!data||!authUser||childrenDialogSession||childContextBusy())return;
-      const session={generation:uiGeneration,childId:currentChild.id,readSequence:0,ready:false,loading:false,mutation:null,needsRefresh:false,error:'',children:[],invitations:[],createExpanded:false,createName:''};
+      const session={generation:uiGeneration,childId:currentChild.id,readSequence:0,ready:false,loading:false,needsRefresh:false,error:'',children:[]};
       childrenDialogSession=session;$('#childrenDialog').showModal();$('#openChildrenDialog')?.setAttribute('aria-expanded','true');loadChildrenDialog(session);
     }
     function wireChildrenDialog(){
-      $('#closeChildrenDialog').onclick=()=>{if(!childrenDialogSession?.mutation)closeChildrenDialog(true)};
-      $('#childrenDialog').addEventListener('cancel',event=>{event.preventDefault();if(!childrenDialogSession?.mutation)closeChildrenDialog(true)},true);
-      $('#childrenDialog').addEventListener('keydown',event=>{if(event.key==='Escape'&&childrenDialogSession?.mutation){event.preventDefault();event.stopPropagation()}},true);
+      $('#closeChildrenDialog').onclick=()=>closeChildrenDialog(true);
+      $('#childrenDialog').addEventListener('cancel',event=>{event.preventDefault();closeChildrenDialog(true)},true);
       $('#childrenDialog').addEventListener('close',()=>{if(!$('#childrenDialog').open)closeChildrenDialog()});
     }
     async function selectChild(id,replace=true){
