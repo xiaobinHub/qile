@@ -665,6 +665,7 @@
     }
     function closeChildrenDialog(restoreFocus=false){
       const session=childrenDialogSession,dialog=$('#childrenDialog');childrenDialogSession=null;
+      document.documentElement.classList.remove('children-dialog-open');
       $('#childrenDialogBody').replaceChildren();$('#closeChildrenDialog').disabled=false;dialog.removeAttribute('aria-busy');
       const trigger=$('#openChildrenDialog');trigger?.setAttribute('aria-expanded','false');
       if(dialog.open)dialog.close();
@@ -682,7 +683,7 @@
       if(session.loading&&!session.ready){body.innerHTML='<div class="children-dialog-state" role="status">正在读取孩子列表…</div>';syncChildrenDialogBusy(session);return}
       const error=session.error?`<div class="children-dialog-feedback"><p class="account-error" id="childrenDialogError" role="alert">${esc(session.error)}</p><button class="btn" type="button" id="retryChildrenDialog">刷新列表</button></div>`:'<p id="childrenDialogError" class="account-error" role="alert"></p>';
       body.innerHTML=`${error}${session.ready?`
-        <div class="children-dialog-cards" role="group" aria-label="选择孩子">${session.children.map(child=>{const active=child.id===session.childId;return `<button type="button" class="children-dialog-card${active?' is-current':''}" data-open-child="${esc(child.id)}"${active?' aria-current="true"':''} aria-label="${esc(child.name)}，${active?'当前孩子':child.archived?'查看归档':'进入孩子页面'}"><span class="children-card-status">${active?'<span class="children-current-status"><span aria-hidden="true">✓</span> 当前孩子</span>':child.archived?'<span class="children-archived-status">已归档 · 只读</span>':''}</span><span class="children-card-avatar" aria-hidden="true">${esc(childInitial(child.name))}</span><span class="children-dialog-card-copy"><strong>${esc(child.name)}</strong><span class="children-dialog-card-meta">${child.role==='owner'?'负责人':'共同管理'}${active&&child.archived?' · 已归档，只读':''}</span></span><span class="children-card-enter">${active?'正在查看':child.archived?'查看成长记录':'进入成长计划'}<span aria-hidden="true">${active?'✓':'↗'}</span></span></button>`}).join('')||'<p class="children-dialog-empty">暂无可切换的孩子。</p>'}</div>${session.children.length>1?'<p class="children-switch-hint">点击卡牌切换 · 左右滑动查看更多</p>':''}`:''}`;
+        <div class="children-dialog-cards" role="group" aria-label="选择孩子">${session.children.map(child=>{const active=child.id===session.childId;return `<button type="button" class="children-dialog-card${active?' is-current':''}" data-open-child="${esc(child.id)}"${active?' aria-current="true"':''} aria-label="${esc(child.name)}，${active?'当前孩子':child.archived?'查看归档':'进入孩子页面'}"><span class="children-card-status">${child.archived?'<span class="children-archived-status">已归档 · 只读</span>':''}</span><span class="children-card-avatar" aria-hidden="true">${esc(childInitial(child.name))}</span><span class="children-dialog-card-copy"><strong>${esc(child.name)}</strong></span><span class="children-card-enter">${active?'正在查看':child.archived?'查看成长记录':'进入成长计划'}<span aria-hidden="true">${active?'✓':'↗'}</span></span></button>`}).join('')||'<p class="children-dialog-empty">暂无可切换的孩子。</p>'}</div>${session.children.length>1?'<p class="children-switch-hint">点击卡牌切换 · 滑动或滚轮查看更多</p>':''}`:''}`;
       $('#retryChildrenDialog')?.addEventListener('click',()=>{if(!session.loading)loadChildrenDialog(session)});
       $$('#childrenDialogBody [data-open-child]').forEach(button=>button.onclick=()=>{
         if(!childrenDialogActive(session)||session.loading||session.needsRefresh||childContextBusy())return;
@@ -697,6 +698,10 @@
           event.preventDefault();const next=event.key==='Home'?0:event.key==='End'?buttons.length-1:Math.max(0,Math.min(buttons.length-1,index+(event.key==='ArrowRight'?1:-1)));
           buttons[next].focus({preventScroll:true});buttons[next].scrollIntoView({block:'nearest',inline:'center'});
         };
+        cards.addEventListener('wheel',event=>{
+          if(Math.abs(event.deltaY)<=Math.abs(event.deltaX))return;
+          event.preventDefault();cards.scrollLeft+=event.deltaY;
+        },{passive:false});
         const current=cards.querySelector('.is-current');if(current)cards.scrollLeft=current.offsetLeft-(cards.clientWidth-current.offsetWidth)/2;
       }
       syncChildrenDialogBusy(session);
@@ -717,13 +722,20 @@
     function openChildrenDialog(){
       if(!currentChild||!data||!authUser||childrenDialogSession||childContextBusy())return;
       const session={generation:uiGeneration,childId:currentChild.id,readSequence:0,ready:false,loading:false,needsRefresh:false,error:'',children:[]};
-      childrenDialogSession=session;$('#childrenDialog').showModal();$('#openChildrenDialog')?.setAttribute('aria-expanded','true');loadChildrenDialog(session);
+      childrenDialogSession=session;document.documentElement.classList.add('children-dialog-open');$('#childrenDialog').showModal();$('#openChildrenDialog')?.setAttribute('aria-expanded','true');loadChildrenDialog(session);
     }
     function wireChildrenDialog(){
+      const dialog=$('#childrenDialog');
       $('#closeChildrenDialog').onclick=()=>closeChildrenDialog(true);
-      $('#childrenDialog').addEventListener('cancel',event=>{event.preventDefault();closeChildrenDialog(true)},true);
-      $('#childrenDialog').addEventListener('click',event=>{if(event.target===$('#childrenDialog'))closeChildrenDialog(true)});
-      $('#childrenDialog').addEventListener('close',()=>{if(!$('#childrenDialog').open)closeChildrenDialog()});
+      dialog.addEventListener('cancel',event=>{event.preventDefault();closeChildrenDialog(true)},true);
+      dialog.addEventListener('click',event=>{if(!event.target.closest('button'))closeChildrenDialog(true)});
+      dialog.addEventListener('close',()=>{if(!dialog.open)closeChildrenDialog()});
+      const blockWhenNotCards=event=>{
+        if(event.target.closest?.('.children-dialog-cards'))return;
+        event.preventDefault();
+      };
+      dialog.addEventListener('wheel',blockWhenNotCards,{passive:false});
+      dialog.addEventListener('touchmove',blockWhenNotCards,{passive:false});
     }
     async function selectChild(id,replace=true){
       const selected=childList.find(c=>c.id===id);if(!selected)return;

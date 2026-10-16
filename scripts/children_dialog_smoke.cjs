@@ -35,6 +35,9 @@ async function exerciseChildrenDialog({browser,admin,dad,firstId,secondId,passwo
     assert.ok(Math.abs(singleBox.x+singleBox.width/2-singleDialog.x-singleDialog.width/2)<3,'A single child card is centered');
     assert.ok(singleBox.height>singleBox.width*1.25,'Children are shown as portrait cards');
     assert.equal(await dialog.locator('.modal,.modal-head').count(),0,'The switcher has no conventional modal frame');
+    assert.ok(singleDialog.width>=1543*0.95,'The chooser uses the full viewport width');
+    assert.ok(Math.abs((singleBox.y+singleBox.height/2)-(singleDialog.y+singleDialog.height/2))<954*0.18,'Chooser content is vertically centered in the viewport');
+    assert.equal(await dialog.getByText('当前孩子',{exact:true}).count(),0,'The selected card has no current-child label');
     await page.screenshot({path:path.join(out,'parent-children-single.png')});
     await dialog.locator(`[data-open-child="${ownId}"]`).click();
     await closed();await focusReturned();
@@ -83,6 +86,13 @@ async function exerciseChildrenDialog({browser,admin,dad,firstId,secondId,passwo
     assert.equal(await dialog.locator('[data-accept-invite],[data-reject-invite],#createChildForm').count(),0);
     const cards=dialog.locator('[data-open-child]'),firstBox=await cards.nth(0).boundingBox(),secondBox=await cards.nth(1).boundingBox();
     assert.ok(secondBox.x>firstBox.x+firstBox.width-5&&Math.abs(secondBox.y-firstBox.y)<30,'Desktop cards are side by side');
+    assert.equal(await dialog.getByText('当前孩子',{exact:true}).count(),0,'The current card shows no current-child badge');
+    assert.equal(await dialog.locator('.children-dialog-cards').evaluate(element=>getComputedStyle(element).scrollbarWidth),'none','Card scroller hides its scrollbar');
+    assert.equal(await page.evaluate(()=>document.documentElement.classList.contains('children-dialog-open')),true,'Page scroll is locked while the chooser is open');
+    const pageScrollBefore=await page.evaluate(()=>({win:window.scrollY,month:document.querySelector('.month-scroll')?.scrollTop??-1,week:document.querySelector('.week-wrap')?.scrollTop??-1}));
+    await page.mouse.move(36,360);await page.mouse.wheel(0,800);await page.waitForTimeout(120);
+    const pageScrollAfter=await page.evaluate(()=>({win:window.scrollY,month:document.querySelector('.month-scroll')?.scrollTop??-1,week:document.querySelector('.week-wrap')?.scrollTop??-1}));
+    assert.deepEqual(pageScrollAfter,pageScrollBefore,'Backdrop wheel must not scroll the calendar underneath');
     await page.screenshot({path:path.join(out,'parent-children-desktop.png')});
     await cards.first().focus();await page.keyboard.press('ArrowRight');
     assert.equal(await page.evaluate(()=>document.activeElement?.dataset.openChild),await cards.nth(1).getAttribute('data-open-child'));
@@ -113,6 +123,10 @@ async function exerciseChildrenDialog({browser,admin,dad,firstId,secondId,passwo
     await dialog.locator('.children-dialog-cards').hover();await page.mouse.wheel(-700,0);
     await page.waitForFunction(before=>document.querySelector('#childrenDialog .children-dialog-cards').scrollLeft<before,scrollBefore);
     assert.equal(await trigger.getAttribute('data-child-id'),newId,'Scrolling card choices does not change the current child');
+    const scrollMid=await dialog.locator('.children-dialog-cards').evaluate(element=>element.scrollLeft);
+    await dialog.locator('.children-dialog-cards').hover();await page.mouse.wheel(0,700);
+    await page.waitForFunction(before=>document.querySelector('#childrenDialog .children-dialog-cards').scrollLeft!==before,scrollMid);
+    assert.equal(await trigger.getAttribute('data-child-id'),newId,'Vertical wheel scrolling keeps the current child');
     await page.keyboard.press('Escape');await closed();await focusReturned();
 
     await page.route('**/api/children',async route=>route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({error:'测试列表暂不可用'})}),{times:1});

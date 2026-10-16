@@ -143,15 +143,17 @@
     .child-profile:hover,.child-profile[aria-expanded="true"]{border-color:#d8e0d7;background:#fff}.child-profile:focus-visible{outline:3px solid rgba(79,139,108,.25);outline-offset:2px}
     .child-profile .child-avatar,#childrenDialog .child-avatar{display:grid;place-items:center;flex:0 0 auto;width:42px;height:42px;border:1px solid #dbe5d7;border-radius:50%;background:#eaf1e5;color:#4b7152;font-size:18px;font-weight:750}
     .child-profile-copy{display:grid;gap:3px;min-width:0}.child-profile-copy>strong{overflow:hidden;max-width:155px;font-size:14px;font-weight:700;white-space:nowrap;text-overflow:ellipsis}.child-profile-meta{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:10px;line-height:1.25}.child-profile-chevron{flex:0 0 auto;color:#7b887e;font-size:17px;line-height:1}
-    #childrenDialog{width:min(1000px,calc(100vw - 32px));max-width:calc(100vw - 32px);max-height:calc(100svh - 40px);padding:0;border:0;border-radius:0;background:transparent;box-shadow:none;overflow:visible}
+    #childrenDialog[open]{display:flex;flex-direction:column;justify-content:center;width:100%;max-width:100%;height:100%;max-height:100%;margin:0;padding:0;border:0;border-radius:0;background:transparent;box-shadow:none;overflow:hidden;overscroll-behavior:contain;touch-action:none}
+    html.children-dialog-open,html.children-dialog-open body{overflow:hidden;overscroll-behavior:none}
     #childrenDialog::backdrop{background:rgba(31,42,36,.64);backdrop-filter:blur(7px)}
-    #childrenDialog .child-switcher{display:flex;flex-direction:column;max-height:calc(100svh - 40px);min-width:0}
-    #childrenDialog .child-switcher-heading{position:relative;flex:none;min-height:50px;padding:4px 56px 14px;text-align:center;color:#fff}
-    #childrenDialog .child-switcher-heading h2{margin:0;font-size:27px;font-weight:700;letter-spacing:.08em}
-    #childrenDialog #closeChildrenDialog{position:absolute;right:16px;top:0;display:grid;place-items:center;width:40px;height:40px;padding:0;border:1px solid rgba(255,255,255,.32);border-radius:50%;background:rgba(255,255,255,.1);color:#fff;font-size:22px;cursor:pointer}
+    #childrenDialog .child-switcher{display:flex;flex-direction:column;min-width:0;max-height:100%}
+    #childrenDialog .child-switcher-heading{position:relative;display:flex;align-items:center;justify-content:center;flex:none;min-height:50px;padding:18px 72px 14px;color:#fff}
+    #childrenDialog .child-switcher-heading h2{margin:0;font-size:27px;font-weight:700;letter-spacing:.08em;text-align:center}
+    #childrenDialog #closeChildrenDialog{position:absolute;right:24px;top:18px;bottom:14px;display:flex;align-items:center;justify-content:center;width:40px;height:40px;margin:auto 0;padding:0;border:1px solid rgba(255,255,255,.32);border-radius:50%;background:rgba(255,255,255,.1);color:#fff;font-size:22px;line-height:1;cursor:pointer}
     #childrenDialog #closeChildrenDialog:hover{background:rgba(255,255,255,.22)}
-    #childrenDialogBody{min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:0 0 5px}
-    #childrenDialog .children-dialog-cards{position:relative;display:flex;gap:25px;overflow-x:auto;overscroll-behavior-x:contain;scroll-snap-type:x mandatory;scroll-padding-inline:32px;padding:32px 32px 38px;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.3) transparent}
+    #childrenDialogBody{min-height:0;overflow-y:auto;overscroll-behavior:contain;touch-action:pan-x;max-width:100%}
+    #childrenDialog .children-dialog-cards{position:relative;display:flex;gap:25px;overflow-x:auto;overscroll-behavior:contain;scroll-snap-type:x mandatory;scroll-padding-inline:32px;padding:32px 32px 22px;scrollbar-width:none;touch-action:pan-x}
+    #childrenDialog .children-dialog-cards::-webkit-scrollbar{display:none}
     #childrenDialog .children-dialog-card{--card-paper:#fff9ed;--card-accent:#b57c42;--card-soft:#f3e4ca;--card-tilt:-2deg;position:relative;isolation:isolate;display:flex;flex:0 0 250px;flex-direction:column;align-items:center;gap:21px;min-width:0;min-height:344px;scroll-snap-align:center;padding:22px 23px 23px;border:1px solid rgba(255,255,255,.8);border-radius:25px;background:var(--card-paper);color:var(--ink);text-align:center;cursor:pointer;box-shadow:0 18px 36px rgba(15,29,20,.16);transform:rotate(var(--card-tilt));transition:transform .2s,box-shadow .2s}
     #childrenDialog .children-dialog-card:first-child{margin-left:auto}#childrenDialog .children-dialog-card:last-child{margin-right:auto}
     #childrenDialog .children-dialog-card:nth-child(4n+2){--card-paper:#edf6f0;--card-accent:#4e7c64;--card-soft:#d7e9dc;--card-tilt:2deg}
@@ -161,7 +163,6 @@
     #childrenDialog .children-dialog-card.is-current{outline:3px solid #c8dcb8;outline-offset:5px;transform:translateY(-7px) rotate(0)}
     @media(hover:hover){#childrenDialog .children-dialog-card:hover:not(:disabled){transform:translateY(-10px) rotate(0);box-shadow:0 24px 46px rgba(15,29,20,.25)}}
     #childrenDialog .children-card-status{display:flex;align-items:center;justify-content:center;min-height:25px;font-size:11px;line-height:1.4}
-    #childrenDialog .children-current-status{display:flex;align-items:center;gap:5px;padding:4px 10px;border:1px solid #dce7d6;border-radius:20px;background:#edf4e8;color:#4d7153}
     #childrenDialog .children-archived-status{color:#806a51}.child-profile .children-archived-status{color:#8d734e}
     #childrenDialog .children-card-avatar{display:grid;place-items:center;flex:none;width:104px;height:104px;margin-top:1px;border:7px solid rgba(255,255,255,.85);border-radius:50%;background:var(--card-soft);color:var(--card-accent);font-size:43px;font-weight:700;box-shadow:0 6px 18px rgba(37,45,30,.06)}
     #childrenDialog .children-dialog-card-copy{display:grid;gap:9px;align-content:start;flex:1;min-width:0;width:100%}
@@ -175,7 +176,7 @@
     #childrenDialog .account-error{margin:0;font-size:13px;line-height:1.7;overflow-wrap:anywhere}#childrenDialog .account-error:empty{display:none}
     #childrenDialog .children-dialog-feedback .btn{margin-top:10px}#childrenDialog button:disabled{cursor:wait;opacity:.58}
     #childrenDialog button:focus-visible{outline:3px solid #f1b88c;outline-offset:6px}
-    @media(max-width:760px){.child-profile{max-width:160px;gap:7px;padding:3px 4px}.child-profile .child-avatar{width:36px;height:36px;font-size:16px}.child-profile-copy>strong{max-width:100px;font-size:13px}.child-profile-meta{font-size:9px}.child-profile-chevron{font-size:15px}#childrenDialog{width:calc(100vw - 24px);max-width:calc(100vw - 24px)}#childrenDialog .child-switcher-heading h2{font-size:24px}#childrenDialog #closeChildrenDialog{right:5px}#childrenDialog .children-dialog-cards{gap:22px;padding:29px 27px 34px;scroll-padding-inline:27px}#childrenDialog .children-dialog-card{flex-basis:250px}}
+    @media(max-width:760px){.child-profile{max-width:160px;gap:7px;padding:3px 4px}.child-profile .child-avatar{width:36px;height:36px;font-size:16px}.child-profile-copy>strong{max-width:100px;font-size:13px}.child-profile-meta{font-size:9px}.child-profile-chevron{font-size:15px}#childrenDialog .child-switcher-heading{padding:14px 56px 12px}#childrenDialog .child-switcher-heading h2{font-size:24px}#childrenDialog #closeChildrenDialog{right:12px;top:14px;bottom:12px}#childrenDialog .children-dialog-cards{gap:22px;padding:29px 27px 18px;scroll-padding-inline:27px}#childrenDialog .children-dialog-card{flex-basis:250px}}
     @media(max-width:480px){.child-profile{max-width:133px}.child-profile-copy>strong{max-width:74px}.child-profile-meta{max-width:76px}.child-profile-chevron{font-size:13px}#childrenDialog .children-dialog-card{flex-basis:min(260px,calc(100vw - 94px));min-height:340px}#childrenDialog .children-dialog-feedback{margin-inline:16px}#childrenDialog .children-switch-hint{font-size:11px}}
     @media(prefers-reduced-motion:reduce){#childrenDialog .children-dialog-card{transition:none;transform:none!important}}
   </style>
