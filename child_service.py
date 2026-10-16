@@ -187,12 +187,33 @@ class ChildService:
         require(row[3]==('admin' if surface=='admin' else 'parent'),403,'此账号不能使用当前入口。')
         return row
 
+    def origin_trusted(self, origin, surface):
+        expected = self.config[surface + '_origin']
+        if origin == expected:
+            return True
+        if self.config.get('environment') != 'development':
+            return False
+        try:
+            got = urlsplit(origin or '')
+            want = urlsplit(expected)
+        except ValueError:
+            return False
+        if not got.hostname or got.scheme != want.scheme or got.port != want.port:
+            return False
+        if got.path not in ('', '/') or got.username or got.password or got.query or got.fragment:
+            return False
+        try:
+            address = ipaddress.ip_address(got.hostname)
+        except ValueError:
+            return False
+        return address.is_loopback or address.is_private or address.is_link_local
+
     def request(self, method, path, body, token, csrf, origin, surface, client):
         require(surface in ('parent','admin'))
         require(isinstance(body,dict))
         write=method not in ('GET','HEAD')
         if write:
-            require(origin==self.config[surface+'_origin'],403,'请求来源不受信任。')
+            require(self.origin_trusted(origin,surface),403,'请求来源不受信任。')
         exclusive=path.startswith('auth/') or path.startswith('account/') or path.startswith('admin/')
         def run(cur):
             if path=='auth/login' and method=='POST':

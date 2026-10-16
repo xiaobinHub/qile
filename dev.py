@@ -160,7 +160,7 @@ def start():
         environment = {**os.environ, 'LELE_ACCOUNTS_CONFIG': str(CONFIG), 'LELE_SURFACE': surface}
         with (RUNTIME / (surface + '.log')).open('ab', buffering=0) as log:
             process = subprocess.Popen([sys.executable, '-m', 'uvicorn', 'accounts_app:create_from_env', '--factory',
-                                        '--host', '127.0.0.1', '--port', str(port), '--no-proxy-headers'],
+                                        '--host', '0.0.0.0', '--port', str(port), '--no-proxy-headers'],
                                        cwd=ROOT, env=environment, stdin=subprocess.DEVNULL, stdout=log, stderr=log,
                                        start_new_session=True)
         pid_path.write_text(str(process.pid))
@@ -174,6 +174,52 @@ def start():
             raise RuntimeError('开发服务尚未就绪，请查看本机日志。')
     print('家长端：' + config['parent_origin'])
     print('管理员：' + config['admin_origin'])
+    lan_ip = _lan_ip()
+    if lan_ip:
+        print('局域网家长端：http://{}:18787'.format(lan_ip))
+        print('局域网管理端：http://{}:18788'.format(lan_ip))
+
+
+def _lan_ip():
+    import ipaddress
+    import socket
+    import subprocess
+    candidates = []
+    try:
+        listing = subprocess.check_output(['ifconfig'], text=True, stderr=subprocess.DEVNULL)
+    except (OSError, subprocess.CalledProcessError):
+        listing = ''
+    for line in listing.splitlines():
+        line = line.strip()
+        if not line.startswith('inet '):
+            continue
+        address = line.split()[1]
+        try:
+            parsed = ipaddress.ip_address(address)
+        except ValueError:
+            continue
+        if parsed.version != 4 or parsed.is_loopback or parsed.is_link_local:
+            continue
+        if not parsed.is_private or parsed in ipaddress.ip_network('198.18.0.0/15'):
+            continue
+        candidates.append(str(parsed))
+    if not candidates:
+        try:
+            probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            probe.connect(('10.255.255.255', 1))
+            address = probe.getsockname()[0]
+            probe.close()
+            parsed = ipaddress.ip_address(address)
+            if parsed.is_private and not parsed.is_loopback and parsed not in ipaddress.ip_network('198.18.0.0/15'):
+                return str(parsed)
+        except OSError:
+            return None
+        return None
+    for prefix in ('192.168.', '10.', '172.'):
+        for address in candidates:
+            if address.startswith(prefix):
+                return address
+    return candidates[0]
 
 
 def stop():
