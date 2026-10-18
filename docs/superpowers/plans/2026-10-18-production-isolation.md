@@ -8,14 +8,14 @@
 
 用户已授权在本次会话执行；由当前代理顺序执行，无需再次申请方案批准。
 
-- [ ] 保存 main、RDS、开发提交及生产快照、launchd 配置、口令/配置摘要。保持未提交文档不变。
-- [ ] 在隔离工作区将 main fast-forward 至 codex/rds-storage，提交设计。
-- [ ] 增加 scripts/local_production.py，修改原 .app 启停脚本，编写运行说明和生命周期边界测试。测试使用临时目录、模拟系统命令，禁止操作正式服务。
-- [ ] 执行 `python -m unittest test_local_production`、旧版隔离存储/HTTP测试，检查脚本语法、Git diff；提交 main，标记 `local-prod-20261018-rds`。
-- [ ] 导出 tag 至生产 releases 目录，创建独立 .venv、安装固定依赖；复制正式配置与口令（0600），生成完整提交和 SHA-256 manifest，设代码只读。
-- [ ] 切换前通过只读 /api/data 与 /api/health 获取即时基线；运行生产控制程序 start，失败恢复旧 launchd 配置。
-- [ ] 比较生产页面、数据、配置与口令摘要；核对进程路径、私有文件 404、开发健康状态。新版开发服务不写入正式 RDS。
-- [ ] 将 main 运维改动合回孩子账号分支，更新开发环境说明，记录实际验证结果；归档临时工作区。
+- [x] 保存 main、RDS、开发提交及生产快照、launchd 配置、口令/配置摘要。保持未提交文档不变。
+- [x] 在隔离工作区将 main fast-forward 至 codex/rds-storage，提交设计。
+- [x] 增加 scripts/local_production.py，修改原 .app 启停脚本，编写运行说明和生命周期边界测试。测试使用临时目录、模拟系统命令，禁止操作正式服务。
+- [x] 执行 `python -m unittest test_local_production`、旧版隔离存储/HTTP测试，检查脚本语法、Git diff；提交 main，标记 `local-prod-20261018-rds`。
+- [x] 导出 tag 至生产 releases 目录，创建独立 .venv、安装固定依赖；复制正式配置与口令（0600），生成完整提交和 SHA-256 manifest，设代码只读。
+- [x] 切换前通过只读 /api/data 与 /api/health 获取即时基线；运行生产控制程序 start，失败恢复旧 launchd 配置。
+- [x] 比较生产页面、数据、配置与口令摘要；核对进程路径、私有文件 404、开发健康状态。新版开发服务不写入正式 RDS。
+- [x] 将 main 运维改动合回孩子账号分支，更新开发环境说明，记录实际验证结果；归档临时工作区。
 
 ## 回退
 
