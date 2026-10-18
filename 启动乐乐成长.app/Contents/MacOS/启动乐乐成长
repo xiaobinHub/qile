@@ -1,121 +1,24 @@
 #!/bin/zsh
-# Finder launcher: installs the per-user service, then opens the local app.
-set -u
-
+# Operate the independent production release; never run development server.py.
+set -eu
 APP_BIN_DIR="$(cd -- "$(dirname -- "$0")" && pwd)"
 PROJECT_ROOT="$(cd -- "$APP_BIN_DIR/../../.." && pwd)"
-LABEL="com.lele.growth"
-USER_ID="$(id -u)"
-DOMAIN="gui/${USER_ID}"
-LAUNCH_AGENTS_DIR="$HOME/Library/LaunchAgents"
-PLIST_PATH="$LAUNCH_AGENTS_DIR/${LABEL}.plist"
-LOG_DIR="$PROJECT_ROOT/data/logs"
-SERVICE_URL="http://127.0.0.1:8787/"
-PYTHON_BIN="$(command -v python3 || true)"
-
-# 使用迁移核验后明确选择的存储方式；配置存在本身不会触发切换。
-if [[ -f "$PROJECT_ROOT/data/storage-mode.json" ]]; then
-  STORAGE_MODE=$(/usr/bin/plutil -extract storage raw -o - "$PROJECT_ROOT/data/storage-mode.json" 2>/dev/null || true)
+if [[ -f "$PROJECT_ROOT/control.py" && -f "$PROJECT_ROOT/current.json" ]]; then
+  PRODUCTION_ROOT="$PROJECT_ROOT"
 else
-  if [[ -f "$PROJECT_ROOT/data/rds-config.json" || -f "$PROJECT_ROOT/data/rds-cutover.json" ]]; then
-    /usr/bin/osascript -e 'display alert "无法启动乐乐成长计划" message "存储方式配置缺失，已停止启动以保护当前数据。" as critical'
-    exit 1
-  fi
-  STORAGE_MODE="json"
+  PRODUCTION_ROOT="${PROJECT_ROOT:h}/乐乐成长-生产"
 fi
-if [[ "$STORAGE_MODE" == "postgres" ]]; then
-  PYTHON_BIN="$PROJECT_ROOT/.venv/bin/python"
-elif [[ "$STORAGE_MODE" != "json" ]]; then
-  /usr/bin/osascript -e 'display alert "无法启动乐乐成长计划" message "存储方式配置无效，请检查 data/storage-mode.json。" as critical'
+if [[ ! -x "$PRODUCTION_ROOT/.venv/bin/python" || ! -f "$PRODUCTION_ROOT/control.py" ]]; then
+  /usr/bin/osascript -e 'display alert "无法操作乐乐成长正式服务" message "未找到独立生产目录，请先完成生产环境安装。" as critical'
   exit 1
 fi
-
-show_error() {
-  /usr/bin/osascript - "$1" <<'APPLESCRIPT'
+ERROR_FILE="$(/usr/bin/mktemp)"
+trap '/bin/rm -f "$ERROR_FILE"' EXIT
+if ! "$PRODUCTION_ROOT/.venv/bin/python" "$PRODUCTION_ROOT/control.py" start --open >"$ERROR_FILE" 2>&1; then
+  /usr/bin/osascript - "$(/bin/cat "$ERROR_FILE")" <<'APPLESCRIPT'
 on run argv
-  display alert "无法启动乐乐成长计划" message (item 1 of argv) as critical
+  display alert "无法操作乐乐成长正式服务" message (item 1 of argv) as critical
 end run
 APPLESCRIPT
-}
-
-if [[ -z "$PYTHON_BIN" || ! -x "$PYTHON_BIN" || ! -f "$PROJECT_ROOT/server.py" || ! -f "$PROJECT_ROOT/index.html" ]]; then
-  show_error "未找到项目文件或 Python 3。请确认“启动乐乐成长.app”仍在项目目录中。"
   exit 1
 fi
-
-mkdir -p "$LAUNCH_AGENTS_DIR" "$LOG_DIR" || {
-  show_error "无法创建后台服务所需目录。"
-  exit 1
-}
-
-# launchd 的标准错误只记录未捕获异常；日常访问日志由 server.py 自动轮转。
-if [[ -f "$LOG_DIR/launchd.stderr.log" && $(/usr/bin/stat -f%z "$LOG_DIR/launchd.stderr.log") -gt 262144 ]]; then
-  mv -f "$LOG_DIR/launchd.stderr.log" "$LOG_DIR/launchd.stderr.previous.log"
-fi
-
-/usr/bin/env "$PYTHON_BIN" - "$PROJECT_ROOT" "$PLIST_PATH" "$LOG_DIR" "$STORAGE_MODE" <<'PY'
-import os
-import plistlib
-import sys
-import tempfile
-
-root, destination, log_dir, storage = sys.argv[1:]
-arguments = [sys.executable, os.path.join(root, "server.py"), "--no-browser", "--log-dir", log_dir, "--storage", storage]
-if storage == "postgres":
-    arguments += ["--db-config", os.path.join(root, "data", "rds-config.json")]
-record = {
-    "Label": "com.lele.growth",
-    "ProgramArguments": arguments,
-    "WorkingDirectory": root,
-    "RunAtLoad": True,
-    "KeepAlive": True,
-    "ThrottleInterval": 5,
-    "ProcessType": "Background",
-    "StandardErrorPath": os.path.join(log_dir, "launchd.stderr.log"),
-    "EnvironmentVariables": {"PYTHONUNBUFFERED": "1"},
-}
-directory = os.path.dirname(destination)
-fd, temporary = tempfile.mkstemp(prefix=".lele-growth-", dir=directory)
-try:
-    with os.fdopen(fd, "wb") as output:
-        plistlib.dump(record, output, sort_keys=False)
-    os.replace(temporary, destination)
-finally:
-    if os.path.exists(temporary):
-        os.unlink(temporary)
-PY
-if [[ $? -ne 0 ]]; then
-  show_error "无法注册后台服务配置。"
-  exit 1
-fi
-
-# 先卸载旧配置，保证更新后的服务路径与参数立刻生效。
-/bin/launchctl bootout "$DOMAIN/$LABEL" >/dev/null 2>&1 || true
-
-# 若旧版前台启动脚本仍占用端口，只停止本项目自己的 Python 服务；其他程序不会被触碰。
-for process_id in $(/usr/sbin/lsof -nP -tiTCP:8787 -sTCP:LISTEN 2>/dev/null); do
-  command_line=$(/bin/ps -p "$process_id" -o command= 2>/dev/null || true)
-  if [[ "$command_line" == *"$PROJECT_ROOT/server.py"* ]]; then
-    /bin/kill "$process_id" >/dev/null 2>&1 || true
-  elif [[ -n "$command_line" ]]; then
-    show_error "端口 8787 正被其他程序占用。请先关闭该程序后重试。"
-    exit 1
-  fi
-done
-
-/bin/launchctl bootstrap "$DOMAIN" "$PLIST_PATH" >/dev/null 2>&1 || {
-  show_error "后台服务注册失败。详情可在 data/logs/launchd.stderr.log 查看。"
-  exit 1
-}
-/bin/launchctl kickstart -k "$DOMAIN/$LABEL" >/dev/null 2>&1 || true
-
-for attempt in {1..20}; do
-  if /usr/bin/curl --silent --fail --max-time 3 "${SERVICE_URL}api/health" >/dev/null 2>&1; then
-    /usr/bin/open "$SERVICE_URL"
-    exit 0
-  fi
-  /bin/sleep 0.2
-done
-
-show_error "后台服务未能在预期时间内启动。详情可在 data/logs/server.log 查看。"
-exit 1

@@ -1,20 +1,24 @@
 #!/bin/zsh
-# Finder stopper: unloads only this user's managed service.
-set -u
-
+# Operate the independent production release; never run development server.py.
+set -eu
 APP_BIN_DIR="$(cd -- "$(dirname -- "$0")" && pwd)"
 PROJECT_ROOT="$(cd -- "$APP_BIN_DIR/../../.." && pwd)"
-LABEL="com.lele.growth"
-DOMAIN="gui/$(id -u)"
-
-/bin/launchctl bootout "$DOMAIN/$LABEL" >/dev/null 2>&1 || true
-
-# 兼容旧版终端启动方式：只终止属于当前项目的 server.py，不影响其他应用。
-for process_id in $(/usr/sbin/lsof -nP -tiTCP:8787 -sTCP:LISTEN 2>/dev/null); do
-  command_line=$(/bin/ps -p "$process_id" -o command= 2>/dev/null || true)
-  if [[ "$command_line" == *"$PROJECT_ROOT/server.py"* ]]; then
-    /bin/kill "$process_id" >/dev/null 2>&1 || true
-  fi
-done
-
-exit 0
+if [[ -f "$PROJECT_ROOT/control.py" && -f "$PROJECT_ROOT/current.json" ]]; then
+  PRODUCTION_ROOT="$PROJECT_ROOT"
+else
+  PRODUCTION_ROOT="${PROJECT_ROOT:h}/乐乐成长-生产"
+fi
+if [[ ! -x "$PRODUCTION_ROOT/.venv/bin/python" || ! -f "$PRODUCTION_ROOT/control.py" ]]; then
+  /usr/bin/osascript -e 'display alert "无法操作乐乐成长正式服务" message "未找到独立生产目录，请先完成生产环境安装。" as critical'
+  exit 1
+fi
+ERROR_FILE="$(/usr/bin/mktemp)"
+trap '/bin/rm -f "$ERROR_FILE"' EXIT
+if ! "$PRODUCTION_ROOT/.venv/bin/python" "$PRODUCTION_ROOT/control.py" stop >"$ERROR_FILE" 2>&1; then
+  /usr/bin/osascript - "$(/bin/cat "$ERROR_FILE")" <<'APPLESCRIPT'
+on run argv
+  display alert "无法操作乐乐成长正式服务" message (item 1 of argv) as critical
+end run
+APPLESCRIPT
+  exit 1
+fi
