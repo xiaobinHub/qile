@@ -641,16 +641,16 @@
     function preferredChildId(){try{return localStorage.getItem('lele-preferred-child:'+authUser.id)}catch{return null}}
     function rememberChild(id){try{localStorage.setItem('lele-preferred-child:'+authUser.id,id)}catch{}}
     async function showCalendarHome(){history.replaceState(null,'','/');await enterAccount()}
-    function renderEmptyCalendar(message='',failed=false){
+    function renderUnboundHome(message='',failed=false){
       settingsUI?.invalidate();
       $('#root').innerHTML=appShell();
-      $('#refreshData').onclick=()=>enterAccount();
-      $$('[data-view]').forEach(button=>{button.classList.toggle('active',button.dataset.view===state.view);button.onclick=()=>{state.view=button.dataset.view;renderEmptyCalendar(message,failed)}});
+      $('.nav').innerHTML=`<button data-view="settings" ${state.view==='settings'?'class="active"':''}>设置</button>`;
+      $('#refreshData').remove();
+      $('[data-view="settings"]').onclick=()=>{state.view='settings';renderUnboundHome(message,failed)};
       if(state.view==='settings'){renderSettings();return}
-      $('#main').innerHTML=`<section class="panel calendar-empty-panel"><div class="toolbar"><h1>${state.view==='store'?'积分商城':'任务日历'}</h1></div><div class="calendar-empty-content" id="emptyCalendar"><span class="calendar-empty-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M7 3v4m10-4v4M3 11h18m-13 4h2m4 0h2m-8 3h2"/></svg></span><h2>${failed?'暂时无法读取成长记录':'从陪伴孩子的第一步开始'}</h2><p ${failed?'role="alert"':''}>${esc(message||(state.view==='store'?'为孩子建立成长记录后，就可以使用积分和礼品。':'还没有孩子的成长记录。创建孩子或接受家人的邀请后，就可以开始安排任务。'))}</p><div class="calendar-empty-actions">${failed?'<button class="btn primary" id="retryCalendar" type="button">重新加载</button>':'<button class="btn primary" id="emptyCalendarCreate" type="button">创建孩子</button><button class="btn" id="emptyCalendarInvitations" type="button">查看我的邀请</button>'}</div></div></section>`;
-      if($('#retryCalendar'))$('#retryCalendar').onclick=()=>enterAccount();
-      if($('#emptyCalendarCreate'))$('#emptyCalendarCreate').onclick=()=>settingsUI.open('child/profile');
-      if($('#emptyCalendarInvitations'))$('#emptyCalendarInvitations').onclick=()=>settingsUI.open('child/invitations');
+      if(!failed){settingsUI.renderOnboarding($('#main'));return}
+      $('#main').innerHTML=`<section class="panel calendar-empty-panel"><div class="calendar-empty-content"><h1>暂时无法读取成长记录</h1><p role="alert">${esc(message)}</p><button class="btn primary" id="retryCalendar" type="button">重新加载</button></div></section>`;
+      $('#retryCalendar').onclick=()=>enterAccount();
     }
     async function enterAccount(){
       if(!authUser){renderLogin();return}
@@ -663,8 +663,8 @@
         const active=childList.filter(child=>!child.archived),preferred=preferredChildId();
         const chosen=active.find(child=>child.id===preferred)||active[0]||childList[0];
         if(chosen){await selectChild(chosen.id,'replace');return}
-        history.replaceState(null,'','/');renderEmptyCalendar();
-      }catch(error){if(error.kind!=='stale'&&error.kind!=='unauthorized')renderEmptyCalendar(error.message,true)}
+        history.replaceState(null,'','/');state.view='onboarding';renderUnboundHome();
+      }catch(error){if(error.kind!=='stale'&&error.kind!=='unauthorized')renderUnboundHome(error.message,true)}
     }
     function childInitial(name){return Array.from(String(name||'').trim())[0]||'孩'}
     function childrenDialogActive(session){return !!session&&childrenDialogSession===session&&$('#childrenDialog').open&&session.generation===uiGeneration&&session.childId===currentChild?.id&&!!authUser}
@@ -752,7 +752,7 @@
       clearContext();currentChild=selected;state.view='calendar';
       if(replace==='replace')history.replaceState(null,'',`/children/${id}`);else if(replace)history.pushState(null,'',`/children/${id}`);
       $('#root').innerHTML='<section class="auth-screen"><h1>正在读取孩子数据…</h1></section>';
-      try{data=await Store.load();rememberChild(id);render()}catch(error){if(error.kind!=='unauthorized'&&error.kind!=='stale'){if(error.kind==='forbidden'){await showCalendarHome();return}clearContext();state.view='calendar';renderEmptyCalendar(error.message,true)}}
+      try{data=await Store.load();rememberChild(id);render()}catch(error){if(error.kind!=='unauthorized'&&error.kind!=='stale'){if(error.kind==='forbidden'){await showCalendarHome();return}clearContext();state.view='onboarding';renderUnboundHome(error.message,true)}}
     }
     function loadPackage(pkg){
       if(!currentChild||pkg.context?.childId!==currentChild.id)throw new StoreError('孩子数据上下文不一致。','stale');
@@ -795,7 +795,7 @@
         if(childContextBusy())return;
         state.view='settings';
         if(currentChild&&data)render();
-        else{uiGeneration++;renderEmptyCalendar()}
+        else{uiGeneration++;renderUnboundHome()}
       },
       home:()=>showCalendarHome(),selectChild,
       sync:async reloadData=>{

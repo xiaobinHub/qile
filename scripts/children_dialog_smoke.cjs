@@ -19,7 +19,6 @@ async function exerciseChildrenDialog({browser,admin,dad,firstId,secondId,passwo
     await login(page,18887,'qachooser',passwords.initial);
     await parentPassword(page,passwords.dad);
     await login(page,18887,'qachooser',passwords.dad);
-    await page.locator('#emptyCalendarCreate').click();
     await page.locator('#newChildName').fill('弹窗测试孩子');
     await page.locator('#createChildForm button').click();
     await trigger.waitFor();

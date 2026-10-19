@@ -66,19 +66,17 @@
     function render(){
       const main=document.querySelector('#main');if(!main)return;
       const token=++epoch,{child,user}=context(),childId=child?.id;
-      const group=groups.find(group=>group.items.some(item=>item[0]===selected)),item=group.items.find(item=>item[0]===selected);
-      main.innerHTML=`<section class="settings-workspace" aria-labelledby="settingsTitle"><header class="settings-page-heading"><div><h1 id="settingsTitle">设置</h1><p>照顾好每一份成长，也照顾好你的使用习惯。</p></div></header><div class="settings-columns"><aside class="settings-sidebar"><nav aria-label="设置导航">${groups.map(group=>`<div class="settings-nav-group"><h2>${group.title}</h2>${group.items.map(([key,label,type,id])=>`<button type="button" id="${id}" data-settings-page="${key}" class="settings-nav-item ${key===selected?'is-active':''} ${key==='account/logout'?'settings-signout':''}" ${key===selected?'aria-current="page"':''}>${icon(type)}<span>${label}</span>${key===selected?icon('arrow'):''}</button>`).join('')}</div>`).join('')}</nav><div class="settings-sidebar-account"><span class="settings-mini-avatar">${initial(user.nickname)}</span><div><strong>${esc(user.nickname)}</strong><small>${esc(user.loginName)}</small></div></div></aside><section class="settings-detail" aria-labelledby="settingsDetailTitle"><header class="settings-detail-heading"><h2 id="settingsDetailTitle" tabindex="-1">${item[1]}</h2><div>${descriptions[selected]}</div></header><div id="settingsContent" class="settings-detail-body"></div></section></div></section>`;
+      const visibleGroups=child?groups:groups.filter(group=>group.title==='账号管理');
+      if(!child&&!selected.startsWith('account/'))selected='account/profile';
+      const group=visibleGroups.find(group=>group.items.some(item=>item[0]===selected)),item=group.items.find(item=>item[0]===selected);
+      main.innerHTML=`<section class="settings-workspace" aria-labelledby="settingsTitle"><header class="settings-page-heading"><div><h1 id="settingsTitle">设置</h1><p>照顾好每一份成长，也照顾好你的使用习惯。</p></div>${child?'':'<button class="btn settings-back-home" id="backToOnboarding" type="button">返回开始页</button>'}</header><div class="settings-columns"><aside class="settings-sidebar"><nav aria-label="设置导航">${visibleGroups.map(group=>`<div class="settings-nav-group"><h2>${group.title}</h2>${group.items.map(([key,label,type,id])=>`<button type="button" id="${id}" data-settings-page="${key}" class="settings-nav-item ${key===selected?'is-active':''} ${key==='account/logout'?'settings-signout':''}" ${key===selected?'aria-current="page"':''}>${icon(type)}<span>${label}</span>${key===selected?icon('arrow'):''}</button>`).join('')}</div>`).join('')}</nav><div class="settings-sidebar-account"><span class="settings-mini-avatar">${initial(user.nickname)}</span><div><strong>${esc(user.nickname)}</strong><small>${esc(user.loginName)}</small></div></div></aside><section class="settings-detail" aria-labelledby="settingsDetailTitle"><header class="settings-detail-heading"><h2 id="settingsDetailTitle" tabindex="-1">${item[1]}</h2><div>${descriptions[selected]}</div></header><div id="settingsContent" class="settings-detail-body"></div></section></div></section>`;
       const panel=main.querySelector('#settingsContent');
+      if(main.querySelector('#backToOnboarding'))main.querySelector('#backToOnboarding').onclick=deps.home;
       const active=()=>token===epoch&&panel.isConnected&&context().child?.id===childId;
       main.querySelectorAll('[data-settings-page]').forEach(button=>button.onclick=()=>{
         if(button.dataset.settingsPage==='account/logout'){deps.logout();return}
         selected=button.dataset.settingsPage;render();document.querySelector('#settingsDetailTitle')?.focus({preventScroll:true});
       });
-      if(!child&&selected==='child/profile'){renderCreateChild(panel,active);return}
-      if(!child&&selected!=='child/invitations'&&!selected.startsWith('account/')){
-        panel.innerHTML=empty('还没有孩子的成长记录','创建孩子或接受邀请后，即可管理相应资料。','child')+'<button class="btn settings-empty-action" id="settingsCreateFirstChild" type="button">创建孩子</button>';
-        panel.querySelector('#settingsCreateFirstChild').onclick=()=>open('child/profile');return;
-      }
       if(selected==='child/profile')renderChildProfile(panel,active,child);
       if(selected==='child/family')renderFamily(panel,active,child);
       if(selected==='child/invitations')renderInvitations(panel,active);
@@ -94,9 +92,15 @@
       if(selected==='account/profile')renderProfile(panel,active,user);
       if(selected==='account/password'){panel.innerHTML=passwordMarkup(false);bindPassword(panel,active)}
     }
+    function renderOnboarding(main){
+      const token=++epoch,user=context().user;
+      main.innerHTML=`<section class="onboarding" id="onboarding" aria-labelledby="onboardingTitle"><header class="onboarding-heading"><span class="onboarding-greeting">你好，${esc(user.nickname)}</span><h1 id="onboardingTitle">从陪伴的第一步开始</h1><p>创建孩子的成长记录，或接受家人的邀请，一起见证每一份努力。</p></header><div class="onboarding-columns"><section class="onboarding-card" aria-labelledby="onboardingCreateTitle"><header><span class="onboarding-icon">${icon('child')}</span><h2 id="onboardingCreateTitle">创建孩子</h2><p>为孩子安排任务，记录努力，积累成长的点滴。</p></header><div id="onboardingCreatePanel"></div></section><section class="onboarding-card" aria-labelledby="onboardingInvitationsTitle"><header><span class="onboarding-icon">${icon('mail')}</span><h2 id="onboardingInvitationsTitle">家人的邀请</h2><p>家人已经创建了孩子？接受邀请后，就能一起管理。</p></header><div id="onboardingInvitationsPanel"></div></section></div></section>`;
+      const active=()=>epoch===token&&main.querySelector('#onboarding')?.isConnected&&!context().child;
+      renderCreateChild(main.querySelector('#onboardingCreatePanel'),active);
+      renderInvitations(main.querySelector('#onboardingInvitationsPanel'),active,true);
+    }
     function renderCreateChild(panel,active){
-      panel.innerHTML=`<form id="createChildForm" class="settings-form"><fieldset><div class="settings-field"><label for="newChildName">孩子昵称</label><input id="newChildName" required maxlength="40" autocomplete="off" placeholder="请输入孩子昵称"><p class="settings-help">创建后，这个孩子将拥有独立的任务、积分和礼品。</p></div>${feedback('childrenError')}<div class="settings-form-footer"><button class="btn primary" type="submit">创建孩子</button></div></fieldset></form><p class="settings-help settings-onboarding-help">家人已经创建了孩子？<button class="settings-inline-link" id="createChildViewInvitations" type="button">查看我的邀请</button></p>`;
-      panel.querySelector('#createChildViewInvitations').onclick=()=>open('child/invitations');
+      panel.innerHTML=`<form id="createChildForm" class="settings-form"><fieldset><div class="settings-field"><label for="newChildName">孩子昵称</label><input id="newChildName" required maxlength="40" autocomplete="off" placeholder="请输入孩子昵称"><p class="settings-help">每个孩子都有独立的任务、积分和礼品。</p></div>${feedback('childrenError')}<div class="settings-form-footer"><button class="btn primary" type="submit">创建孩子</button></div></fieldset></form>`;
       panel.querySelector('#createChildForm').onsubmit=event=>{event.preventDefault();mutate(panel,active,event.submitter,()=>deps.api('/api/children','POST',{name:panel.querySelector('#newChildName').value.trim()}),async result=>{await deps.sync(false);if(active())deps.selectChild(result.child.id)})};
     }
     function renderChildProfile(panel,active,child){
@@ -128,15 +132,16 @@
         panel.querySelectorAll('[data-transfer]').forEach(button=>button.onclick=()=>{if(confirm('转让后，你将成为共同管理家长。确认转让负责身份？'))action(button,`/api/children/${child.id}/transfer`,'POST',{userId:button.dataset.transfer})});
       }catch(error){if(active())panelError(panel,error,render)}
     }
-    async function renderInvitations(panel,active){
+    async function renderInvitations(panel,active,onboarding=false){
       panel.innerHTML='<p class="settings-loading" role="status">正在读取我的邀请…</p>';
       try{
         const result=await deps.api('/api/invitations');if(!active())return;
-        panel.innerHTML=`${feedback('invitationError')}<div class="settings-invitation-list">${result.invitations.length?result.invitations.map(inv=>`<article class="settings-invitation-card"><div class="settings-person-row"><span class="settings-large-avatar">${initial(inv.childName)}</span><div class="settings-person-copy"><strong>${esc(inv.childName)}</strong><p>邀请你成为共同管理家长</p></div><span class="settings-status is-owner">待处理</span></div><p class="settings-help">接受后，可以查看和管理这个孩子的任务、积分与礼品。</p><div class="settings-invitation-footer"><span>${esc(date(inv.expiresAt))} 前有效</span><div><button class="btn" type="button" data-reject-invite="${esc(inv.id)}">拒绝邀请</button><button class="btn primary" type="button" data-accept-invite="${esc(inv.id)}">接受邀请</button></div></div></article>`).join(''):empty('暂无待处理邀请','收到家人的邀请后，会在这里显示。')}</div>`;
+        panel.innerHTML=`${feedback('invitationError')}<div class="settings-invitation-list">${result.invitations.length?result.invitations.map(inv=>`<article class="settings-invitation-card"><div class="settings-person-row"><span class="settings-large-avatar">${initial(inv.childName)}</span><div class="settings-person-copy"><strong>${esc(inv.childName)}</strong><p>邀请你成为共同管理家长</p></div><span class="settings-status is-owner">待处理</span></div><p class="settings-help">接受后，可以查看和管理这个孩子的任务、积分与礼品。</p><div class="settings-invitation-footer"><span>${esc(date(inv.expiresAt))} 前有效</span><div><button class="btn" type="button" data-reject-invite="${esc(inv.id)}">拒绝邀请</button><button class="btn primary" type="button" data-accept-invite="${esc(inv.id)}">接受邀请</button></div></div></article>`).join(''):empty('暂无待处理邀请',onboarding?`请让家人使用你的登录名「${context().user.loginName}」发送邀请，收到后可在这里接受。`:'收到家人的邀请后，会在这里显示。')}</div>`;
         for(const answer of ['accept','reject'])panel.querySelectorAll(`[data-${answer}-invite]`).forEach(button=>button.onclick=()=>{
           const inviteId=button.dataset[answer+'Invite'];
           mutate(panel,active,button,()=>deps.api(`/api/invitations/${inviteId}/${answer}`,'POST',{}),async result=>{
             await deps.sync(false);if(!active())return;
+            if(onboarding){if(answer==='accept'){await deps.selectChild(result.childId)}else{await renderInvitations(panel,active,true)}return}
             invitationNotice={answer,childId:result.childId};render();
           });
         });
@@ -146,7 +151,7 @@
           banner.innerHTML=`<span>${saved.answer==='accept'?'已接受邀请，可以一起记录成长了。':'已拒绝这份邀请。'}</span>${saved.answer==='accept'?'<button type="button" class="btn" data-enter-invited-child>进入孩子</button>':''}`;
           panel.prepend(banner);const enter=banner.querySelector('button');if(enter)enter.onclick=()=>deps.selectChild(saved.childId);
         }
-      }catch(error){if(active())panelError(panel,error,render)}
+      }catch(error){if(active())panelError(panel,error,onboarding?()=>renderInvitations(panel,active,true):render)}
     }
     function renderBackup(panel,child){
       const restore=child.role==='owner'&&!child.archived,{updatedAt}=context();
@@ -158,7 +163,7 @@
       panel.innerHTML=`<form id="profileForm" class="settings-form"><fieldset><div class="settings-field"><label for="profileLogin">登录名</label><input id="profileLogin" value="${esc(user.loginName)}" readonly autocomplete="username" aria-describedby="loginNameHelp"><p id="loginNameHelp" class="settings-help">登录名由管理员开通，不支持修改。</p></div><div class="settings-field"><label for="profileNickname">账号昵称</label><input id="profileNickname" value="${esc(user.nickname)}" required maxlength="40" autocomplete="nickname" placeholder="请输入你的昵称"><p class="settings-help">家人会通过这个昵称识别你，最多 40 个字。</p></div>${feedback('profileError')}<div class="settings-form-footer"><button class="btn primary" type="submit">保存昵称</button></div></fieldset></form>`;
       panel.querySelector('#profileForm').onsubmit=event=>{event.preventDefault();mutate(panel,active,event.submitter,()=>deps.api('/api/account/profile','PATCH',{nickname:panel.querySelector('#profileNickname').value.trim()}),result=>{deps.updateUser(result.user);render();const message=document.querySelector('#profileError');message.classList.add('success');message.textContent='账号昵称已更新。'})};
     }
-    return {render,open,invalidate,reset,requiredPassword};
+    return {render,open,invalidate,reset,requiredPassword,renderOnboarding};
   }
   window.LeleParentSettings={create};
 })();

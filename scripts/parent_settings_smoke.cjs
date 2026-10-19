@@ -109,12 +109,28 @@ async function exerciseParentSettings({browser,admin,dad,mom,firstId,secondId,pa
   page.on('request',request=>{if(new URL(request.url()).pathname==='/api/auth/logout')logoutRequests++});
   try{
     await login(page,18887,'qasettings',passwords.initial);await parentPassword(page,passwords.mom);await login(page,18887,'qasettings',passwords.mom);
-    await page.locator('#emptyCalendarInvitations').click();
+    await page.locator('#onboarding').waitFor();
+    assert.deepEqual(await page.locator('.nav button').allTextContents(),['设置']);
+    await page.getByRole('button',{name:'设置',exact:true}).click();
+    assert.deepEqual(await page.locator('[aria-label="设置导航"] h2').allTextContents(),['账号管理']);
+    assert.equal(await page.locator('[data-settings-page]').count(),3);
+    assert.equal(await page.locator('#createChildForm,[data-accept-invite],[data-reject-invite]').count(),0);
+    assert.equal(await page.locator('#settingsDetailTitle').innerText(),'修改账号昵称');
+    await page.setViewportSize({width:390,height:844});
+    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false);
+    await page.screenshot({path:path.join(out,'parent-unbound-settings.png'),fullPage:true});
+    await page.setViewportSize({width:1280,height:940});
+    await page.locator('#backToOnboarding').click();
+    await page.locator('#onboarding').waitFor();
     await page.locator('.settings-invitation-card').nth(1).waitFor();
     await page.screenshot({path:path.join(out,'parent-settings-invitations.png'),fullPage:true});
     const firstCard=page.locator('.settings-invitation-card').filter({hasText:originalName});
     await firstCard.locator('[data-reject-invite]').click();await firstCard.waitFor({state:'detached'});
-    await page.locator('[data-accept-invite]').click();await page.locator('[data-enter-invited-child]').waitFor();
+    await page.locator('[data-accept-invite]').click();
+    await page.waitForFunction(id=>document.querySelector('#openChildrenDialog')?.dataset.childId===id,secondId);
+    assert.deepEqual(await page.locator('.nav button').allTextContents(),['日历','积分商城','设置']);
+    await page.getByRole('button',{name:'设置',exact:true}).click();
+    assert.deepEqual(await page.locator('[aria-label="设置导航"] h2').allTextContents(),['孩子管理','任务设置','账号管理']);
     assert.equal(await page.evaluate(async id=>(await fetch(`/api/children/${id}/data`)).status,firstId),403);
 
     let captured,release;
