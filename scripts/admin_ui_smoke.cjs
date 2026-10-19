@@ -119,14 +119,13 @@ async function exerciseAdminUI({admin, browser, port, passwords, out, createPare
   await admin.waitForFunction(()=>document.querySelector('#openCreateUser')===document.activeElement);
   await admin.setViewportSize({width:1059,height:954});
 
-  // Profile uses its existing current-password requirement and real persistence.
+  // Login names are immutable; only nicknames can be saved.
   await admin.locator('#profileNav').click();
-  await admin.locator('#profileLogin').fill('qaadmin2');
+  assert.equal(await admin.locator('#profileLogin').getAttribute('readonly'),'');
   await admin.locator('#profileName').fill('测试管理员更新');
-  await admin.locator('#profileCurrent').fill(passwords.adminNew);
   await admin.locator('#profileForm button[type="submit"]').click();
   await admin.getByText('账号资料已保存。',{exact:true}).waitFor();
-  assert.equal((await account('qaadmin2')).nickname,'测试管理员更新');
+  assert.equal((await account('qaadmin')).nickname,'测试管理员更新');
 
   // A profile save from an unmounted page cannot overwrite a newer saved name.
   let capturedProfile,releaseProfile;
@@ -148,13 +147,13 @@ async function exerciseAdminUI({admin, browser, port, passwords, out, createPare
   await admin.locator('#openCreateUser').waitFor();
   await admin.locator('#profileNav').click();
   assert.equal(await admin.locator('#profileName').inputValue(),'测试管理员更新');
-  assert.equal((await account('qaadmin2')).nickname,'测试管理员更新');
+  assert.equal((await account('qaadmin')).nickname,'测试管理员更新');
   await admin.evaluate(()=>window.scrollTo(0,0));
   await admin.screenshot({path:path.join(out,'admin-profile.png'),fullPage:true});
   await admin.locator('#logout').click();
   await admin.locator('#loginName').waitFor();
   assert.equal(await admin.locator('#userRows').count(),0);
-  await admin.locator('#loginName').fill('qaadmin2');
+  await admin.locator('#loginName').fill('qaadmin');
   await admin.locator('#loginPassword').fill(passwords.adminNew);
   await admin.locator('#loginForm button[type="submit"]').click();
   await admin.locator('#openCreateUser').waitFor();

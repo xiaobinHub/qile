@@ -238,12 +238,10 @@ class ChildService:
                 self.audit(cur,user[0],'account.password')
                 return {'ok':True,'_clear_cookie':True}
             if path=='account/profile' and method=='PATCH':
-                require(bool(body) and set(body) <= {'loginName','nickname','currentPassword'} and bool(set(body)&{'loginName','nickname'}))
-                login=login_value(body.get('loginName',user[1]))
-                nickname=text_value(body.get('nickname',user[2]))
-                if login != user[1]:
-                    require(password_matches(user[6],body.get('currentPassword')),403,'修改登录名需要正确的当前密码。')
-                cur.execute('UPDATE lele.users SET login_name=%s,nickname=%s WHERE id=%s RETURNING '+USER_COLUMNS,(login,nickname,user[0]))
+                require('loginName' not in body,400,'登录名不支持修改。')
+                require(set(body)=={'nickname'})
+                nickname=text_value(body['nickname'])
+                cur.execute('UPDATE lele.users SET nickname=%s WHERE id=%s RETURNING '+USER_COLUMNS,(nickname,user[0]))
                 result=public_user(cur.fetchone())
                 self.audit(cur,user[0],'account.profile')
                 return {'user':result}

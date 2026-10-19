@@ -9,29 +9,25 @@ import { PasswordInput, passwordHelp, passwordPolicy } from "@/components/passwo
 import { errorMessage, isIgnoredError, useSession } from "@/lib/session"
 import type { SessionUser } from "@/lib/types"
 import { useMounted } from "@/lib/use-mounted"
-import { loginPolicy } from "@/pages/user-dialogs"
 
 function BasicProfile() {
   const { session, request, updateUser } = useSession()
   const user = session!.user
-  const [loginName, setLoginName] = useState(user.loginName)
   const [nickname, setNickname] = useState(user.nickname)
-  const [currentPassword, setCurrentPassword] = useState("")
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState("")
   const [success, setSuccess] = useState(false)
   const submitting = useRef(false)
   const mounted = useMounted()
-  const changingLogin = loginName !== user.loginName
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (submitting.current) return
     submitting.current = true; setBusy(true); setMessage(""); setSuccess(false)
     try {
-      const result = await request<{ user: SessionUser }>("account/profile", "PATCH", { loginName, nickname, currentPassword })
+      const result = await request<{ user: SessionUser }>("account/profile", "PATCH", { nickname })
       if (mounted.current) {
         updateUser(result.user)
-        setLoginName(result.user.loginName); setNickname(result.user.nickname); setCurrentPassword("")
+        setNickname(result.user.nickname)
         setSuccess(true); setMessage("账号资料已保存。")
       }
     } catch (error) { if (mounted.current && !isIgnoredError(error)) setMessage(errorMessage(error)) }
@@ -40,7 +36,7 @@ function BasicProfile() {
   return <Card className="gap-0 overflow-hidden rounded-xl py-0 shadow-none">
     <CardHeader className="border-b px-5 py-5 sm:px-6"><div className="flex items-start gap-3"><span className="profile-icon"><UserRound className="size-[18px]" /></span><div><CardTitle className="text-[15px] leading-6">基本资料</CardTitle><CardDescription className="mt-1 text-xs leading-5">维护用于登录和识别的账号信息。</CardDescription></div></div></CardHeader>
     <CardContent className="px-5 pt-5 pb-0 sm:px-6">
-      <form id="profileForm" onSubmit={submit} className="space-y-5"><div className="grid gap-5 sm:grid-cols-2"><div className="space-y-2"><Label htmlFor="profileLogin">登录名</Label><Input id="profileLogin" {...loginPolicy} required value={loginName} onChange={event => setLoginName(event.target.value)} autoComplete="username" autoCapitalize="none" disabled={busy} aria-describedby="profileLoginHelp" /><p id="profileLoginHelp" className="field-help">3–32 位，以字母或数字开头。</p></div><div className="space-y-2"><Label htmlFor="profileName">昵称</Label><Input id="profileName" required maxLength={40} value={nickname} onChange={event => setNickname(event.target.value)} autoComplete="nickname" disabled={busy} /></div></div><div className="max-w-[450px] space-y-2"><Label htmlFor="profileCurrent">当前密码<span className="text-xs font-normal text-muted-foreground">{changingLogin ? "（修改登录名必填）" : "（修改登录名时填写）"}</span></Label><PasswordInput id="profileCurrent" maxLength={128} required={changingLogin} value={currentPassword} onChange={event => setCurrentPassword(event.target.value)} autoComplete="current-password" placeholder="修改昵称时无需填写" disabled={busy} aria-describedby="profileCurrentHelp" /><p id="profileCurrentHelp" className="field-help">为保障账号安全，修改登录名需要验证当前密码。</p></div><FormFeedback id="profileError" message={message} success={success} /><div className="-mx-5 flex justify-end border-t bg-muted/15 px-5 py-4 sm:-mx-6 sm:px-6"><Button type="submit" disabled={busy} className="h-9 gap-2 text-xs">{busy ? <><LoaderCircle className="animate-spin" />正在保存…</> : <><Save className="size-3.5" />保存资料</>}</Button></div></form>
+      <form id="profileForm" onSubmit={submit} className="space-y-5"><div className="grid gap-5 sm:grid-cols-2"><div className="space-y-2"><Label htmlFor="profileLogin">登录名</Label><Input id="profileLogin" value={user.loginName} readOnly autoComplete="username" aria-describedby="profileLoginHelp" className="bg-muted/40 text-muted-foreground" /><p id="profileLoginHelp" className="field-help">登录名由管理员开通，不支持修改。</p></div><div className="space-y-2"><Label htmlFor="profileName">昵称</Label><Input id="profileName" required maxLength={40} value={nickname} onChange={event => setNickname(event.target.value)} autoComplete="nickname" disabled={busy} /></div></div><FormFeedback id="profileError" message={message} success={success} /><div className="-mx-5 flex justify-end border-t bg-muted/15 px-5 py-4 sm:-mx-6 sm:px-6"><Button type="submit" disabled={busy} className="h-9 gap-2 text-xs">{busy ? <><LoaderCircle className="animate-spin" />正在保存…</> : <><Save className="size-3.5" />保存资料</>}</Button></div></form>
     </CardContent>
   </Card>
 }

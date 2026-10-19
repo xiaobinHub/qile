@@ -107,6 +107,11 @@ class ChildBackendTests(unittest.TestCase):
         self.assertEqual(unauth.get('/api/children').status_code,401)
 
     def test_admin_built_assets_are_surface_scoped(self):
+        for asset,content_type in (('parent-settings.js','javascript'),('parent-settings.css','text/css')):
+            served=self.a.get('/static/'+asset)
+            self.assertEqual(served.status_code,200)
+            self.assertIn(content_type,served.headers['content-type'])
+            self.assertEqual(self.admin.get('/static/'+asset).status_code,404)
         response=self.admin.get('/')
         self.assertEqual(response.status_code,200)
         script=re.search(r'src="(/admin-assets/[^"/]+\.js)"',response.text)
@@ -302,15 +307,23 @@ class ChildBackendTests(unittest.TestCase):
         self.assertEqual(self.call(self.a,'POST','/api/children/'+child['id']+'/data/restore',restore).status_code,400)
         self.assertEqual(self.data(child)['revision'],0)
 
-    def test_profile_rename_keeps_invitation_target_id(self):
+    def test_profile_nickname_only_keeps_login_and_invitation_target_id(self):
         name='rename'+uuid.uuid4().hex[:8]
         client,user=self.new_parent(name)
         child=self.child();invite=self.invite(child,target=name)
         self.assertEqual(self.call(client,'PATCH','/api/account/profile',{'nickname':'Nickname only'}).status_code,200)
         renamed=name+'x'
-        self.assertEqual(self.call(client,'PATCH','/api/account/profile',{'loginName':renamed}).status_code,403)
-        response=self.call(client,'PATCH','/api/account/profile',{'loginName':renamed,'nickname':'Renamed','currentPassword':NEW_PASSWORD})
-        self.assertEqual(response.status_code,200,response.text)
+        for body in ({'loginName':renamed},
+                     {'loginName':renamed,'nickname':'Renamed','currentPassword':NEW_PASSWORD},
+                     {'loginName':name,'nickname':'Renamed'}):
+            response=self.call(client,'PATCH','/api/account/profile',body)
+            self.assertEqual(response.status_code,400,response.text)
+            self.assertEqual(response.json()['error'],'登录名不支持修改。')
+        me=client.get('/api/auth/me').json()['user']
+        self.assertEqual((me['loginName'],me['nickname']),(name,'Nickname only'))
+        response=self.call(self.admin,'PATCH','/api/account/profile',{'loginName':'renamedadmin','currentPassword':NEW_PASSWORD})
+        self.assertEqual(response.status_code,400,response.text)
+        self.assertEqual(self.admin.get('/api/auth/me').json()['user']['loginName'],'testadmin')
         self.assertEqual(self.call(client,'POST','/api/invitations/'+invite+'/accept',{}).status_code,200)
         self.assertEqual(client.get('/api/children/'+child['id']+'/data').status_code,200)
 

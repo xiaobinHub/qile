@@ -149,7 +149,7 @@ async function exerciseChildrenDialog({browser,admin,dad,firstId,secondId,passwo
     assert.equal(await trigger.getAttribute('data-child-id'),newId);
 
     // Logout in another tab clears an open chooser before its old read returns.
-    const other=await context.newPage();other.on('pageerror',error=>failures.push(error.message));
+    const other=await context.newPage();other.on('dialog',dialog=>dialog.accept());other.on('pageerror',error=>failures.push(error.message));
     await other.goto(page.url());await other.locator('#openChildrenDialog').waitFor();
     let capturedLogout,releaseLogout;
     const waiting=new Promise(resolve=>capturedLogout=resolve),allow=new Promise(resolve=>releaseLogout=resolve);
@@ -157,7 +157,7 @@ async function exerciseChildrenDialog({browser,admin,dad,firstId,secondId,passwo
     await trigger.click();await waiting;
     await other.getByRole('button',{name:'设置',exact:true}).click();
     await other.locator('#openAccountManagement').click();
-    await other.locator('#accountLogout').click();
+    await other.locator('#settingsLogout').click();
     await page.locator('#loginForm').waitFor();
     const logoutArrived=page.waitForResponse(response=>response.url().endsWith('/api/children'));
     releaseLogout();await(await logoutArrived).finished();
