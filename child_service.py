@@ -390,8 +390,8 @@ class ChildService:
     def manage_invitation(self,cur,user,child_id,parts,method,body):
         self.access(cur,user,child_id,owner=True,write=method!='GET')
         if method=='GET' and len(parts)==3:
-            cur.execute("SELECT i.id,i.target_id,u.login_name,u.nickname,i.status,i.expires_at FROM lele.invitations i JOIN lele.users u ON u.id=i.target_id WHERE i.child_id=%s ORDER BY i.created_at DESC",(child_id,))
-            return {'invitations':[dict(id=r[0],userId=r[1],loginName=r[2],nickname=r[3],status=r[4] if r[5]>datetime.now(timezone.utc) or r[4]!='pending' else 'expired',expiresAt=r[5].isoformat()) for r in cur.fetchall()]}
+            cur.execute("SELECT i.id,i.target_id,u.login_name,u.nickname,i.status,i.expires_at,i.created_at FROM lele.invitations i JOIN lele.users u ON u.id=i.target_id WHERE i.child_id=%s AND i.status<>'revoked' ORDER BY i.created_at DESC",(child_id,))
+            return {'invitations':[dict(id=r[0],userId=r[1],loginName=r[2],nickname=r[3],status=r[4] if r[5]>datetime.now(timezone.utc) or r[4]!='pending' else 'expired',expiresAt=r[5].isoformat(),createdAt=r[6].isoformat()) for r in cur.fetchall()]}
         if method=='POST' and len(parts)==3:
             require(set(body)=={'loginName'})
             cur.execute("SELECT id FROM lele.users WHERE login_name=%s AND role='parent' AND status IN ('pending','active')",(login_value(body['loginName']),))

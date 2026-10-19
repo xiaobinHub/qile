@@ -613,9 +613,9 @@
       if(signout){authUser=null;csrfToken='';childList=[]}
       $('#root').innerHTML='<section class="auth-screen"><h1>正在读取…</h1></section>';
     }
-    function accountShell(title,content){return `<div class="account-panel"><div class="toolbar"><h1>${esc(title)}</h1><span class="toolbar-spacer"></span><button class="btn" id="accountHome">我的孩子</button><button class="btn" id="accountProfile">账号管理</button><button class="btn" id="accountLogout">退出登录</button></div>${content}</div>`}
+    function accountShell(title,content){return `<div class="account-panel"><div class="toolbar"><h1>${esc(title)}</h1><span class="toolbar-spacer"></span><button class="btn" id="accountHome">日历首页</button><button class="btn" id="accountProfile">账号管理</button><button class="btn" id="accountLogout">退出登录</button></div>${content}</div>`}
     function bindAccountNav(){
-      if($('#accountHome'))$('#accountHome').onclick=()=>showChildren();
+      if($('#accountHome'))$('#accountHome').onclick=()=>showCalendarHome();
       if($('#accountProfile'))$('#accountProfile').onclick=()=>showProfile();
       if($('#accountLogout'))$('#accountLogout').onclick=confirmLogout;
     }
@@ -638,28 +638,33 @@
     }
     function confirmLogout(){if(confirm('确认退出当前账号？'))logout()}
     async function logout(){const token=csrfToken;clearContext(true);history.replaceState(null,'','/');try{await parentApi('/api/auth/logout','POST',{},token);authBroadcast?.postMessage('logout');renderLogin()}catch(error){authBroadcast?.postMessage('logout');if(error.kind!=='stale')renderLogin(error.kind==='unauthorized'?'':'退出请求未完成，请重新登录后重试。')}}
+    function preferredChildId(){try{return localStorage.getItem('lele-preferred-child:'+authUser.id)}catch{return null}}
+    function rememberChild(id){try{localStorage.setItem('lele-preferred-child:'+authUser.id,id)}catch{}}
+    async function showCalendarHome(){history.replaceState(null,'','/');await enterAccount()}
+    function renderEmptyCalendar(message='',failed=false){
+      settingsUI?.invalidate();
+      $('#root').innerHTML=appShell();
+      $('#refreshData').onclick=()=>enterAccount();
+      $$('[data-view]').forEach(button=>{button.classList.toggle('active',button.dataset.view===state.view);button.onclick=()=>{state.view=button.dataset.view;renderEmptyCalendar(message,failed)}});
+      if(state.view==='settings'){renderSettings();return}
+      $('#main').innerHTML=`<section class="panel calendar-empty-panel"><div class="toolbar"><h1>${state.view==='store'?'积分商城':'任务日历'}</h1></div><div class="calendar-empty-content" id="emptyCalendar"><span class="calendar-empty-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M7 3v4m10-4v4M3 11h18m-13 4h2m4 0h2m-8 3h2"/></svg></span><h2>${failed?'暂时无法读取成长记录':'从陪伴孩子的第一步开始'}</h2><p ${failed?'role="alert"':''}>${esc(message||(state.view==='store'?'为孩子建立成长记录后，就可以使用积分和礼品。':'还没有孩子的成长记录。创建孩子或接受家人的邀请后，就可以开始安排任务。'))}</p><div class="calendar-empty-actions">${failed?'<button class="btn primary" id="retryCalendar" type="button">重新加载</button>':'<button class="btn primary" id="emptyCalendarCreate" type="button">创建孩子</button><button class="btn" id="emptyCalendarInvitations" type="button">查看我的邀请</button>'}</div></div></section>`;
+      if($('#retryCalendar'))$('#retryCalendar').onclick=()=>enterAccount();
+      if($('#emptyCalendarCreate'))$('#emptyCalendarCreate').onclick=()=>settingsUI.open('child/profile');
+      if($('#emptyCalendarInvitations'))$('#emptyCalendarInvitations').onclick=()=>settingsUI.open('child/invitations');
+    }
     async function enterAccount(){
       if(!authUser){renderLogin();return}
       if(authUser.mustChangePassword){showProfile(true);return}
-      clearContext();
+      clearContext();state.view='calendar';
       const requested=location.pathname.match(/^\/children\/([^/]+)/)?.[1];
       try{
-      const result=await parentApi('/api/children');childList=result.children;
-      if(requested){const child=childList.find(c=>c.id===requested);if(child){await selectChild(child.id,false);return}}
-      const active=childList.filter(c=>!c.archived);
-      if(active.length===1){await selectChild(active[0].id);return}await showChildren();
-      }catch(error){if(error.kind!=='stale'&&error.kind!=='unauthorized'){$('#root').innerHTML=accountShell('暂时无法读取',`<p>${esc(error.message)}</p>`);bindAccountNav()}}
-    }
-    async function showChildren(){
-      clearContext();history.replaceState(null,'','/');
-      try{
-        const [listed,invites]=await Promise.all([parentApi('/api/children'),parentApi('/api/invitations')]);childList=listed.children;
-        $('#root').innerHTML=accountShell('我的孩子',`<p class="account-note">每个孩子拥有独立的任务、积分和礼品。共同管理权限按孩子分别邀请。</p><form class="account-form" id="createChildForm"><label>添加孩子<input id="newChildName" placeholder="孩子姓名或昵称" maxlength="40" required></label><button class="btn primary">创建孩子</button><div id="childrenError" class="account-error"></div></form><div class="child-cards">${childList.map(c=>`<article class="child-card"><h2>${esc(c.name)}</h2><p>${c.role==='owner'?'我是负责人':'共同管理'}${c.archived?' · 已归档':''}</p><button class="btn" data-open-child="${esc(c.id)}">${c.archived?'查看归档':'进入'}</button></article>`).join('')||'<p>还没有孩子，可以创建孩子或接受下面的邀请。</p>'}</div><h2>待处理邀请</h2><div>${(invites.invitations||[]).map(inv=>`<div class="child-member"><span>${esc(inv.childName||inv.child_name||'孩子')} · ${esc(inv.inviterNickname||inv.inviterName||'家长邀请')}</span><button class="btn primary" data-accept-invite="${esc(inv.id)}">接受</button><button class="btn" data-reject-invite="${esc(inv.id)}">拒绝</button></div>`).join('')||'<p class="account-note">暂无待处理邀请</p>'}</div>`);
-        bindAccountNav();
-        $('#createChildForm').onsubmit=async e=>{e.preventDefault();e.submitter.disabled=true;try{await parentApi('/api/children','POST',{name:$('#newChildName').value});await enterAccount()}catch(error){if($('#childrenError'))$('#childrenError').textContent=error.message}finally{if(e.submitter.isConnected)e.submitter.disabled=false}};
-        $$('[data-open-child]').forEach(b=>b.onclick=()=>selectChild(b.dataset.openChild));
-        for(const action of ['accept','reject'])$$(`[data-${action}-invite]`).forEach(b=>b.onclick=async()=>{try{await parentApi(`/api/invitations/${b.dataset[action+'Invite']}/${action}`,'POST',{});await showChildren()}catch(error){toast(error.message)}});
-      }catch(error){if(error.kind!=='unauthorized'&&error.kind!=='stale')$('#root').innerHTML=accountShell('连接未完成',`<p>${esc(error.message)}</p>`);bindAccountNav()}
+        const result=await parentApi('/api/children');childList=result.children;
+        if(requested){const child=childList.find(c=>c.id===requested);if(child){await selectChild(child.id,false);return}}
+        const active=childList.filter(child=>!child.archived),preferred=preferredChildId();
+        const chosen=active.find(child=>child.id===preferred)||active[0]||childList[0];
+        if(chosen){await selectChild(chosen.id,'replace');return}
+        history.replaceState(null,'','/');renderEmptyCalendar();
+      }catch(error){if(error.kind!=='stale'&&error.kind!=='unauthorized')renderEmptyCalendar(error.message,true)}
     }
     function childInitial(name){return Array.from(String(name||'').trim())[0]||'孩'}
     function childrenDialogActive(session){return !!session&&childrenDialogSession===session&&$('#childrenDialog').open&&session.generation===uiGeneration&&session.childId===currentChild?.id&&!!authUser}
@@ -745,9 +750,9 @@
     async function selectChild(id,replace=true){
       const selected=childList.find(c=>c.id===id);if(!selected)return;
       clearContext();currentChild=selected;state.view='calendar';
-      if(replace)history.pushState(null,'',`/children/${id}`);
+      if(replace==='replace')history.replaceState(null,'',`/children/${id}`);else if(replace)history.pushState(null,'',`/children/${id}`);
       $('#root').innerHTML='<section class="auth-screen"><h1>正在读取孩子数据…</h1></section>';
-      try{data=await Store.load();render()}catch(error){if(error.kind!=='unauthorized'&&error.kind!=='stale'){await showChildren();toast(error.message)}}
+      try{data=await Store.load();rememberChild(id);render()}catch(error){if(error.kind!=='unauthorized'&&error.kind!=='stale'){if(error.kind==='forbidden'){await showCalendarHome();return}clearContext();state.view='calendar';renderEmptyCalendar(error.message,true)}}
     }
     function loadPackage(pkg){
       if(!currentChild||pkg.context?.childId!==currentChild.id)throw new StoreError('孩子数据上下文不一致。','stale');
@@ -769,13 +774,13 @@
       const request=pendingOperation?.body||{expectedRevision:storageMeta.revision,membershipVersion:currentChild.membershipVersion,operationId:uid(),kind,payload};
       pendingOperation={signature,body:request};saveBusy=true;const generation=uiGeneration,id=currentChild.id;
       try{const pkg=await parentApi(`/api/children/${id}/operations`,'POST',request);const result=loadPackage(pkg);pendingOperation=null;return result}
-      catch(error){if(error.status&&error.status<500)pendingOperation=null;if(error.kind==='forbidden'){await showChildren()}throw error}
+      catch(error){if(error.status&&error.status<500)pendingOperation=null;if(error.kind==='forbidden'){await showCalendarHome()}throw error}
       finally{if(generation===uiGeneration)saveBusy=false}
     }
     const oldRender=render;
     render=function(){settingsUI?.invalidate();oldRender();if(!data||!currentChild)return;const trigger=document.createElement('button');trigger.id='openChildrenDialog';trigger.type='button';trigger.className='child-profile';trigger.dataset.childId=currentChild.id;trigger.setAttribute('aria-haspopup','dialog');trigger.setAttribute('aria-expanded',String(!!childrenDialogSession));trigger.setAttribute('aria-controls','childrenDialog');trigger.setAttribute('aria-label',`${currentChild.name}，打开我的孩子${currentChild.archived?'，已归档，只读':''}`);trigger.innerHTML=`<span class="child-avatar" aria-hidden="true">${esc(childInitial(currentChild.name))}</span><span class="child-profile-copy"><strong>${esc(currentChild.name)}</strong>${currentChild.archived?'<span class="child-profile-meta"><span class="children-archived-status">已归档 · 只读</span></span>':''}</span><span class="child-profile-chevron" aria-hidden="true">⌄</span>`;$('.topbar').append(trigger);trigger.onclick=openChildrenDialog;};
     storageErrorMessage=function(error){return error?.message||'连接暂时中断，请刷新核对。'};
-    refreshPageData=async function(){if(saveBusy||refreshBusy)return;refreshBusy=true;try{data=await Store.load();pendingOperation=null;render();toast('已读取最新数据')}catch(error){if(error.kind==='forbidden'){await showChildren()}if(error.kind!=='stale')toast(error.message)}finally{refreshBusy=false}};
+    refreshPageData=async function(){if(saveBusy||refreshBusy)return;refreshBusy=true;try{data=await Store.load();pendingOperation=null;render();toast('已读取最新数据')}catch(error){if(error.kind==='forbidden'){await showCalendarHome()}if(error.kind!=='stale')toast(error.message)}finally{refreshBusy=false}};
     function showProfile(forced=false){
       if(!forced){settingsUI.open('account/profile');return}
       clearContext();
@@ -790,9 +795,9 @@
         if(childContextBusy())return;
         state.view='settings';
         if(currentChild&&data)render();
-        else{uiGeneration++;$('#root').innerHTML=appShell();$('.nav').innerHTML='<button type="button" id="accountHome">我的孩子</button>';$('#refreshData').remove();bindAccountNav();renderSettings()}
+        else{uiGeneration++;renderEmptyCalendar()}
       },
-      home:()=>showChildren(),selectChild,
+      home:()=>showCalendarHome(),selectChild,
       sync:async reloadData=>{
         const id=currentChild?.id;
         const result=await parentApi('/api/children');childList=result.children;
@@ -841,14 +846,14 @@
       try{
         const status=await parentApi(`/api/children/${currentChild.id}/context`);
         if(generation!==uiGeneration||!$('#main')||saveBusy||refreshBusy)return;
-        if(status.child.membershipVersion!==currentChild.membershipVersion){await showChildren();toast('管理权限已变化，请重新打开孩子。');return}
+        if(status.child.membershipVersion!==currentChild.membershipVersion){await showCalendarHome();toast('管理权限已变化，请重新打开孩子。');return}
         const changed=status.revision!==storageMeta.revision||status.child.archived!==currentChild.archived||status.child.role!==currentChild.role;
         if(changed){
           currentChild={...currentChild,...status.child};childList=childList.map(c=>c.id===currentChild.id?currentChild:c);
           if(document.querySelector('dialog[open]')||pendingOperation){if(notifiedRevision!==status.revision){notifiedRevision=status.revision;toast('其他家长已更新数据，请完成当前编辑后刷新。')}}
           else{data=await Store.load();notifiedRevision=null;render()}
         }
-      }catch(error){if(error.kind==='forbidden'){await showChildren();toast('你已不再拥有该孩子的管理权限。')}}
+      }catch(error){if(error.kind==='forbidden'){await showCalendarHome();toast('你已不再拥有该孩子的管理权限。')}}
       finally{checkingContext=false}
     }
     if(!SELFTEST){setInterval(checkChildContext,30000);window.addEventListener('focus',checkChildContext);document.addEventListener('visibilitychange',checkChildContext)}

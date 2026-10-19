@@ -2,7 +2,7 @@
 const assert=require('node:assert/strict');
 const path=require('node:path');
 
-async function exerciseChildrenDialog({browser,admin,dad,firstId,secondId,passwords,createParent,login,parentPassword,out,failures}){
+async function exerciseChildrenDialog({browser,admin,dad,firstId,secondId,passwords,createParent,createChildFixture,login,parentPassword,out,failures}){
   assert.equal(new URL(dad.url()).port,'18887');
   assert.equal(new URL(admin.url()).port,'18888');
   await createParent(admin,'qachooser','弹窗测试家长');
@@ -19,6 +19,7 @@ async function exerciseChildrenDialog({browser,admin,dad,firstId,secondId,passwo
     await login(page,18887,'qachooser',passwords.initial);
     await parentPassword(page,passwords.dad);
     await login(page,18887,'qachooser',passwords.dad);
+    await page.locator('#emptyCalendarCreate').click();
     await page.locator('#newChildName').fill('弹窗测试孩子');
     await page.locator('#createChildForm button').click();
     await trigger.waitFor();
@@ -63,22 +64,16 @@ async function exerciseChildrenDialog({browser,admin,dad,firstId,secondId,passwo
     assert.equal(await dialog.locator('[data-open-child]').count(),1,'An unaccepted child is not offered for switching');
     await page.locator('#closeChildrenDialog').click();await closed();
 
-    // Existing management remains usable; no new invitations/create entry is added.
+    // Invitations are handled only in their dedicated settings pane.
     await page.getByRole('button',{name:'设置',exact:true}).click();
-    await page.locator('#openAccountManagement').click();
-    await page.locator('#accountHome').click();
+    await page.locator('#openMyInvitationsSettings').click();
     await page.locator(`[data-accept-invite="${invites[0]}"]`).waitFor();
     await page.screenshot({path:path.join(out,'parent-children-management.png'),fullPage:true});
     await page.locator(`[data-reject-invite="${invites[1]}"]`).click();
     await page.locator(`[data-reject-invite="${invites[1]}"]`).waitFor({state:'detached'});
     await page.locator(`[data-accept-invite="${invites[0]}"]`).click();
-    await page.locator(`[data-open-child="${firstId}"]`).waitFor();
-    await page.locator('#newChildName').fill('新建卡片孩子');
-    await page.locator('#createChildForm button').click();
-    const createdCard=page.locator('.child-card').filter({hasText:'新建卡片孩子'}).locator('[data-open-child]');
-    await createdCard.waitFor();
-    const newId=await createdCard.getAttribute('data-open-child');
-    await page.locator(`[data-open-child="${firstId}"]`).click();
+    await page.locator('[data-enter-invited-child]').click();
+    const newId=(await createChildFixture(page,'新建卡片孩子')).id;
     await waitChild(firstId);
     await trigger.click();
     await dialog.locator(`[data-open-child="${newId}"]`).waitFor();

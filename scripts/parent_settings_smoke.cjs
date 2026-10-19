@@ -12,7 +12,7 @@ async function exerciseParentSettings({browser,admin,dad,mom,firstId,secondId,pa
   await dad.getByRole('button',{name:'设置',exact:true}).click();
   assert.equal(await dad.locator('[aria-label="设置导航"] h2').allTextContents().then(items=>items.join('/')),'孩子管理/任务设置/账号管理');
   assert.equal(await dad.locator('[data-settings-page]').count(),9);
-  assert.equal(await dad.locator('#openLanAccessSettings').count(),0);
+  assert.equal(await dad.locator('#openLanAccessSettings,#accountHome,.settings-heading-actions,.settings-detail-heading>p').count(),0);
   const left=await dad.locator('.settings-sidebar').boundingBox(),right=await dad.locator('.settings-detail').boundingBox();
   assert.ok(right.x>left.x+left.width,'Settings use two distinct columns on desktop');
   await dad.screenshot({path:path.join(out,'parent-settings-child.png'),fullPage:true});
@@ -87,8 +87,13 @@ async function exerciseParentSettings({browser,admin,dad,mom,firstId,secondId,pa
   await open(dad,'child/family');
   await dad.locator('#inviteLogin').fill('qasettings');await dad.locator('#inviteParentForm button').click();
   const sentRow=dad.locator('.settings-person-row').filter({has:dad.locator('[data-revoke]')}).filter({hasText:'qasettings'});
+  const revokedId=await sentRow.locator('[data-revoke]').getAttribute('data-revoke');
+  const sent=await dad.evaluate(async id=>(await(await fetch(`/api/children/${id}/invitations`)).json()).invitations,firstId);
+  assert.equal(await sentRow.locator('time').getAttribute('datetime'),sent.find(inv=>inv.id===revokedId).createdAt);
+  assert.match(await sentRow.locator('.settings-invitation-sent-at').innerText(),/发出于/);
   await sentRow.locator('[data-revoke]').click();
-  await dad.getByText('已撤销',{exact:true}).first().waitFor();
+  await dad.locator(`[data-revoke="${revokedId}"]`).waitFor({state:'detached'});
+  assert.equal(await dad.getByText('已撤销',{exact:true}).count(),0);
   await dad.locator('#inviteLogin').fill('qasettings');await dad.locator('#inviteParentForm button').click();
   await sentRow.locator('[data-revoke]').waitFor();
   await dad.screenshot({path:path.join(out,'parent-settings-family.png'),fullPage:true});
@@ -104,7 +109,7 @@ async function exerciseParentSettings({browser,admin,dad,mom,firstId,secondId,pa
   page.on('request',request=>{if(new URL(request.url()).pathname==='/api/auth/logout')logoutRequests++});
   try{
     await login(page,18887,'qasettings',passwords.initial);await parentPassword(page,passwords.mom);await login(page,18887,'qasettings',passwords.mom);
-    await page.locator('#accountProfile').click();await open(page,'child/invitations');
+    await page.locator('#emptyCalendarInvitations').click();
     await page.locator('.settings-invitation-card').nth(1).waitFor();
     await page.screenshot({path:path.join(out,'parent-settings-invitations.png'),fullPage:true});
     const firstCard=page.locator('.settings-invitation-card').filter({hasText:originalName});

@@ -73,3 +73,18 @@ Files: 新增 `scripts/parent_settings_smoke.cjs`；修改 `scripts/browser_smok
 - 独立本机生产服务 8787 的进程保持不变；本次没有发布阿里云。
 
 验收截图：`output/playwright/parent-settings-child.png`、`parent-settings-family.png`、`parent-settings-invitations.png`、`parent-settings-presets.png`、`parent-settings-account.png`、`parent-settings-mobile.png`。
+
+
+## 同日五项批注修订（已完成）
+
+用户明确要求取消旧“我的孩子”首页，直接进入任务日历；同时移除设置详情的一级分类重复文案、设置标题右侧的孩子信息与入口，补充邀请发出时间并隐藏撤销邀请。
+
+- [x] `web/parent.js`：根路径优先进入当前账号最近选择的未归档孩子，无有效偏好时回退到首个有权限孩子；显式孩子链接优先。卡牌仍负责切换，无孩子时展示日历空状态及创建/邀请引导，删除旧独立列表页面；请求失败展示错误重试而非生成默认业务数据。
+- [x] `web/parent-settings.js` / `.css`：移除详情分类和标题右侧入口；无孩子昵称页提供首次创建表单；已发邀请展示真实日期时间并过滤撤销状态。
+- [x] `child_service.py`：已发邀请读取原 `created_at` 为 `createdAt`，查询排除 revoked。保留数据库原行和审计，无结构迁移。
+- [x] `test_child_backend.py`：验证发出时间精确匹配数据库，撤销后查询不可见但原行状态仍为 revoked。
+- [x] 更新三份浏览器脚本的导航、无孩子引导、卡牌切换及邀请断言；额外测试多孩子根路径、最近选择、无授权偏好回退与重复入口移除。
+
+验证：29 项后端测试通过；30 个隔离浏览器场景通过，页面错误 0；语法和空白检查通过。人工查看更新后的邀请页面，时间与状态清楚，重复入口消失。
+
+本地开发 18787/18788 已重启；重启前后 6 个孩子完整业务数据校验值一致，修订号 0、0、0、0、0、262。8787 独立生产进程未变，阿里云未发布。本轮回滚基线为 `5e4777b`。

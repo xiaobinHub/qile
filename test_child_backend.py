@@ -239,10 +239,21 @@ class ChildBackendTests(unittest.TestCase):
 
     def test_invitation_target_expiry_reject_revoke(self):
         child=self.child(); invite=self.invite(child)
+        sent=self.a.get('/api/children/'+child['id']+'/invitations').json()['invitations']
+        def created_at(cur):
+            cur.execute('SELECT created_at FROM lele.invitations WHERE id=%s',(invite,))
+            return cur.fetchone()[0].isoformat()
+        self.assertEqual(next(row for row in sent if row['id']==invite)['createdAt'],self.service.transaction(created_at))
         self.assertEqual(self.call(self.outsider,'POST','/api/invitations/'+invite+'/accept',{}).status_code,404)
         self.assertEqual(self.call(self.b,'POST','/api/invitations/'+invite+'/reject',{}).status_code,200)
         invite=self.invite(child)
         self.assertEqual(self.call(self.a,'DELETE','/api/children/'+child['id']+'/invitations/'+invite).status_code,200)
+        sent=self.a.get('/api/children/'+child['id']+'/invitations').json()['invitations']
+        self.assertNotIn(invite,[row['id'] for row in sent])
+        def revoked_status(cur):
+            cur.execute('SELECT status FROM lele.invitations WHERE id=%s',(invite,))
+            return cur.fetchone()[0]
+        self.assertEqual(self.service.transaction(revoked_status),'revoked')
         self.assertEqual(self.call(self.b,'POST','/api/invitations/'+invite+'/accept',{}).status_code,409)
         invite=self.invite(child)
         self.service.transaction(lambda c:c.execute("UPDATE lele.invitations SET expires_at=now()-interval '1 second' WHERE id=%s",(invite,)),exclusive=True)
