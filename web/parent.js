@@ -188,6 +188,7 @@
     }
     let presetEditorId=null,presetSaveBusy=false,presetComposing=false,presetOptionsState=null;
     function renderTaskPresets(){
+      if(settingsUI?.refresh())return;
       const list=$('#settingsTaskPresetsList')||$('#taskPresetsList');
       list.innerHTML=data.taskPresets.length?data.taskPresets.map(preset=>{const type=data.categories.find(item=>item.id===preset.categoryId);return `<article class="task-preset-card"><div class="task-preset-card-main"><strong>${esc(preset.title)}</strong><div class="task-preset-card-meta"><span class="task-preset-category" style="--preset-cat:${esc(type?.active?type.color:'#9ba59e')}"><i aria-hidden="true"></i>${esc(taskPresetTypeName(preset))}</span><span class="task-preset-time"><svg aria-hidden="true" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="7"/><path d="M10 6v4l3 2"/></svg>${esc(preset.startTime)}–${esc(preset.endTime)}</span></div></div><div class="task-preset-side"><span class="task-preset-reward">+${preset.points}<small>分</small></span><div class="task-preset-actions"><button class="btn" type="button" data-preset-edit="${preset.id}" ${currentChild?.archived?'disabled':''}>编辑</button><button class="btn danger" type="button" data-preset-delete="${preset.id}" ${presetSaveBusy||currentChild?.archived?'disabled':''}>删除</button></div></div></article>`}).join(''):'<div class="empty">暂无常用任务，点击右上角“添加”开始配置。</div>';
       if($('#settingsPresetCount'))$('#settingsPresetCount').textContent=`共 ${data.taskPresets.length} 项配置`;
@@ -201,7 +202,7 @@
       $('#presetCategory').innerHTML=`<option value="" disabled>${previousType&&!previousType.active?'原类型已停用，请重新选择':'请选择任务类型'}</option>`+types.map(item=>`<option value="${item.id}">${esc(item.name)}</option>`).join('');$('#presetCategory').value=previousType?.active?previousType.id:'';
       $('#taskPresetEditorError').textContent=types.length?'':'暂无可用类型，请先在设置中添加任务类型';$('#taskPresetEditorDialog').showModal();$('#presetTitle').focus();
     }
-    function setPresetBusy(busy){presetSaveBusy=busy;$$('#taskPresetForm button').forEach(button=>button.disabled=busy);$('#addTaskPreset').disabled=busy;$$('[data-preset-delete]').forEach(button=>button.disabled=busy)}
+    function setPresetBusy(busy){presetSaveBusy=busy;$$('#taskPresetForm button').forEach(button=>button.disabled=busy);$('#addTaskPreset').disabled=busy;$$('#taskPresetsList [data-preset-delete]').forEach(button=>button.disabled=busy)}
     async function saveTaskPreset(event){
       event.preventDefault();if(presetSaveBusy)return;
       const preset={id:presetEditorId||uid(),title:$('#presetTitle').value.trim(),categoryId:$('#presetCategory').value,startTime:$('#presetStart').value,endTime:$('#presetEnd').value,points:$('#presetPoints').value===''?NaN:Number($('#presetPoints').value)},error=validateTaskPreset(preset);
@@ -596,7 +597,7 @@
       return result;
     };
     function clearContext(signout=false){
-      window.LelePasswordSetup.unmount();
+      window.LeleParentUI.unmountPassword();
       settingsUI?.reset();
       uiGeneration++;currentChild=null;pendingOperation=null;data=null;persistedData=null;saveBusy=false;refreshBusy=false;
       storageMeta.revision=0;storageMeta.updatedAt=null;
@@ -784,7 +785,7 @@
       if(!forced){settingsUI.open('account/profile');return}
       clearContext();
       $('#root').innerHTML='<section class="password-setup-screen" aria-labelledby="passwordSetupTitle"><div class="password-setup-mount" id="passwordSetupMount"></div></section>';
-      window.LelePasswordSetup.mount($('#passwordSetupMount'),{changePassword:changeAccountPassword,logout:confirmLogout});
+      window.LeleParentUI.mountPassword($('#passwordSetupMount'),{changePassword:changeAccountPassword,logout:confirmLogout});
     }
     async function changeAccountPassword(values){
       await parentApi('/api/account/password','POST',values);
@@ -807,8 +808,15 @@
         return true;
       },
       repaint:()=>render(),updateUser:user=>authUser=user,
-      renderPresets:()=>renderTaskPresets(),editPreset:()=>openTaskPresetEditor(),
-      renderCategories:()=>renderCategories(),addCategory:()=>openCategoryCreate(),
+      editPreset:id=>openTaskPresetEditor(id),
+      deletePreset:async id=>{if(!confirm('确认删除此常用配置？已创建的任务不受影响。'))return;await command('preset.delete',{id});settingsUI.refresh()},
+      addCategory:()=>openCategoryCreate(),deleteCategory:id=>openCategoryDelete(id),
+      saveCategory:async category=>{await command('category.save',{category:{id:category.id,name:category.name,color:category.color}})},
+      reorderCategory:async(fromId,targetId,after)=>{
+        const ids=data.categories.map(item=>item.id),from=ids.indexOf(fromId);if(from<0)return;
+        const [id]=ids.splice(from,1),target=ids.indexOf(targetId);if(target<0)return;
+        ids.splice(target+(after?1:0),0,id);await command('category.reorder',{ids});
+      },
       exportBackup:()=>downloadBackup(),importBackup:()=>$('#importInput').click(),
       logout:confirmLogout,
       changePassword:changeAccountPassword
@@ -830,7 +838,7 @@
     deleteCategory=async function(){try{await command('category.delete',{id:state.deletingCategoryId});$('#categoryDeleteDialog').close();renderCategories();toast('类型已更新，历史记录已保留')}catch(error){toast(error.message)}};
     saveCategoryOrder=async function(targetId,after){const order=data.categories.map(c=>c.id),from=order.indexOf(categoryDragId);if(from<0)return;const [id]=order.splice(from,1),target=order.indexOf(targetId);if(target<0)return;order.splice(target+(after?1:0),0,id);try{await command('category.reorder',{ids:order});renderCategories()}catch(error){toast(error.message)}};
     const oldCategories=renderCategories;
-    renderCategories=function(){oldCategories();if(currentChild?.archived){$$('#settingsCategoryList input,#settingsCategoryList button').forEach(control=>{control.disabled=true;control.draggable=false});return}$$('[data-cat-color],[data-cat-name]').forEach(input=>input.onchange=async()=>{const id=input.dataset.catColor||input.dataset.catName,c=data.categories.find(c=>c.id===id);const payload={id,name:input.dataset.catName?input.value.trim():c.name,color:input.dataset.catColor?input.value:c.color};try{await command('category.save',{category:payload});renderCategories()}catch(error){toast(error.message);renderCategories()}})};
+    renderCategories=function(){if(settingsUI?.refresh())return;oldCategories();if(currentChild?.archived){$$('#settingsCategoryList input,#settingsCategoryList button').forEach(control=>{control.disabled=true;control.draggable=false});return}$$('[data-cat-color],[data-cat-name]').forEach(input=>input.onchange=async()=>{const id=input.dataset.catColor||input.dataset.catName,c=data.categories.find(c=>c.id===id);const payload={id,name:input.dataset.catName?input.value.trim():c.name,color:input.dataset.catColor?input.value:c.color};try{await command('category.save',{category:payload});renderCategories()}catch(error){toast(error.message);renderCategories()}})};
     downloadBackup=function(){download({...backup(),sourceChild:{id:currentChild.id,name:currentChild.name}},`${currentChild.name}-成长备份-${dateStr(new Date())}.json`);toast('当前孩子备份已导出')};
     importFile=async function(file){const target=currentChild,generation=uiGeneration;try{if(!target||target.role!=='owner'||target.archived)throw new Error('只有未归档孩子的负责人可以恢复数据。');const pkg=JSON.parse(await file.text());if(generation!==uiGeneration)return;const next=pkg.format==='lele-task-manager-store'?validateData(migrateData(pkg.data)):validateBackup(pkg);if(!confirm(`将此备份恢复到“${target.name}”。\n任务系列：${next.series.length}\n积分流水：${next.ledger.length}\n当前业务数据将被替换，孩子姓名和家长权限保持不变。确认恢复？`))return;if(saveBusy)throw new Error('请等待当前操作保存完成。');saveBusy=true;const result=await parentApi(`/api/children/${target.id}/data/restore`,'POST',{expectedRevision:storageMeta.revision,membershipVersion:target.membershipVersion,operationId:uid(),data:next});loadPackage(result);render();toast('当前孩子数据已恢复')}catch(error){if(error.kind!=='stale')alert('导入失败：'+error.message)}finally{if(generation===uiGeneration)saveBusy=false;$('#importInput').value=''}};
     renderAccessGate=renderLogin;

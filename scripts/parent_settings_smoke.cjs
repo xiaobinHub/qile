@@ -12,6 +12,9 @@ async function exerciseParentSettings({browser,admin,dad,mom,firstId,secondId,pa
   await dad.getByRole('button',{name:'设置',exact:true}).click();
   assert.equal(await dad.locator('[aria-label="设置导航"] h2').allTextContents().then(items=>items.join('/')),'孩子管理/任务设置/账号管理');
   assert.equal(await dad.locator('[data-settings-page]').count(),9);
+  assert.equal(await dad.locator('.settings-sidebar[data-slot="card"],.settings-detail[data-slot="card"]').count(),2);
+  assert.equal(await dad.locator('[data-settings-page][data-slot="button"]').count(),9);
+  assert.equal(await dad.locator('#renameChild[data-slot="input"]').count(),1);
   assert.equal(await dad.locator('#openLanAccessSettings,#accountHome,.settings-heading-actions,.settings-detail-heading>p').count(),0);
   const left=await dad.locator('.settings-sidebar').boundingBox(),right=await dad.locator('.settings-detail').boundingBox();
   assert.ok(right.x>left.x+left.width,'Settings use two distinct columns on desktop');
@@ -64,6 +67,20 @@ async function exerciseParentSettings({browser,admin,dad,mom,firstId,secondId,pa
   await dad.locator('#categoryCreateDialog').waitFor({state:'hidden'});
   await dad.locator('#settingsCategoryList input[type="text"]').last().waitFor();
   assert.equal((await store(dad,firstId)).data.categories.at(-1).name,'界面测试类型');
+  const testCategory=(await store(dad,firstId)).data.categories.at(-1);
+  await dad.locator(`[data-cat-name="${testCategory.id}"]`).fill('类型编辑验证');
+  await dad.locator(`[data-cat-name="${testCategory.id}"]`).press('Tab');
+  await dad.waitForFunction(async({child,id})=>(await(await fetch(`/api/children/${child}/data`)).json()).data.categories.find(item=>item.id===id).name==='类型编辑验证',{child:firstId,id:testCategory.id});
+  await dad.locator(`[data-cat-color="${testCategory.id}"]`).evaluate(input=>{
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,'#336699');
+    input.dispatchEvent(new Event('change',{bubbles:true}));
+  });
+  await dad.waitForFunction(async({child,id})=>(await(await fetch(`/api/children/${child}/data`)).json()).data.categories.find(item=>item.id===id).color==='#336699',{child:firstId,id:testCategory.id});
+  const target=dad.locator('[data-category-row]').first();
+  await dad.locator(`[data-drag-category="${testCategory.id}"]`).dragTo(target,{targetPosition:{x:10,y:3}});
+  await dad.waitForFunction(async({child,id})=>(await(await fetch(`/api/children/${child}/data`)).json()).data.categories[0].id===id,{child:firstId,id:testCategory.id});
+  assert.equal(await dad.locator('#settingsCategoryList input[data-slot="input"]').count(),(await store(dad,firstId)).data.categories.length*2);
+  await dad.screenshot({path:path.join(out,'parent-settings-categories.png'),fullPage:true});
   await open(dad,'tasks/backup');assert.equal(await dad.locator('#settingsImportBtn').isEnabled(),true);
   const downloaded=dad.waitForEvent('download');await dad.locator('#settingsExportBtn').click();
   assert.match((await downloaded).suggestedFilename(),/成长备份.*json$/);
@@ -150,6 +167,17 @@ async function exerciseParentSettings({browser,admin,dad,mom,firstId,secondId,pa
     await page.getByRole('button',{name:'设置',exact:true}).click();
     assert.deepEqual(await page.locator('[aria-label="设置导航"] h2').allTextContents(),['孩子管理','任务设置','账号管理']);
     assert.equal(await page.evaluate(async id=>(await fetch(`/api/children/${id}/data`)).status,firstId),403);
+
+    // A bound parent handles incoming invitations in the React settings pane.
+    await dad.locator('#inviteLogin').fill('qasettings');await dad.locator('#inviteParentForm button').click();await dad.locator('[data-revoke]').waitFor();
+    await open(page,'child/invitations');await page.locator('[data-reject-invite]').click();
+    await page.getByText('已拒绝这份邀请。',{exact:true}).waitFor();await page.getByText('暂无待处理邀请',{exact:true}).waitFor();
+    await open(dad,'account/profile');await open(dad,'child/family');await dad.locator('[data-delete-invitation]').waitFor();
+    await dad.locator('#inviteLogin').fill('qasettings');await dad.locator('#inviteParentForm button').click();await dad.locator('[data-revoke]').waitFor();
+    await open(page,'account/profile');await open(page,'child/invitations');await page.locator('[data-accept-invite]').click();
+    await page.locator('[data-enter-invited-child]').waitFor();assert.equal(await page.locator('#openChildrenDialog').getAttribute('data-child-id'),secondId);
+    await page.locator('[data-enter-invited-child]').click();await page.waitForFunction(id=>document.querySelector('#openChildrenDialog')?.dataset.childId===id,firstId);
+    await page.getByRole('button',{name:'设置',exact:true}).click();
 
     let captured,release;
     const waiting=new Promise(resolve=>captured=resolve),allow=new Promise(resolve=>release=resolve);

@@ -55,7 +55,7 @@ npm run build:admin
 
 `npm run check:admin` 只检查 TypeScript 类型。后台构建产物纳入 Git，后续部署使用同一份已验证的产物；服务器运行服务不需要 Node.js。新增生产发布前需先在本机重新构建并测试。
 
-家长首次或重置后的密码设置页源码在 `parent-ui/`，通过 React 复用 `admin-ui/src/components/ui/` 的 shadcn/ui Card、Input、Label 和 Button。该页保留原有家长端样式，不加载全局 Tailwind reset；其余家长页面仍由现有脚本管理。修改后执行 `npm run build:parent`（包含 TypeScript 检查），构建文件为 `web/parent-dist/password-setup.js`，纳入 Git 并由家长端同源精确白名单提供。`npm run check:parent` 只检查类型。首次添加静态路由后需要重启本地开发服务，后续仅修改该页面时构建并刷新即可。
+家长设置页和首次或重置后的密码设置页源码在 `parent-ui/`，通过 React 复用 `admin-ui/src/components/ui/` 的 shadcn/ui Card、Input、Label、Button 和 Badge。设置按账号、孩子、任务拆分组件，沿用原家长端样式，不加载全局 Tailwind reset。日历、商城、初始引导和已有编辑弹窗继续由原脚本管理；设置内容由 React 独立挂载，退出或切换上下文前卸载。任务配置编辑器通过业务回调刷新 React 列表，不直接改写其 DOM。修改后执行 `npm run build:parent`（包含 TypeScript 检查），统一构建文件为 `web/parent-dist/parent-ui.js`，纳入 Git 并由家长端同源精确白名单提供。`npm run check:parent` 只检查类型。首次替换静态路由后需要重启本地开发服务，后续仅修改这些页面时构建并刷新即可。
 
 浏览器回归使用额外的 `lele_test_browser` 隔离库和临时端口 18887/18888，覆盖后台操作弹窗、搜索筛选、账号资料、窄屏，以及账号开通、首次改密、多孩子隔离、邀请、任务、礼品、备份权限及退出：
 

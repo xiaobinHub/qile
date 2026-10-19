@@ -15,10 +15,10 @@ export default defineConfig({
     emptyOutDir: true,
     sourcemap: false,
     lib: {
-      entry: fileURLToPath(new URL("./src/password-setup.tsx", import.meta.url)),
-      name: "LelePasswordSetup",
+      entry: fileURLToPath(new URL("./src/index.ts", import.meta.url)),
+      name: "LeleParentUI",
       formats: ["iife"],
-      fileName: () => "password-setup.js",
+      fileName: () => "parent-ui.js",
     },
   },
 })

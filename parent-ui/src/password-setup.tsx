@@ -19,19 +19,20 @@ function PasswordEye({ visible }: { visible: boolean }) {
   </svg>
 }
 
-function PasswordField({ id, label, placeholder, inputRef }: {
+export function PasswordField({ id, label, placeholder, inputRef, current = false }: {
   id: string
   label: string
   placeholder: string
   inputRef: RefObject<HTMLInputElement | null>
+  current?: boolean
 }) {
   const [visible, setVisible] = useState(false)
   return <div className="settings-field">
     <Label htmlFor={id}>{label}</Label>
     <div className="settings-password-input">
-      <Input ref={inputRef} id={id} name={id} type={visible ? "text" : "password"} required minLength={6} maxLength={128}
-        pattern="(?=.*[A-Za-z])(?=.*[0-9]).{6,128}" title="至少 6 位，且同时包含字母和数字"
-        autoComplete="new-password" placeholder={placeholder} aria-describedby={id === "passwordNew" ? "passwordHelp" : undefined} />
+      <Input ref={inputRef} id={id} name={id} type={visible ? "text" : "password"} required minLength={current ? undefined : 6} maxLength={128}
+        pattern={current ? undefined : "(?=.*[A-Za-z])(?=.*[0-9]).{6,128}"} title={current ? undefined : "至少 6 位，且同时包含字母和数字"}
+        autoComplete={current ? "current-password" : "new-password"} placeholder={placeholder} aria-describedby={id === "passwordNew" ? "passwordHelp" : undefined} />
       <Button type="button" variant="ghost" size="icon" className="settings-password-toggle" data-password-toggle={id}
         aria-controls={id} aria-label={`${visible ? "隐藏" : "显示"}${label}`} aria-pressed={visible} onClick={() => setVisible(value => !value)}>
         <PasswordEye visible={visible} />
