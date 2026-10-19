@@ -103,9 +103,9 @@ def create_app(config_path, surface='parent'):
 
     @app.get('/static/{asset}')
     def static(asset:str):
-        if surface!='parent' or asset not in {'parent.js','parent-settings.js','parent-settings.css'}:
+        if surface!='parent' or asset not in {'parent.js','parent-settings.js','parent-settings.css','password-setup.js'}:
             raise ApiError(404,'文件不存在。')
-        file=web_root/asset
+        file=web_root/'parent-dist'/asset if asset=='password-setup.js' else web_root/asset
         if not file.is_file(): raise ApiError(404,'文件不存在。')
         return FileResponse(file)
 

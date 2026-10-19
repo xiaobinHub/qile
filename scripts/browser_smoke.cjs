@@ -38,6 +38,10 @@ async function checkPasswordInput(page,selector){for(const [value,valid] of [['a
 async function parentPassword(page,newPassword){
  assert.equal(await page.locator('#passwordCurrent,#accountHome,#accountProfile').count(),0);
  await page.locator('.password-setup-card').waitFor();
+ assert.equal(await page.locator('#requiredPasswordContent[data-slot="card"]').count(),1);
+ assert.equal(await page.locator('#passwordForm input[data-slot="input"]').count(),2);
+ assert.equal(await page.locator('#passwordForm label[data-slot="label"]').count(),2);
+ assert.equal(await page.locator('#passwordForm button[type="submit"][data-slot="button"]').count(),1);
  for(const id of ['passwordNew','passwordRepeat']){
   const input=page.locator('#'+id),toggle=page.locator(`[data-password-toggle="${id}"]`);
   await input.fill('Abc123');assert.equal(await input.getAttribute('type'),'password');
@@ -51,9 +55,23 @@ async function parentPassword(page,newPassword){
  await page.locator('#accountLogout').click();await page.keyboard.press('Escape');assert.equal(await page.locator('#logoutDialog').isVisible(),false);assert.equal(logouts,0);
  page.off('request',watch);
  await checkPasswordInput(page,'#passwordNew');await checkPasswordInput(page,'#passwordRepeat');
+ await page.locator('#passwordNew').fill('Abc123');await page.locator('#passwordRepeat').fill('Abc124');
+ await page.locator('#passwordForm button[type="submit"]').click();await page.getByText('两次输入的新密码不一致。',{exact:true}).waitFor();
+ assert.equal(await page.locator('#passwordRepeat').evaluate(el=>el===document.activeElement),true);
+ await page.locator('#passwordNew').fill(passwords.initial);await page.locator('#passwordRepeat').fill(passwords.initial);
+ await page.locator('#passwordForm button[type="submit"]').click();await page.getByText('新密码不能与当前密码相同。',{exact:true}).waitFor();
+ assert.equal(await page.locator('#passwordForm fieldset').evaluate(el=>el.disabled),false);
  await page.locator('#passwordNew').fill(newPassword);await page.locator('#passwordRepeat').fill(newPassword);
+ let releaseSave;const allowSave=new Promise(resolve=>releaseSave=resolve);
+ await page.route('**/api/account/password',async route=>{await allowSave;await route.continue()},{times:1});
+ let saves=0;const countSave=request=>{if(new URL(request.url()).pathname==='/api/account/password')saves++};page.on('request',countSave);
  const requested=page.waitForRequest(request=>request.method()==='POST'&&new URL(request.url()).pathname==='/api/account/password');
- await page.locator('#passwordForm button[type="submit"]').click();assert.deepEqual(Object.keys((await requested).postDataJSON()),['newPassword']);await page.locator('#loginName').waitFor();
+ await page.locator('#passwordForm button[type="submit"]').click();assert.deepEqual(Object.keys((await requested).postDataJSON()),['newPassword']);
+ await page.waitForFunction(()=>document.querySelector('#passwordForm fieldset')?.disabled===true);
+ assert.equal(await page.locator('#passwordForm button[type="submit"]').isDisabled(),true);
+ assert.equal(await page.locator('[data-password-toggle="passwordNew"]').isDisabled(),true);
+ await page.locator('#passwordForm').dispatchEvent('submit');assert.equal(saves,1);
+ releaseSave();await page.locator('#loginName').waitFor();page.off('request',countSave);
 }
 
 async function waitForStore(page,id,predicate){for(let n=0;n<200;n++){const value=await page.evaluate(async child=>(await fetch(`/api/children/${child}/data`)).json(),id);if(predicate(value))return value;await page.waitForTimeout(50)}throw Error('Persisted business result not reached')}

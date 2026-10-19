@@ -1,4 +1,5 @@
 .settings-workspace{--settings-green:#39734f;--settings-soft:#edf5ef;--settings-ink:#263a2d;padding:10px 0 24px;color:var(--settings-ink)}
+.password-setup-mount{width:min(100%,460px)}
 .settings-page-heading{display:flex;align-items:center;justify-content:space-between;gap:20px;margin:5px 0 24px}
 .settings-page-heading h1{margin:0;font-size:26px;font-weight:750;letter-spacing:-.6px}
 .settings-page-heading p{margin:7px 0 0;color:var(--muted);font-size:13px}

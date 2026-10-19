@@ -27,7 +27,7 @@
   const feedback=id=>`<p id="${id}" class="settings-feedback" role="status" aria-live="polite"></p>`;
   const passwordEye=visible=>`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${visible?'<path d="m3 3 18 18M10.6 5.1A12 12 0 0 1 12 5c6.4 0 10 7 10 7a18 18 0 0 1-3 3.9M6.2 6.2A19 19 0 0 0 2 12s3.6 7 10 7a12 12 0 0 0 5.8-1.8M9.9 9.9a3 3 0 0 0 4.2 4.2"/>':'<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/>'}</svg>`;
   const passwordField=(id,label,placeholder,current=false)=>`<div class="settings-field"><label for="${id}">${label}</label><div class="settings-password-input"><input id="${id}" type="password" required maxlength="128" autocomplete="${current?'current-password':'new-password'}" placeholder="${placeholder}" ${current?'':'minlength="6" pattern="(?=.*[A-Za-z])(?=.*[0-9]).{6,128}" title="至少 6 位，且同时包含字母和数字"'} ${id==='passwordNew'?'aria-describedby="passwordHelp"':''}><button type="button" class="settings-password-toggle" data-password-toggle="${id}" aria-controls="${id}" aria-label="显示${label}" aria-pressed="false">${passwordEye(false)}</button></div></div>`;
-  const passwordMarkup=forced=>`<form id="passwordForm" class="settings-form"><fieldset>${forced?'':passwordField('passwordCurrent','当前密码','输入当前登录密码',true)}${passwordField('passwordNew','新密码','设置新密码')}${passwordField('passwordRepeat','再次输入新密码','再次输入新密码')}<p id="passwordHelp" class="settings-help">密码至少 6 位，同时包含数字和字母</p>${feedback('profileError')}<div class="settings-form-footer">${forced?'':'<span>修改后，所有已登录页面需要重新登录。</span>'}<button class="btn primary" type="submit">${forced?'保存新密码':'修改密码'}</button></div></fieldset></form>`;
+  const passwordMarkup=()=>`<form id="passwordForm" class="settings-form"><fieldset>${passwordField('passwordCurrent','当前密码','输入当前登录密码',true)}${passwordField('passwordNew','新密码','设置新密码')}${passwordField('passwordRepeat','再次输入新密码','再次输入新密码')}<p id="passwordHelp" class="settings-help">密码至少 6 位，同时包含数字和字母</p>${feedback('profileError')}<div class="settings-form-footer"><span>修改后，所有已登录页面需要重新登录。</span><button class="btn primary" type="submit">修改密码</button></div></fieldset></form>`;
 
   function create(deps){
     let selected='child/profile',epoch=0,pendingWrite=null,invitationNotice=null;
@@ -52,7 +52,7 @@
       catch(error){if(active()&&error.kind!=='stale'&&error.kind!=='unauthorized'&&errorBox)errorBox.textContent=error.message}
       finally{if(pendingWrite===write)pendingWrite=null;if(button.isConnected){if(fieldset)fieldset.disabled=false;else button.disabled=false;button.textContent=oldText}}
     }
-    function bindPassword(panel,active,forced=false){
+    function bindPassword(panel,active){
       panel.querySelectorAll('[data-password-toggle]').forEach(button=>button.onclick=()=>{
         const input=panel.querySelector('#'+button.dataset.passwordToggle),visible=input.type==='password';
         input.type=visible?'text':'password';
@@ -63,16 +63,9 @@
       panel.querySelector('#passwordForm').onsubmit=event=>{
         event.preventDefault();const q=selector=>panel.querySelector(selector);
         if(q('#passwordNew').value!==q('#passwordRepeat').value){q('#profileError').textContent='两次输入的新密码不一致。';q('#passwordRepeat').focus();return}
-        const values={newPassword:q('#passwordNew').value};
-        if(!forced)values.currentPassword=q('#passwordCurrent').value;
+        const values={newPassword:q('#passwordNew').value,currentPassword:q('#passwordCurrent').value};
         mutate(panel,active,event.submitter,()=>deps.changePassword(values),()=>{});
       };
-    }
-    function requiredPassword(panel){
-      const token=++epoch;
-      panel.classList.add('settings-required-password','password-setup-card');
-      panel.innerHTML=`<header class="password-setup-heading"><span class="password-setup-icon">${icon('key')}</span><h1 id="passwordSetupTitle">设置自己的密码</h1><p>当前使用初始或重置密码，请设置一个新密码后继续。</p></header><div class="password-setup-body">${passwordMarkup(true)}</div><footer class="password-setup-footer"><button id="accountLogout" type="button" class="password-setup-logout">退出登录</button></footer>`;
-      bindPassword(panel,()=>epoch===token&&panel.isConnected,true);
     }
     function render(){
       const main=document.querySelector('#main');if(!main)return;
@@ -101,7 +94,7 @@
       }
       if(selected==='tasks/backup')renderBackup(panel,child);
       if(selected==='account/profile')renderProfile(panel,active,user);
-      if(selected==='account/password'){panel.innerHTML=passwordMarkup(false);bindPassword(panel,active)}
+      if(selected==='account/password'){panel.innerHTML=passwordMarkup();bindPassword(panel,active)}
     }
     function renderOnboarding(main){
       const token=++epoch,user=context().user;
@@ -174,7 +167,7 @@
       panel.innerHTML=`<form id="profileForm" class="settings-form"><fieldset><div class="settings-field"><label for="profileLogin">登录名</label><input id="profileLogin" value="${esc(user.loginName)}" readonly autocomplete="username" aria-describedby="loginNameHelp"><p id="loginNameHelp" class="settings-help">登录名由管理员开通，不支持修改。</p></div><div class="settings-field"><label for="profileNickname">账号昵称</label><input id="profileNickname" value="${esc(user.nickname)}" required maxlength="40" autocomplete="nickname" placeholder="请输入你的昵称"><p class="settings-help">家人会通过这个昵称识别你，最多 40 个字。</p></div>${feedback('profileError')}<div class="settings-form-footer"><button class="btn primary" type="submit">保存昵称</button></div></fieldset></form>`;
       panel.querySelector('#profileForm').onsubmit=event=>{event.preventDefault();mutate(panel,active,event.submitter,()=>deps.api('/api/account/profile','PATCH',{nickname:panel.querySelector('#profileNickname').value.trim()}),result=>{deps.updateUser(result.user);render();const message=document.querySelector('#profileError');message.classList.add('success');message.textContent='账号昵称已更新。'})};
     }
-    return {render,open,invalidate,reset,requiredPassword,renderOnboarding};
+    return {render,open,invalidate,reset,renderOnboarding};
   }
   window.LeleParentSettings={create};
 })();

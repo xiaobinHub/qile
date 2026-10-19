@@ -4,7 +4,9 @@
   "scripts": {
     "test:browser": "node scripts/browser_smoke.cjs",
     "check:admin": "tsc --project admin-ui/tsconfig.json --noEmit",
-    "build:admin": "npm run check:admin && vite build --config admin-ui/vite.config.mts"
+    "build:admin": "npm run check:admin && vite build --config admin-ui/vite.config.mts",
+    "check:parent": "tsc --project parent-ui/tsconfig.json --noEmit",
+    "build:parent": "npm run check:parent && vite build --config parent-ui/vite.config.mts"
   },
   "devDependencies": {
     "@tailwindcss/vite": "4.3.3",

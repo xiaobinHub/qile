@@ -107,7 +107,7 @@ class ChildBackendTests(unittest.TestCase):
         self.assertEqual(unauth.get('/api/children').status_code,401)
 
     def test_admin_built_assets_are_surface_scoped(self):
-        for asset,content_type in (('parent-settings.js','javascript'),('parent-settings.css','text/css')):
+        for asset,content_type in (('parent-settings.js','javascript'),('parent-settings.css','text/css'),('password-setup.js','javascript')):
             served=self.a.get('/static/'+asset)
             self.assertEqual(served.status_code,200)
             self.assertIn(content_type,served.headers['content-type'])

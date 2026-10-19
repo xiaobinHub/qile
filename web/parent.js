@@ -596,6 +596,7 @@
       return result;
     };
     function clearContext(signout=false){
+      window.LelePasswordSetup.unmount();
       settingsUI?.reset();
       uiGeneration++;currentChild=null;pendingOperation=null;data=null;persistedData=null;saveBusy=false;refreshBusy=false;
       storageMeta.revision=0;storageMeta.updatedAt=null;
@@ -782,9 +783,12 @@
     function showProfile(forced=false){
       if(!forced){settingsUI.open('account/profile');return}
       clearContext();
-      $('#root').innerHTML='<section class="password-setup-screen" aria-labelledby="passwordSetupTitle"><div id="requiredPasswordContent"></div></section>';
-      settingsUI.requiredPassword($('#requiredPasswordContent'));
-      $('#accountLogout').onclick=confirmLogout;
+      $('#root').innerHTML='<section class="password-setup-screen" aria-labelledby="passwordSetupTitle"><div class="password-setup-mount" id="passwordSetupMount"></div></section>';
+      window.LelePasswordSetup.mount($('#passwordSetupMount'),{changePassword:changeAccountPassword,logout:confirmLogout});
+    }
+    async function changeAccountPassword(values){
+      await parentApi('/api/account/password','POST',values);
+      authBroadcast?.postMessage('logout');clearContext(true);history.replaceState(null,'','/');renderLogin('密码已修改，请重新登录。');
     }
     settingsUI=window.LeleParentSettings.create({
       context:()=>({child:currentChild,user:authUser,data,updatedAt:storageMeta.updatedAt}),
@@ -807,10 +811,7 @@
       renderCategories:()=>renderCategories(),addCategory:()=>openCategoryCreate(),
       exportBackup:()=>downloadBackup(),importBackup:()=>$('#importInput').click(),
       logout:confirmLogout,
-      changePassword:async values=>{
-        await parentApi('/api/account/password','POST',values);
-        authBroadcast?.postMessage('logout');clearContext(true);history.replaceState(null,'','/');renderLogin('密码已修改，请重新登录。');
-      }
+      changePassword:changeAccountPassword
     });
     // All server writes are explicit commands. Existing client helpers remain only for rendering/selftests.
     saveTask=async function(e){e.preventDefault();if(presetComposing||presetOptionsState)return;const task=taskFromForm(),error=validateTask(task),old=state.editing,scope=old?.recurring?$('#taskScope').value:'only';if(error){$('#taskError').textContent=error;return}if(old?.recurring&&!scope){$('#taskError').textContent='请选择修改范围';return}if(overlapWarning(task,old?.occurrenceKey)&&!$('#taskNotice').dataset.confirmed){$('#taskNotice').textContent='这个时段已有其他任务。再次点击保存仍可保存。';$('#taskNotice').classList.remove('hidden');$('#taskNotice').dataset.confirmed='1';return}try{await command(old?'task.edit':'task.create',old?{occurrenceKey:old.occurrenceKey,task,scope}:{task});$('#taskDialog').close();state.editing=null;render();toast('任务已保存')}catch(error){$('#taskError').textContent=error.message}};
