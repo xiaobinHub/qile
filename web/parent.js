@@ -630,7 +630,11 @@
       $('#toggleLoginPassword').onclick=()=>{const input=$('#loginPassword'),toggle=$('#toggleLoginPassword'),visible=input.type==='password';input.type=visible?'text':'password';toggle.setAttribute('aria-label',visible?'隐藏密码':'显示密码');toggle.setAttribute('aria-pressed',String(visible));toggle.innerHTML=visible?eyeOff:eye};
       $('#loginForm').onsubmit=async e=>{e.preventDefault();const form=e.currentTarget,button=e.submitter||$('#loginSubmit');if(button.disabled)return;button.disabled=true;button.classList.add('is-loading');button.setAttribute('aria-busy','true');$('#loginError').textContent='';$('#loginSubmitLabel').textContent='正在登录…';try{const session=await parentApi('/api/auth/login','POST',{loginName:$('#loginName').value,password:$('#loginPassword').value});authUser=session.user;csrfToken=session.csrfToken;$('#loginPassword').value='';await enterAccount()}catch(error){if(form.isConnected&&$('#loginError')){$('#loginError').classList.add('is-error');$('#loginError').setAttribute('role','alert');$('#loginError').textContent=error.message}}finally{if(button.isConnected){button.disabled=false;button.classList.remove('is-loading');button.removeAttribute('aria-busy');$('#loginSubmitLabel').textContent='登录'}}};
     }
-    function confirmLogout(){if(confirm('确认退出当前账号？'))logout()}
+    function confirmLogout(){
+      const dialog=$('#logoutDialog');if(!authUser||dialog.open)return;
+      $('#confirmLogout').onclick=()=>{dialog.close();logout()};
+      dialog.showModal();$('#cancelLogout').focus();
+    }
     async function logout(){const token=csrfToken;clearContext(true);history.replaceState(null,'','/');try{await parentApi('/api/auth/logout','POST',{},token);authBroadcast?.postMessage('logout');renderLogin()}catch(error){authBroadcast?.postMessage('logout');if(error.kind!=='stale')renderLogin(error.kind==='unauthorized'?'':'退出请求未完成，请重新登录后重试。')}}
     function preferredChildId(){try{return localStorage.getItem('lele-preferred-child:'+authUser.id)}catch{return null}}
     function rememberChild(id){try{localStorage.setItem('lele-preferred-child:'+authUser.id,id)}catch{}}

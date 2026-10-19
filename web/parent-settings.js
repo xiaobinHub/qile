@@ -25,7 +25,9 @@
   const empty=(title,copy,type='mail')=>`<div class="settings-empty"><span>${icon(type)}</span><strong>${esc(title)}</strong><p>${esc(copy)}</p></div>`;
   const notice=message=>`<p class="settings-notice">${esc(message)}</p>`;
   const feedback=id=>`<p id="${id}" class="settings-feedback" role="status" aria-live="polite"></p>`;
-  const passwordMarkup=forced=>`<form id="passwordForm" class="settings-form"><fieldset>${forced?'':'<div class="settings-field"><label for="passwordCurrent">当前密码</label><input id="passwordCurrent" type="password" required maxlength="128" autocomplete="current-password" placeholder="输入当前登录密码"></div>'}<div class="settings-field"><label for="passwordNew">新密码</label><input id="passwordNew" type="password" required minlength="6" maxlength="128" pattern="(?=.*[A-Za-z])(?=.*[0-9]).{6,128}" title="至少 6 位，且同时包含字母和数字" autocomplete="new-password" placeholder="设置新密码" aria-describedby="passwordHelp"></div><div class="settings-field"><label for="passwordRepeat">再次输入新密码</label><input id="passwordRepeat" type="password" required minlength="6" maxlength="128" pattern="(?=.*[A-Za-z])(?=.*[0-9]).{6,128}" title="至少 6 位，且同时包含字母和数字" autocomplete="new-password" placeholder="再次输入新密码"></div><p id="passwordHelp" class="settings-help">密码至少 6 位，同时包含数字和字母</p>${feedback('profileError')}<div class="settings-form-footer">${forced?'':'<span>修改后，所有已登录页面需要重新登录。</span>'}<button class="btn primary" type="submit">${forced?'保存新密码':'修改密码'}</button></div></fieldset></form>`;
+  const passwordEye=visible=>`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${visible?'<path d="m3 3 18 18M10.6 5.1A12 12 0 0 1 12 5c6.4 0 10 7 10 7a18 18 0 0 1-3 3.9M6.2 6.2A19 19 0 0 0 2 12s3.6 7 10 7a12 12 0 0 0 5.8-1.8M9.9 9.9a3 3 0 0 0 4.2 4.2"/>':'<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/>'}</svg>`;
+  const passwordField=(id,label,placeholder,current=false)=>`<div class="settings-field"><label for="${id}">${label}</label><div class="settings-password-input"><input id="${id}" type="password" required maxlength="128" autocomplete="${current?'current-password':'new-password'}" placeholder="${placeholder}" ${current?'':'minlength="6" pattern="(?=.*[A-Za-z])(?=.*[0-9]).{6,128}" title="至少 6 位，且同时包含字母和数字"'} ${id==='passwordNew'?'aria-describedby="passwordHelp"':''}><button type="button" class="settings-password-toggle" data-password-toggle="${id}" aria-controls="${id}" aria-label="显示${label}" aria-pressed="false">${passwordEye(false)}</button></div></div>`;
+  const passwordMarkup=forced=>`<form id="passwordForm" class="settings-form"><fieldset>${forced?'':passwordField('passwordCurrent','当前密码','输入当前登录密码',true)}${passwordField('passwordNew','新密码','设置新密码')}${passwordField('passwordRepeat','再次输入新密码','再次输入新密码')}<p id="passwordHelp" class="settings-help">密码至少 6 位，同时包含数字和字母</p>${feedback('profileError')}<div class="settings-form-footer">${forced?'':'<span>修改后，所有已登录页面需要重新登录。</span>'}<button class="btn primary" type="submit">${forced?'保存新密码':'修改密码'}</button></div></fieldset></form>`;
 
   function create(deps){
     let selected='child/profile',epoch=0,pendingWrite=null,invitationNotice=null;
@@ -51,6 +53,13 @@
       finally{if(pendingWrite===write)pendingWrite=null;if(button.isConnected){if(fieldset)fieldset.disabled=false;else button.disabled=false;button.textContent=oldText}}
     }
     function bindPassword(panel,active,forced=false){
+      panel.querySelectorAll('[data-password-toggle]').forEach(button=>button.onclick=()=>{
+        const input=panel.querySelector('#'+button.dataset.passwordToggle),visible=input.type==='password';
+        input.type=visible?'text':'password';
+        button.setAttribute('aria-pressed',String(visible));
+        button.setAttribute('aria-label',(visible?'隐藏':'显示')+panel.querySelector(`label[for="${input.id}"]`).textContent);
+        button.innerHTML=passwordEye(visible);
+      });
       panel.querySelector('#passwordForm').onsubmit=event=>{
         event.preventDefault();const q=selector=>panel.querySelector(selector);
         if(q('#passwordNew').value!==q('#passwordRepeat').value){q('#profileError').textContent='两次输入的新密码不一致。';q('#passwordRepeat').focus();return}

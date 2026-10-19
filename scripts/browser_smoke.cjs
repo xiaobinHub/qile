@@ -38,10 +38,22 @@ async function checkPasswordInput(page,selector){for(const [value,valid] of [['a
 async function parentPassword(page,newPassword){
  assert.equal(await page.locator('#passwordCurrent,#accountHome,#accountProfile').count(),0);
  await page.locator('.password-setup-card').waitFor();
+ for(const id of ['passwordNew','passwordRepeat']){
+  const input=page.locator('#'+id),toggle=page.locator(`[data-password-toggle="${id}"]`);
+  await input.fill('Abc123');assert.equal(await input.getAttribute('type'),'password');
+  await toggle.click();assert.equal(await input.getAttribute('type'),'text');assert.equal(await input.inputValue(),'Abc123');assert.equal(await toggle.getAttribute('aria-pressed'),'true');
+  await toggle.press('Space');assert.equal(await input.getAttribute('type'),'password');assert.equal(await input.inputValue(),'Abc123');assert.equal(await toggle.getAttribute('aria-pressed'),'false');
+ }
+ let logouts=0;const watch=request=>{if(new URL(request.url()).pathname==='/api/auth/logout')logouts++};page.on('request',watch);
+ await page.locator('#accountLogout').click();await page.locator('#logoutDialog').waitFor({state:'visible'});
+ assert.equal(await page.locator('#cancelLogout').evaluate(el=>el===document.activeElement),true);
+ await page.locator('#cancelLogout').click();assert.equal(await page.locator('#logoutDialog').isVisible(),false);assert.equal(logouts,0);
+ await page.locator('#accountLogout').click();await page.keyboard.press('Escape');assert.equal(await page.locator('#logoutDialog').isVisible(),false);assert.equal(logouts,0);
+ page.off('request',watch);
  await checkPasswordInput(page,'#passwordNew');await checkPasswordInput(page,'#passwordRepeat');
  await page.locator('#passwordNew').fill(newPassword);await page.locator('#passwordRepeat').fill(newPassword);
  const requested=page.waitForRequest(request=>request.method()==='POST'&&new URL(request.url()).pathname==='/api/account/password');
- await page.locator('#passwordForm button').click();assert.deepEqual(Object.keys((await requested).postDataJSON()),['newPassword']);await page.locator('#loginName').waitFor();
+ await page.locator('#passwordForm button[type="submit"]').click();assert.deepEqual(Object.keys((await requested).postDataJSON()),['newPassword']);await page.locator('#loginName').waitFor();
 }
 
 async function waitForStore(page,id,predicate){for(let n=0;n<200;n++){const value=await page.evaluate(async child=>(await fetch(`/api/children/${child}/data`)).json(),id);if(predicate(value))return value;await page.waitForTimeout(50)}throw Error('Persisted business result not reached')}
@@ -71,6 +83,7 @@ async function createParent(admin,loginName,nickname){await admin.locator('#open
  await dad.locator('.password-setup-card').waitFor();await dad.setViewportSize({width:1098,height:890});
  const setupCard=await dad.locator('.password-setup-card').boundingBox();assert.ok(Math.abs(setupCard.x+setupCard.width/2-1098/2)<12);assert.ok(setupCard.y>=0&&setupCard.y+setupCard.height<=890);
  await dad.screenshot({path:path.join(out,'parent-password-setup-desktop.png')});
+ await dad.locator('#accountLogout').click();await dad.screenshot({path:path.join(out,'parent-logout-confirmation.png')});await dad.locator('#cancelLogout').click();
  await dad.setViewportSize({width:390,height:844});assert.equal(await dad.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false);
  await dad.screenshot({path:path.join(out,'parent-password-setup-mobile.png')});await dad.setViewportSize({width:1280,height:940});
  await parentPassword(dad,passwords.dad);await login(dad,18887,'qadad',passwords.dad);await dad.locator('#onboarding').waitFor();assert.deepEqual(await dad.locator('.nav button').allTextContents(),['设置']);await dad.screenshot({path:path.join(out,'parent-unbound-home.png'),fullPage:true});await dad.locator('#newChildName').fill('测试哥哥');await dad.locator('#createChildForm button').click();await dad.locator('#openChildrenDialog').waitFor();
@@ -123,12 +136,12 @@ async function createParent(admin,loginName,nickname){await admin.locator('#open
  await mom.locator('#openChildNicknameSettings').click();await mom.locator('.settings-more summary').click();await mom.locator('#leaveChild').click();await mom.locator('#onboarding').waitFor();assert.deepEqual(await mom.locator('.nav button').allTextContents(),['设置']);assert.equal(await mom.locator('[data-open-child]').count(),0);
  const denied=await mom.evaluate(async(id)=>(await fetch(`/api/children/${id}/data`)).status,firstId);assert.equal(denied,403);
  // Logout also clears the page before the delayed server response completes.
- await dad.getByRole('button',{name:'设置',exact:true}).click();await dad.locator('#openAccountManagement').click();await dad.locator('#settingsLogout').waitFor();await dad.route('**/api/auth/logout',async route=>{await new Promise(r=>setTimeout(r,600));await route.continue()});await dad.locator('#settingsLogout').click();assert.equal(await dad.locator('[data-open-child]').count(),0);await dad.locator('#loginName').waitFor();
+ await dad.getByRole('button',{name:'设置',exact:true}).click();await dad.locator('#openAccountManagement').click();await dad.locator('#settingsLogout').waitFor();await dad.route('**/api/auth/logout',async route=>{await new Promise(r=>setTimeout(r,600));await route.continue()});await dad.locator('#settingsLogout').click();await dad.locator('#confirmLogout').click();assert.equal(await dad.locator('[data-open-child]').count(),0);await dad.locator('#loginName').waitFor();
  }
  await exerciseAdminUI({admin,browser,port:18888,passwords,out,createParent});
  assert.deepEqual(failures,[]);
- const scenarios=['unbound onboarding/create/invitations/account-only settings','calendar home/recent child/permission fallback','invitation sent time/revoked visibility','parent settings layout/nickname/immutable login','parent settings presets/categories/backup','parent settings invitations/roles/archive','parent settings stale reads/logout cancel','admin login/password/create','parent login responsive/feedback','parent forced password/no current/centered responsive card','task create/complete','gift redeem/reverse','specific-child invite','multiple child isolation','two-tab context','slow history/logout invalidation','out-of-order read monotonicity','legacy image HTML escaping','child print title','restore permissions','member self-leave','mobile layout','child portrait cards / keyboard / responsive','child switch only / existing management','child dialog stale response/logout','admin search/status/refresh','admin disable/enable/cancel','admin password reset','admin dialog keyboard/focus','admin mobile layout','admin profile/logout/stale save'];
- console.log(JSON.stringify({passed:true,scenarios:process.argv.includes('--admin-only')?scenarios.filter(s=>s.startsWith('admin ')):scenarios,pageErrors:failures,screenshots:process.argv.includes('--admin-only')?4:22}));
+ const scenarios=['unbound onboarding/create/invitations/account-only settings','calendar home/recent child/permission fallback','invitation sent time/revoked visibility','parent settings layout/nickname/immutable login','parent settings presets/categories/backup','parent settings invitations/roles/archive','parent settings stale reads/logout cancel','admin login/password/create','parent login responsive/feedback','parent forced password/no current/centered responsive card/visibility/logout dialog','task create/complete','gift redeem/reverse','specific-child invite','multiple child isolation','two-tab context','slow history/logout invalidation','out-of-order read monotonicity','legacy image HTML escaping','child print title','restore permissions','member self-leave','mobile layout','child portrait cards / keyboard / responsive','child switch only / existing management','child dialog stale response/logout','admin search/status/refresh','admin disable/enable/cancel','admin password reset','admin dialog keyboard/focus','admin mobile layout','admin profile/logout/stale save'];
+ console.log(JSON.stringify({passed:true,scenarios:process.argv.includes('--admin-only')?scenarios.filter(s=>s.startsWith('admin ')):scenarios,pageErrors:failures,screenshots:process.argv.includes('--admin-only')?4:23}));
  }catch(error){console.error(error.stack);if(browser){for(const [i,context] of browser.contexts().entries()){const page=context.pages().at(-1);if(page){await page.screenshot({path:path.join(out,`failure-${i}.png`),fullPage:true});console.error(`Context ${i}: `+(await page.locator('body').innerText()).slice(0,2000))}}}process.exitCode=1}
  finally{if(browser)await browser.close();for(const child of children)child.kill('SIGTERM')}
 })();

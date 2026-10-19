@@ -151,7 +151,7 @@ async function exerciseChildrenDialog({browser,admin,dad,firstId,secondId,passwo
     await trigger.click();await waiting;
     await other.getByRole('button',{name:'设置',exact:true}).click();
     await other.locator('#openAccountManagement').click();
-    await other.locator('#settingsLogout').click();
+    await other.locator('#settingsLogout').click();await other.locator('#confirmLogout').click();
     await page.locator('#loginForm').waitFor();
     const logoutArrived=page.waitForResponse(response=>response.url().endsWith('/api/children'));
     releaseLogout();await(await logoutArrived).finished();

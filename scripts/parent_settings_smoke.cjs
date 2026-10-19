@@ -36,12 +36,14 @@ async function exerciseParentSettings({browser,admin,dad,mom,firstId,secondId,pa
   await dad.screenshot({path:path.join(out,'parent-settings-account.png'),fullPage:true});
   await open(dad,'account/password');
   await dad.locator('#passwordCurrent').fill(passwords.dad);
+  await dad.locator('[data-password-toggle="passwordCurrent"]').click();assert.equal(await dad.locator('#passwordCurrent').getAttribute('type'),'text');
+  await dad.locator('[data-password-toggle="passwordCurrent"]').click();assert.equal(await dad.locator('#passwordCurrent').getAttribute('type'),'password');
   await dad.locator('#passwordNew').fill('abc123');
   await dad.locator('#passwordRepeat').fill('abc124');
   let passwordRequests=0;
   const watch=request=>{if(new URL(request.url()).pathname==='/api/account/password')passwordRequests++};
   dad.on('request',watch);
-  await dad.locator('#passwordForm button').click();
+  await dad.locator('#passwordForm button[type="submit"]').click();
   await dad.getByText('两次输入的新密码不一致。',{exact:true}).waitFor();
   assert.equal(passwordRequests,0);dad.off('request',watch);
 
@@ -103,9 +105,9 @@ async function exerciseParentSettings({browser,admin,dad,mom,firstId,secondId,pa
   await dad.locator('[data-revoke]').waitFor();
 
   const ownContext=await browser.newContext({viewport:{width:1280,height:940}}),page=await ownContext.newPage();
-  let acceptDialog=true,logoutRequests=0;
+  let logoutRequests=0,nativeDialogs=0;
   page.on('pageerror',error=>failures.push(error.message));
-  page.on('dialog',dialog=>acceptDialog?dialog.accept():dialog.dismiss());
+  page.on('dialog',dialog=>{nativeDialogs++;dialog.accept()});
   page.on('request',request=>{if(new URL(request.url()).pathname==='/api/auth/logout')logoutRequests++});
   try{
     await login(page,18887,'qasettings',passwords.initial);await parentPassword(page,passwords.mom);await login(page,18887,'qasettings',passwords.mom);
@@ -143,8 +145,11 @@ async function exerciseParentSettings({browser,admin,dad,mom,firstId,secondId,pa
       await open(page,key);assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false,`No mobile overflow: ${key}`);
     }
     await page.screenshot({path:path.join(out,'parent-settings-mobile.png'),fullPage:true});
-    acceptDialog=false;await page.locator('#settingsLogout').click();assert.equal(logoutRequests,0);assert.equal(await page.locator('#loginForm').count(),0);
-    acceptDialog=true;await page.locator('#settingsLogout').click();await page.locator('#loginName').waitFor();assert.equal(logoutRequests,1);
+    const nativeBefore=nativeDialogs;
+    await page.locator('#settingsLogout').click();await page.locator('#logoutDialog').waitFor({state:'visible'});
+    await page.locator('#cancelLogout').click();assert.equal(logoutRequests,0);assert.equal(await page.locator('#loginForm').count(),0);
+    assert.equal(await page.locator('#settingsLogout').evaluate(el=>el===document.activeElement),true);
+    await page.locator('#settingsLogout').click();await page.locator('#confirmLogout').click();await page.locator('#loginName').waitFor();assert.equal(logoutRequests,1);assert.equal(nativeDialogs,nativeBefore);
   }finally{await ownContext.close()}
   await dad.goto(`http://127.0.0.1:18887/children/${secondId}`);await dad.locator('#openChildrenDialog').waitFor();
 }
