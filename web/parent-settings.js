@@ -25,7 +25,7 @@
   const empty=(title,copy,type='mail')=>`<div class="settings-empty"><span>${icon(type)}</span><strong>${esc(title)}</strong><p>${esc(copy)}</p></div>`;
   const notice=message=>`<p class="settings-notice">${esc(message)}</p>`;
   const feedback=id=>`<p id="${id}" class="settings-feedback" role="status" aria-live="polite"></p>`;
-  const passwordMarkup=forced=>`<form id="passwordForm" class="settings-form"><fieldset>${forced?'':'<div class="settings-field"><label for="passwordCurrent">当前密码</label><input id="passwordCurrent" type="password" required maxlength="128" autocomplete="current-password" placeholder="输入当前登录密码"></div>'}<div class="settings-field"><label for="passwordNew">新密码</label><input id="passwordNew" type="password" required minlength="6" maxlength="128" pattern="(?=.*[A-Za-z])(?=.*[0-9]).{6,128}" title="至少 6 位，且同时包含字母和数字" autocomplete="new-password" placeholder="设置新密码" aria-describedby="passwordHelp"></div><div class="settings-field"><label for="passwordRepeat">再次输入新密码</label><input id="passwordRepeat" type="password" required minlength="6" maxlength="128" pattern="(?=.*[A-Za-z])(?=.*[0-9]).{6,128}" title="至少 6 位，且同时包含字母和数字" autocomplete="new-password" placeholder="再次输入新密码"></div><p id="passwordHelp" class="settings-help">密码至少 6 位，且同时包含字母和数字，最多 128 位。</p>${feedback('profileError')}<div class="settings-form-footer"><span>${forced?'保存后，请使用新密码重新登录。':'修改后，所有已登录页面需要重新登录。'}</span><button class="btn primary" type="submit">${forced?'保存新密码':'修改密码'}</button></div></fieldset></form>`;
+  const passwordMarkup=forced=>`<form id="passwordForm" class="settings-form"><fieldset>${forced?'':'<div class="settings-field"><label for="passwordCurrent">当前密码</label><input id="passwordCurrent" type="password" required maxlength="128" autocomplete="current-password" placeholder="输入当前登录密码"></div>'}<div class="settings-field"><label for="passwordNew">新密码</label><input id="passwordNew" type="password" required minlength="6" maxlength="128" pattern="(?=.*[A-Za-z])(?=.*[0-9]).{6,128}" title="至少 6 位，且同时包含字母和数字" autocomplete="new-password" placeholder="设置新密码" aria-describedby="passwordHelp"></div><div class="settings-field"><label for="passwordRepeat">再次输入新密码</label><input id="passwordRepeat" type="password" required minlength="6" maxlength="128" pattern="(?=.*[A-Za-z])(?=.*[0-9]).{6,128}" title="至少 6 位，且同时包含字母和数字" autocomplete="new-password" placeholder="再次输入新密码"></div><p id="passwordHelp" class="settings-help">密码至少 6 位，同时包含数字和字母</p>${feedback('profileError')}<div class="settings-form-footer">${forced?'':'<span>修改后，所有已登录页面需要重新登录。</span>'}<button class="btn primary" type="submit">${forced?'保存新密码':'修改密码'}</button></div></fieldset></form>`;
 
   function create(deps){
     let selected='child/profile',epoch=0,pendingWrite=null,invitationNotice=null;
@@ -60,9 +60,9 @@
       };
     }
     function requiredPassword(panel){
-      const token=++epoch,user=context().user;
+      const token=++epoch;
       panel.classList.add('settings-required-password','password-setup-card');
-      panel.innerHTML=`<header class="password-setup-heading"><span class="password-setup-icon">${icon('key')}</span><h1 id="passwordSetupTitle">设置自己的密码</h1><p>当前使用初始或重置密码，<br>请设置一个新密码后继续。</p></header><div class="password-setup-body">${passwordMarkup(true)}</div><footer class="password-setup-footer"><span>${esc(user.nickname)}<small>${esc(user.loginName)}</small></span><button id="accountLogout" type="button" class="password-setup-logout">退出登录</button></footer>`;
+      panel.innerHTML=`<header class="password-setup-heading"><span class="password-setup-icon">${icon('key')}</span><h1 id="passwordSetupTitle">设置自己的密码</h1><p>当前使用初始或重置密码，请设置一个新密码后继续。</p></header><div class="password-setup-body">${passwordMarkup(true)}</div><footer class="password-setup-footer"><button id="accountLogout" type="button" class="password-setup-logout">退出登录</button></footer>`;
       bindPassword(panel,()=>epoch===token&&panel.isConnected,true);
     }
     function render(){
