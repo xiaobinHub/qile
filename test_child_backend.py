@@ -285,6 +285,43 @@ class ChildBackendTests(unittest.TestCase):
         self.service.transaction(lambda c:c.execute("UPDATE lele.invitations SET expires_at=now()-interval '1 second' WHERE id=%s",(invite,)),exclusive=True)
         self.assertEqual(self.call(self.b,'POST','/api/invitations/'+invite+'/accept',{}).status_code,409)
 
+    def test_rejected_invitation_delete_and_accepted_visibility(self):
+        child=self.child(); root='/api/children/'+child['id']
+        accepted=self.invite(child)
+        self.assertEqual(self.call(self.b,'POST','/api/invitations/'+accepted+'/accept',{}).status_code,200)
+        rejected=self.invite(child,target='outsider')
+        self.assertEqual(self.call(self.outsider,'POST','/api/invitations/'+rejected+'/reject',{}).status_code,200)
+        sent=self.a.get(root+'/invitations').json()['invitations']
+        self.assertNotIn(accepted,[row['id'] for row in sent])
+        self.assertEqual(next(row for row in sent if row['id']==rejected)['status'],'rejected')
+        path=root+'/invitations/'+rejected
+        before=self.data(child); members=self.a.get(root+'/members').json()
+        for client in (self.b,self.outsider,self.admin):
+            self.assertEqual(self.call(client,'DELETE',path).status_code,403)
+        self.assertEqual(self.a.delete(path,headers={'Origin':self.service.config['parent_origin'],'X-CSRF-Token':'bad'}).status_code,403)
+        other=self.child()
+        self.assertEqual(self.call(self.a,'DELETE','/api/children/'+other['id']+'/invitations/'+rejected).status_code,409)
+        self.assertEqual(self.call(self.a,'DELETE',root+'/invitations/'+accepted).status_code,409)
+        self.assertEqual(self.call(self.a,'PATCH',root,{'archived':True}).status_code,200)
+        self.assertEqual(self.call(self.a,'DELETE',path).status_code,409)
+        self.assertEqual(self.call(self.a,'PATCH',root,{'archived':False}).status_code,200)
+        self.assertEqual(self.call(self.a,'DELETE',path).status_code,200)
+        self.assertEqual(self.call(self.a,'DELETE',path).status_code,409)
+        self.assertNotIn(rejected,[row['id'] for row in self.a.get(root+'/invitations').json()['invitations']])
+        self.assertEqual(self.data(child),before)
+        self.assertEqual(self.a.get(root+'/members').json(),members)
+        def retained_history(cur):
+            cur.execute('SELECT status FROM lele.invitations WHERE id=%s',(rejected,))
+            status=cur.fetchone()[0]
+            cur.execute("SELECT action,detail FROM lele.audit_events WHERE child_id=%s AND detail->>'invitationId'=%s ORDER BY id",(child['id'],rejected))
+            return status,cur.fetchall()
+        status,events=self.service.transaction(retained_history)
+        self.assertEqual(status,'revoked')
+        self.assertIn('invitation.reject',[row[0] for row in events])
+        self.assertEqual(events[-1],('invitation.delete',{'invitationId':rejected,'previousStatus':'rejected'}))
+        self.assertEqual(self.call(self.outsider,'POST','/api/invitations/'+rejected+'/accept',{}).status_code,409)
+        self.assertNotEqual(self.invite(child,target='outsider'),rejected)
+
     def test_admin_disable_and_reset_revoke_sessions(self):
         client,user=self.new_parent('reset'+uuid.uuid4().hex[:8])
         self.assertEqual(self.call(self.admin,'PATCH','/api/admin/users/'+user['id']+'/status',{'status':'disabled'}).status_code,200)

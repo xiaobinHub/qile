@@ -128,6 +128,22 @@ async function exerciseParentSettings({browser,admin,dad,mom,firstId,secondId,pa
     await page.screenshot({path:path.join(out,'parent-settings-invitations.png'),fullPage:true});
     const firstCard=page.locator('.settings-invitation-card').filter({hasText:originalName});
     await firstCard.locator('[data-reject-invite]').click();await firstCard.waitFor({state:'detached'});
+    // The sender can clear a rejected invitation without changing child members.
+    await dad.goto(`http://127.0.0.1:18887/children/${firstId}`);await dad.locator('#openChildrenDialog').waitFor();
+    await dad.getByRole('button',{name:'设置',exact:true}).click();await open(dad,'child/family');
+    const rejectedRow=dad.locator('.settings-person-row').filter({has:dad.locator('[data-delete-invitation]')}).filter({hasText:'qasettings'});
+    await rejectedRow.waitFor();assert.equal(await rejectedRow.getByText('已拒绝',{exact:true}).count(),1);
+    assert.equal(await dad.locator('.settings-status.is-owner').innerText(),'管理员');
+    assert.equal(await dad.locator('.settings-person-row').filter({hasText:'qamom'}).locator('.settings-status').innerText(),'成员');
+    assert.equal(await dad.getByText('已接受',{exact:true}).count(),0);
+    const deleteId=await rejectedRow.locator('[data-delete-invitation]').getAttribute('data-delete-invitation');
+    await dad.screenshot({path:path.join(out,'parent-settings-rejected-invitation.png'),fullPage:true});
+    await dad.setViewportSize({width:390,height:844});assert.equal(await dad.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false);
+    await dad.screenshot({path:path.join(out,'parent-settings-rejected-invitation-mobile.png'),fullPage:true});await dad.setViewportSize({width:1280,height:940});
+    await rejectedRow.locator('[data-delete-invitation]').click();await dad.locator(`[data-delete-invitation="${deleteId}"]`).waitFor({state:'detached'});
+    await open(dad,'account/profile');await open(dad,'child/family');await dad.getByText('共同管理家长',{exact:true}).waitFor();
+    assert.equal(await dad.locator(`[data-delete-invitation="${deleteId}"]`).count(),0);
+    assert.equal(await dad.getByText('已接受',{exact:true}).count(),0);
     await page.locator('[data-accept-invite]').click();
     await page.waitForFunction(id=>document.querySelector('#openChildrenDialog')?.dataset.childId===id,secondId);
     assert.deepEqual(await page.locator('.nav button').allTextContents(),['日历','积分商城','设置']);

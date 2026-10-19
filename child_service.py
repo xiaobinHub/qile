@@ -392,7 +392,7 @@ class ChildService:
     def manage_invitation(self,cur,user,child_id,parts,method,body):
         self.access(cur,user,child_id,owner=True,write=method!='GET')
         if method=='GET' and len(parts)==3:
-            cur.execute("SELECT i.id,i.target_id,u.login_name,u.nickname,i.status,i.expires_at,i.created_at FROM lele.invitations i JOIN lele.users u ON u.id=i.target_id WHERE i.child_id=%s AND i.status<>'revoked' ORDER BY i.created_at DESC",(child_id,))
+            cur.execute("SELECT i.id,i.target_id,u.login_name,u.nickname,i.status,i.expires_at,i.created_at FROM lele.invitations i JOIN lele.users u ON u.id=i.target_id WHERE i.child_id=%s AND i.status NOT IN ('revoked','accepted') ORDER BY i.created_at DESC",(child_id,))
             return {'invitations':[dict(id=r[0],userId=r[1],loginName=r[2],nickname=r[3],status=r[4] if r[5]>datetime.now(timezone.utc) or r[4]!='pending' else 'expired',expiresAt=r[5].isoformat(),createdAt=r[6].isoformat()) for r in cur.fetchall()]}
         if method=='POST' and len(parts)==3:
             require(set(body)=={'loginName'})
@@ -406,9 +406,11 @@ class ChildService:
             expires=cur.fetchone()[0].isoformat(); self.audit(cur,user[0],'invitation.create',child_id,{'invitationId':invite,'targetId':target[0]})
             return {'invitation':dict(id=invite,childId=child_id,userId=target[0],expiresAt=expires,status='pending')}
         if method=='DELETE' and len(parts)==4:
-            cur.execute("UPDATE lele.invitations SET status='revoked' WHERE id=%s AND child_id=%s AND status='pending'",(parts[3],child_id))
-            require(cur.rowcount==1,409,'邀请已处理或不存在。')
-            self.audit(cur,user[0],'invitation.revoke',child_id,{'invitationId':parts[3]})
+            cur.execute('SELECT status FROM lele.invitations WHERE id=%s AND child_id=%s FOR UPDATE',(parts[3],child_id))
+            invitation=cur.fetchone()
+            require(invitation is not None and invitation[0] in ('pending','rejected'),409,'邀请已处理或不存在。')
+            cur.execute("UPDATE lele.invitations SET status='revoked' WHERE id=%s AND child_id=%s",(parts[3],child_id))
+            self.audit(cur,user[0],'invitation.delete' if invitation[0]=='rejected' else 'invitation.revoke',child_id,{'invitationId':parts[3],'previousStatus':invitation[0]})
             return {'ok':True}
         raise ApiError(404,'接口不存在。')
 
