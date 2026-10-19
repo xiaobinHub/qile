@@ -161,6 +161,7 @@ class ChildBackendTests(unittest.TestCase):
         for invalid in ('abc12', 'abcdef', '123456'):
             self.assertEqual(self.call(client,'POST','/api/account/password',{'currentPassword':'Abc123','newPassword':invalid}).status_code,400)
         self.assertEqual(self.call(client,'POST','/api/account/password',{'currentPassword':'Abc123','newPassword':'Def456'}).status_code,200)
+
         self.assertEqual(self.login(client,name,'Def456').status_code,200)
         reset_path=path+'/'+created.json()['user']['id']+'/password'
         for invalid in ('abc12', 'abcdef', '123456'):
@@ -170,6 +171,31 @@ class ChildBackendTests(unittest.TestCase):
         self.assertEqual(client.get('/api/auth/me').status_code,401)
         self.assertEqual(self.login(client,name,'Ghi789').status_code,200)
         self.assertEqual(client.get('/api/children').json()['kind'],'password_change_required')
+
+    def test_forced_password_setup_without_current_password_is_session_scoped(self):
+        name='setup'+uuid.uuid4().hex[:8]
+        created=self.call(self.admin,'POST','/api/admin/users',{'loginName':name,'nickname':'Setup','password':'Abc123'})
+        self.assertEqual(created.status_code,200,created.text)
+        client=TestClient(self.parent_app,base_url=self.service.config['parent_origin'])
+        other=TestClient(self.parent_app,base_url=self.service.config['parent_origin'])
+        self.assertTrue(self.login(client,name,'Abc123').json()['user']['mustChangePassword'])
+        self.login(other,name,'Abc123')
+        self.assertEqual(client.get('/api/children').status_code,403)
+        invalid_csrf=client.post('/api/account/password',json={'newPassword':'Def456'},headers={'Origin':self.service.config['parent_origin'],'X-CSRF-Token':'wrong'})
+        self.assertEqual(invalid_csrf.status_code,403)
+        self.assertEqual(self.call(client,'POST','/api/account/password',{'newPassword':'abcdef'}).status_code,400)
+        response=self.call(client,'POST','/api/account/password',{'newPassword':'Def456'})
+        self.assertEqual(response.status_code,200,response.text)
+        self.assertEqual(client.get('/api/auth/me').status_code,401)
+        self.assertEqual(other.get('/api/auth/me').status_code,401)
+        self.assertFalse(self.login(client,name,'Def456').json()['user']['mustChangePassword'])
+        self.assertEqual(self.call(client,'POST','/api/account/password',{'newPassword':'Ghi789'}).status_code,400)
+        self.assertEqual(self.call(client,'POST','/api/account/password',{'newPassword':'Ghi789','mustChangePassword':True}).status_code,400)
+        self.assertEqual(self.call(client,'POST','/api/account/password',{'currentPassword':'wrong','newPassword':'Ghi789'}).status_code,403)
+        self.assertEqual(self.call(self.admin,'POST','/api/admin/users/'+created.json()['user']['id']+'/password',{'password':'Reset123'}).status_code,200)
+        self.assertTrue(self.login(client,name,'Reset123').json()['user']['mustChangePassword'])
+        self.assertEqual(self.call(client,'POST','/api/account/password',{'newPassword':'New123'}).status_code,200)
+        self.assertFalse(self.login(client,name,'New123').json()['user']['mustChangePassword'])
 
     def test_idempotency_and_revision_conflicts(self):
         child=self.child(); body=self.operation(child); path='/api/children/'+child['id']+'/operations'

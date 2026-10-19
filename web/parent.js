@@ -613,12 +613,6 @@
       if(signout){authUser=null;csrfToken='';childList=[]}
       $('#root').innerHTML='<section class="auth-screen"><h1>正在读取…</h1></section>';
     }
-    function accountShell(title,content){return `<div class="account-panel"><div class="toolbar"><h1>${esc(title)}</h1><span class="toolbar-spacer"></span><button class="btn" id="accountHome">日历首页</button><button class="btn" id="accountProfile">账号管理</button><button class="btn" id="accountLogout">退出登录</button></div>${content}</div>`}
-    function bindAccountNav(){
-      if($('#accountHome'))$('#accountHome').onclick=()=>showCalendarHome();
-      if($('#accountProfile'))$('#accountProfile').onclick=()=>showProfile();
-      if($('#accountLogout'))$('#accountLogout').onclick=confirmLogout;
-    }
     function renderLogin(message=''){
       const eye='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>';
       const eyeOff='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 3 18 18M10.6 5.1A12 12 0 0 1 12 5c6.4 0 10 7 10 7a18 18 0 0 1-3 3.9M6.2 6.2A19 19 0 0 0 2 12s3.6 7 10 7a12 12 0 0 0 5.8-1.8M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg>';
@@ -784,9 +778,9 @@
     function showProfile(forced=false){
       if(!forced){settingsUI.open('account/profile');return}
       clearContext();
-      $('#root').innerHTML=accountShell('请设置自己的密码','<div id="requiredPasswordContent"></div>');
-      bindAccountNav();$('#accountHome').disabled=true;$('#accountProfile').disabled=true;
+      $('#root').innerHTML='<section class="password-setup-screen" aria-labelledby="passwordSetupTitle"><div id="requiredPasswordContent"></div></section>';
       settingsUI.requiredPassword($('#requiredPasswordContent'));
+      $('#accountLogout').onclick=confirmLogout;
     }
     settingsUI=window.LeleParentSettings.create({
       context:()=>({child:currentChild,user:authUser,data,updatedAt:storageMeta.updatedAt}),

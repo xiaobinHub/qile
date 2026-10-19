@@ -229,8 +229,10 @@ class ChildService:
                 self.audit(cur,user[0],'auth.logout')
                 return {'ok':True,'_clear_cookie':True}
             if path=='account/password' and method=='POST':
-                require(set(body)=={'currentPassword','newPassword'})
-                require(password_matches(user[6],body['currentPassword']),403,'当前密码不正确。')
+                allowed=({'newPassword'},{'currentPassword','newPassword'}) if user[5] else ({'currentPassword','newPassword'},)
+                require(set(body) in allowed)
+                if not user[5] or 'currentPassword' in body:
+                    require(password_matches(user[6],body['currentPassword']),403,'当前密码不正确。')
                 new=password_value(body['newPassword'])
                 require(not password_matches(user[6],new),400,'新密码不能与当前密码相同。')
                 cur.execute("UPDATE lele.users SET password_hash=%s,must_change_password=false,status='active' WHERE id=%s",(PASSWORDS.hash(new),user[0]))

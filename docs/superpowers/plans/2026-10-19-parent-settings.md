@@ -99,3 +99,13 @@ Files: 新增 `scripts/parent_settings_smoke.cjs`；修改 `scripts/browser_smok
 - [x] 本地 18787 健康检查通过，实际提供的 parent.js、parent-settings.js、parent-settings.css 与工作区逐字节一致。本次无后端或数据库结构改动，无需重启；测试仅写 lele_test_browser，独立生产 8787 进程保持不变，阿里云未发布。
 
 截图：`output/playwright/parent-unbound-home.png`、`output/playwright/parent-unbound-settings.png`。本轮回滚基线为 `350e2fd`。
+
+## 首次密码设置页面整理（已完成）
+
+- [x] 首次或管理员重置后的强制改密使用居中卡片，移除日历首页、账号管理和当前密码输入，仅保留两次新密码输入、保存及退出登录。
+- [x] 后端根据数据库账号状态接受强制设置的新密码单字段请求，普通改密保留当前密码验证；兼容原客户端提交当前密码且仍验证，不允许伪造状态绕过校验。
+- [x] 新增后端验证首次设置、管理员重置后设置、CSRF 拒绝、密码规则、跨会话注销、普通账号缺少当前密码及伪造标记被拒绝。
+- [x] 30 项后端测试和 31 个隔离浏览器场景通过，页面错误 0；JavaScript 语法及空白检查通过。人工查看 1098px 桌面和 390px 手机截图，卡片居中、字段清楚且无横向溢出。
+- [x] 本地开发 18787/18788 已重启且健康检查通过。6 个孩子完整业务数据重启前后校验值一致，修订号 0、0、0、0、0、262；测试写入仅使用独立测试库。独立生产 8787 进程未变，未发布阿里云。
+
+截图：`output/playwright/parent-password-setup-desktop.png`、`output/playwright/parent-password-setup-mobile.png`。本轮回滚基线为 `62e8b3e`。
