@@ -1,0 +1,59 @@
+# 家长端设置分栏 Implementation Plan
+
+> 用户已确认设计并授权实施。本次在当前会话逐项执行，不委派子代理。
+
+**Goal:** 以孩子管理、任务设置、账号管理组织家长设置，拆分表单和邀请管理，禁止修改登录名。
+
+**Architecture:** 新增独立设置脚本和样式，以依赖对象访问当前账号、孩子、API、原有编辑器和业务命令。原脚本保留业务上下文和强制改密，列表渲染函数支持设置内的目标容器。资料接口只允许更新昵称，管理员共用表单同步调整。
+
+**Tech Stack:** 原生 JavaScript/CSS、FastAPI、Psycopg/PostgreSQL、React/shadcn 管理后台、Playwright。
+
+---
+
+## Task 1: 锁定账号登录名
+
+Files: `child_service.py`、`test_child_backend.py`、`admin-ui/src/pages/profile.tsx`、`scripts/admin_ui_smoke.cjs`。
+
+- [ ] 更新资料回归，断言带正确密码的改登录名请求也返回 400，昵称更新保持登录名及邀请目标不变；同时覆盖管理员。
+- [ ] 资料接口用以下校验和更新替换原登录名修改逻辑：
+
+```python
+require('loginName' not in body,400,'登录名不支持修改。')
+require(set(body)=={'nickname'})
+nickname=text_value(body['nickname'])
+cur.execute('UPDATE lele.users SET nickname=%s WHERE id=%s RETURNING '+USER_COLUMNS,(nickname,user[0]))
+```
+
+- [ ] 后台资料表单以 `readOnly` 展示原登录名，资料请求改为 `{nickname}`，移除修改登录名所需密码字段；更新真实保存的浏览器断言。
+- [ ] 使用 `.venv/bin/python -m unittest test_child_backend -v` 搭配显式 `LELE_TEST_CONFIG=data/development/test-config.json` 运行隔离测试，执行 `npm run build:admin`。
+
+## Task 2: 独立设置模块与分栏
+
+Files: 新增 `web/parent-settings.js`、`web/parent-settings.css`；修改 `web/parent.html`、`accounts_app.py`、`web/parent.js`。
+
+- [ ] 通过 `window.LeleParentSettings.create(dependencies)` 创建设置控制器；接口为 `render()`、`open(page)`、`invalidate()`、`reset()`。依赖包含当前上下文 getter、API、角色同步、渲染器、编辑器、备份、改密及退出回调。
+- [ ] 左侧用带分组标题的原生按钮导航，选中项 `aria-current="page"`；右侧用标题、说明、表单或列表承载。定义页面键 `child/profile`、`child/family`、`child/invitations`、`tasks/presets`、`tasks/categories`、`tasks/backup`、`account/profile`、`account/password`。
+- [ ] 每次 render 增加面板序号，异步回调同时核对当前 DOM、序号与孩子 ID；`invalidate()` 在离开设置和清理孩子上下文时令旧面板失效。
+- [ ] 将脚本与 CSS 加入家长端资源精确白名单并从 HTML 同源引入；不开放后台源码或任意静态文件。
+- [ ] 移除旧设置叠加包装和混合孩子管理页面；账号导航改为打开独立设置项，首次改密沿用强制页面。
+
+## Task 3: 独立孩子、任务与账号内容
+
+Files: `web/parent-settings.js`、`web/parent-settings.css`、`web/parent.js`。
+
+- [ ] 孩子昵称提交 `PATCH /api/children/{id}` 的 `{name}`，成功刷新孩子列表和当前数据；底部折叠现有归档/恢复/退出管理。
+- [ ] 家人页通过成员与已发邀请接口读取；发送 `{loginName}`，撤销 DELETE；移除与转让保留确认，所有操作遵循负责人及归档状态。
+- [ ] 我的邀请读取 `/api/invitations`，分别 POST accept/reject，刷新孩子列表，在页内提供进入按钮；无孩子时保留账号和邀请导航。
+- [ ] 常用任务与类型列表分别选择设置目标容器；新增与编辑调用原弹窗方法，成功后列表刷新。归档状态禁用写入控件。
+- [ ] 备份页调用原有导出与导入能力，显示负责人恢复限制和最近保存时间；删除访问地址入口。
+- [ ] 账号昵称仅提交 `{nickname}`；密码表单维持六位字母数字、重复校验、提交禁用和改密后退出；退出登录先确认。
+
+## Task 4: 隔离浏览器与交付
+
+Files: 新增 `scripts/parent_settings_smoke.cjs`；修改 `scripts/browser_smoke.cjs`、`scripts/children_dialog_smoke.cjs`；构建产物 `web/admin-dist/`。
+
+- [ ] 用现有隔离数据库 `lele_test_browser` 验证完整分栏、三个孩子入口、成员权限、邀请处理、昵称持久化、密码规则、任务配置、备份、退出取消；更新旧导航选择器。
+- [ ] 制造延迟邀请响应后切换面板，断言旧响应不覆盖新内容。验证共同管理与归档状态按钮禁用。
+- [ ] 捕获桌面和 390px 窄屏截图，断言无横向溢出，人工查看标题、间距、表单和成员列表。
+- [ ] 运行 `node --check web/parent.js`、`node --check web/parent-settings.js`、`git diff --check`、`npm run build:admin`、隔离后端与 `npm run test:browser`，通过后仅提交本次文件。
+- [ ] 验证本地开发进程使用当前代码并可读取新资源；向用户交付入口、验证结论和提交号。生产不发布。
