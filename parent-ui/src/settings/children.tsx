@@ -1,9 +1,11 @@
 import { useRef, useState, type FormEvent } from "react"
 import { Badge, Button, Card, Empty, Feedback, Icon, Input, Label, Notice, ReadStatus, date, initial, statusNames, useAction, useRead } from "./primitives"
 import type { Child, Controller, Invitation, Member } from "./types"
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 
 export function ChildProfile({ controller, child }: { controller: Controller; child: Child }) {
   const { deps } = controller, action = useAction(controller), nickname = useRef<HTMLInputElement>(null)
+  const [deleting, setDeleting] = useState(false)
   const owner = child.role === "owner", editable = owner && !child.archived
   function submit(event: FormEvent) {
     event.preventDefault(); if (!editable) return
@@ -12,21 +14,34 @@ export function ChildProfile({ controller, child }: { controller: Controller; ch
     })
   }
   function manage() {
-    const message = owner ? (child.archived ? "恢复后可以继续安排任务，确认恢复孩子？" : "归档后只能查看和导出，成长记录会保留。确认归档孩子？") : "退出后将失去这个孩子的数据访问权限。确认退出管理？"
-    if (!confirm(message)) return
-    action.run("manage", () => owner ? deps.api(`/api/children/${child.id}`, "PATCH", { archived: !child.archived }) : deps.api(`/api/children/${child.id}/members/${deps.context().user.id}`, "DELETE"), async () => {
+    if (owner) { action.setError(""); setDeleting(true); return }
+    if (!confirm("退出后将失去这个孩子的数据访问权限。确认退出管理？")) return
+    action.run("manage", () => deps.api(`/api/children/${child.id}/members/${deps.context().user.id}`, "DELETE"), async () => {
       const available = await deps.sync(true); if (!action.active()) return
       if (!available) deps.home(); else deps.repaint()
     })
   }
+  function remove() {
+    action.run("delete", () => deps.api(`/api/children/${child.id}`, "DELETE"), () => {
+      deps.forgetChild(child.id)
+      deps.home()
+    })
+  }
   return <>
     <div className="settings-child-summary"><span className="settings-large-avatar">{initial(child.name)}</span><div><strong>{child.name}</strong><p>{owner ? "我是负责人" : "共同管理家长"}{child.archived ? " · 已归档" : ""}</p></div></div>
-    {!editable && <Notice>{child.archived ? "孩子已归档，恢复后可以修改昵称。" : "孩子昵称由负责人修改，你可以共同管理任务、积分和礼品。"}</Notice>}
+    {!editable && <Notice>{child.archived ? "孩子已归档，当前仅可查看和导出。" : "孩子昵称由管理员修改，你可以共同管理任务、积分和礼品。"}</Notice>}
     <form id="renameChildForm" className="settings-form" onSubmit={submit}><fieldset disabled={!editable || !!action.busy}>
       <div className="settings-field"><Label htmlFor="renameChild">孩子昵称</Label><Input ref={nickname} id="renameChild" defaultValue={child.name} required maxLength={40} placeholder="请输入孩子昵称" autoComplete="off" /><p className="settings-help">用于孩子卡片、日历和导出记录，最多 40 个字。</p></div>
       <Feedback id="childManageError" message={action.error} /><div className="settings-form-footer"><Button className="btn primary" type="submit">{action.busy === "nickname" ? "正在处理…" : "保存昵称"}</Button></div>
     </fieldset></form>
-    <details className="settings-more"><summary>更多孩子管理</summary><div><p>{owner ? (child.archived ? "恢复后，可以继续安排任务并记录成长。" : "归档后仅可查看和导出，已有成长记录会保留。") : "退出管理后，你将无法查看这个孩子的成长记录。其他家长的数据会保留。"}</p><Button className={`btn ${owner ? "" : "danger"}`} type="button" id={owner ? "archiveChild" : "leaveChild"} disabled={!!action.busy} onClick={manage}>{action.busy === "manage" ? "正在处理…" : owner ? (child.archived ? "恢复孩子" : "归档孩子") : "退出管理该孩子"}</Button></div></details>
+    <details className="settings-more"><summary>更多孩子管理</summary><div><p>{owner ? "删除后，所有成员将无法使用这个孩子的成长记录，不支持恢复。" : "退出管理后，你将无法查看这个孩子的成长记录。其他家长的数据会保留。"}</p><Button className="btn danger" type="button" id={owner ? "deleteChild" : "leaveChild"} disabled={!!action.busy} onClick={manage}>{action.busy === "manage" ? "正在处理…" : owner ? "删除孩子" : "退出管理该孩子"}</Button></div></details>
+    <AlertDialog open={deleting} onOpenChange={open => { if (!action.busy) setDeleting(open) }}>
+      <AlertDialogContent id="deleteChildDialog" className="child-delete-dialog" onEscapeKeyDown={event => { if (action.busy) event.preventDefault() }}>
+        <AlertDialogHeader className="child-delete-heading"><AlertDialogTitle>删除「{child.name}」？</AlertDialogTitle><AlertDialogDescription>删除后，你和其他成员将无法查看或使用这个孩子的成长记录，不支持恢复。</AlertDialogDescription></AlertDialogHeader>
+        <Feedback id="deleteChildError" message={action.error} />
+        <AlertDialogFooter className="child-delete-actions"><AlertDialogCancel id="cancelDeleteChild" className="btn" disabled={!!action.busy}>取消</AlertDialogCancel><AlertDialogAction id="confirmDeleteChild" className="btn danger" disabled={!!action.busy} onClick={event => { event.preventDefault(); remove() }}>{action.busy === "delete" ? "正在删除…" : "删除孩子"}</AlertDialogAction></AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   </>
 }
 

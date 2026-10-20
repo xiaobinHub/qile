@@ -145,7 +145,7 @@ class ChildService:
                     cur.execute('SELECT '+('pg_advisory_xact_lock' if exclusive else 'pg_advisory_xact_lock_shared')+'(1818586213,2)')
                     if schema_check:
                         cur.execute('SELECT version FROM lele.schema_versions')
-                        require(cur.fetchall()==[(2,)],503,'数据库尚未完成账号版本初始化。')
+                        require(cur.fetchall()==[(3,)],503,'数据库尚未完成账号版本升级。')
                     return work(cur)
         except (ApiError, StoreError):
             raise
@@ -168,7 +168,7 @@ class ChildService:
     def access(self, cur, user, child_id, *, owner=False, write=False, allow_archived=False):
         require(user[3]=='parent',403,'管理员不能访问孩子业务数据。')
         self.lock_child(cur,child_id)
-        cur.execute('SELECT c.id,c.name,c.owner_id,c.archived,m.membership_version FROM lele.children c JOIN lele.memberships m ON m.child_id=c.id WHERE c.id=%s AND m.user_id=%s FOR UPDATE OF c,m',(child_id,user[0]))
+        cur.execute('SELECT c.id,c.name,c.owner_id,c.archived,m.membership_version FROM lele.children c JOIN lele.memberships m ON m.child_id=c.id WHERE c.id=%s AND m.user_id=%s AND c.deleted_at IS NULL FOR UPDATE OF c,m',(child_id,user[0]))
         row=cur.fetchone()
         require(row is not None,403,'没有此孩子的访问权限。','membership_revoked')
         require(not owner or row[2]==user[0],403,'只有负责人可以执行此操作。')
@@ -325,13 +325,13 @@ class ChildService:
 
     def parent(self,cur,user,method,path,body):
         if path=='children' and method=='GET':
-            cur.execute('SELECT c.id,c.name,c.owner_id,c.archived,m.membership_version FROM lele.children c JOIN lele.memberships m ON m.child_id=c.id WHERE m.user_id=%s ORDER BY c.created_at,c.id',(user[0],))
+            cur.execute('SELECT c.id,c.name,c.owner_id,c.archived,m.membership_version FROM lele.children c JOIN lele.memberships m ON m.child_id=c.id WHERE m.user_id=%s AND c.deleted_at IS NULL ORDER BY c.created_at,c.id',(user[0],))
             return {'children':[self.child_public(r,user[0]) for r in cur.fetchall()]}
         if path=='children' and method=='POST':
             require(set(body)=={'name'})
             return {'child':self.create_child(cur,user[0],body['name'])}
         if path=='invitations' and method=='GET':
-            cur.execute("SELECT i.id,i.child_id,c.name,i.created_by,i.expires_at FROM lele.invitations i JOIN lele.children c ON c.id=i.child_id WHERE i.target_id=%s AND i.status='pending' AND i.expires_at>now() ORDER BY i.created_at",(user[0],))
+            cur.execute("SELECT i.id,i.child_id,c.name,i.created_by,i.expires_at FROM lele.invitations i JOIN lele.children c ON c.id=i.child_id WHERE i.target_id=%s AND i.status='pending' AND i.expires_at>now() AND c.deleted_at IS NULL ORDER BY i.created_at",(user[0],))
             return {'invitations':[dict(id=r[0],childId=r[1],childName=r[2],createdBy=r[3],expiresAt=r[4].isoformat()) for r in cur.fetchall()]}
         parts=path.split('/')
         if len(parts)==3 and parts[0]=='invitations' and method=='POST':
@@ -339,17 +339,17 @@ class ChildService:
         require(len(parts)>=2 and parts[0]=='children',404,'接口不存在。')
         child_id=parts[1]; suffix='/'.join(parts[2:])
         if suffix=='':
-            require(method=='PATCH' and len(body)==1 and set(body)<= {'name','archived'},404,'接口不存在。')
-            child=self.access(cur,user,child_id,owner=True,write=True,allow_archived=body=={'archived':False})
-            if 'name' in body:
-                name=text_value(body['name'])
-                current=self.store.read(cur,child_id,locked=True)
-                data=copy.deepcopy(current['data']); data['settings']['childName']=name
-                self.save(cur,child_id,current,data)
-                cur.execute('UPDATE lele.children SET name=%s WHERE id=%s',(name,child_id))
-            else:
-                require(type(body['archived']) is bool)
-                cur.execute('UPDATE lele.children SET archived=%s WHERE id=%s',(body['archived'],child_id))
+            if method=='DELETE':
+                require(not body)
+                return self.delete_child(cur,user,child_id)
+            require(method=='PATCH',404,'接口不存在。')
+            require(set(body)=={'name'},400,'仅支持修改孩子昵称。')
+            child=self.access(cur,user,child_id,owner=True,write=True)
+            name=text_value(body['name'])
+            current=self.store.read(cur,child_id,locked=True)
+            data=copy.deepcopy(current['data']); data['settings']['childName']=name
+            self.save(cur,child_id,current,data)
+            cur.execute('UPDATE lele.children SET name=%s WHERE id=%s',(name,child_id))
             self.audit(cur,user[0],'child.update',child_id,body)
             return {'ok':True}
         if suffix=='transfer' and method=='POST':
@@ -389,6 +389,20 @@ class ChildService:
             return self.operation(cur,user,child_id,body,restore=suffix=='data/restore')
         raise ApiError(404,'接口不存在。')
 
+    def delete_child(self,cur,user,child_id):
+        require(user[3]=='parent',403,'管理员不能访问孩子业务数据。')
+        self.lock_child(cur,child_id)
+        # Keep memberships to preserve audit references and recognize owner retries.
+        cur.execute('SELECT c.owner_id,c.deleted_at FROM lele.children c JOIN lele.memberships m ON m.child_id=c.id WHERE c.id=%s AND m.user_id=%s FOR UPDATE OF c,m',(child_id,user[0]))
+        child=cur.fetchone()
+        require(child is not None and child[0]==user[0],403,'没有此孩子的管理权限。','membership_revoked')
+        if child[1] is not None:
+            return {'ok':True}
+        cur.execute('UPDATE lele.children SET deleted_at=now(),deleted_by=%s WHERE id=%s',(user[0],child_id))
+        cur.execute("UPDATE lele.invitations SET status='revoked' WHERE child_id=%s AND status='pending'",(child_id,))
+        self.audit(cur,user[0],'child.delete',child_id)
+        return {'ok':True}
+
     def manage_invitation(self,cur,user,child_id,parts,method,body):
         self.access(cur,user,child_id,owner=True,write=method!='GET')
         if method=='GET' and len(parts)==3:
@@ -419,8 +433,9 @@ class ChildService:
         cur.execute('SELECT child_id FROM lele.invitations WHERE id=%s AND target_id=%s',(invite,user[0]))
         row=cur.fetchone(); require(row is not None,404,'邀请不存在。')
         child_id=row[0]; self.lock_child(cur,child_id)
-        cur.execute("SELECT c.archived,i.status,i.expires_at>now() FROM lele.invitations i JOIN lele.children c ON c.id=i.child_id WHERE i.id=%s AND i.target_id=%s FOR UPDATE OF i,c",(invite,user[0]))
+        cur.execute("SELECT c.archived,i.status,i.expires_at>now(),c.deleted_at FROM lele.invitations i JOIN lele.children c ON c.id=i.child_id WHERE i.id=%s AND i.target_id=%s FOR UPDATE OF i,c",(invite,user[0]))
         row=cur.fetchone()
+        require(row is not None and row[3] is None,403,'没有此孩子的访问权限。','membership_revoked')
         require(row and row[1]=='pending' and row[2],409,'邀请已过期或已处理。')
         require(not row[0],409,'孩子已归档，暂不能处理邀请。','archived')
         if answer=='accept':
@@ -471,22 +486,30 @@ class ChildService:
         return {**updated,'context':dict(childId=child_id,membershipVersion=child[4])}
 
 
-def initialize(config_path):
+def initialize(config_path, *, upgrade_only=False):
     service=ChildService(config_path)
     require(service.config['environment']=='development',403,'此初始化工具仅允许本地开发环境。')
     source=Path(__file__).with_name('db').joinpath('schema_v2.sql').read_text()
     source_hash=hashlib.sha256(source.encode()).hexdigest()
+    migration=Path(__file__).with_name('db').joinpath('migrate_v2_to_v3.sql').read_text()
+    upgraded_hash=hashlib.sha256((source+ '\n'+migration).encode()).hexdigest()
     def run(cur):
         cur.execute("SELECT obj_description(oid,'pg_namespace') FROM pg_namespace WHERE nspname='lele'")
         namespace=cur.fetchone()
         if namespace:
-            marker=f'lele-schema-v2:{source_hash}:{PostgresStore._catalog(cur)}'
-            require(namespace[0]==marker,409,'检测到未知或旧版结构，初始化停止。请使用独立开发数据库。')
-            return {'initialized':False,'version':2}
-        cur.execute(source)
-        marker=f'lele-schema-v2:{source_hash}:{PostgresStore._catalog(cur)}'
+            catalog=PostgresStore._catalog(cur)
+            if namespace[0]==f'lele-schema-v3:{upgraded_hash}:{catalog}':
+                return {'initialized':False,'upgraded':False,'version':3}
+            require(namespace[0]==f'lele-schema-v2:{source_hash}:{catalog}',409,'检测到未知数据库结构，升级停止。')
+            cur.execute('SELECT version FROM lele.schema_versions')
+            require(cur.fetchall()==[(2,)],409,'数据库版本与结构标记不一致，升级停止。')
+        else:
+            require(not upgrade_only,409,'数据库尚未初始化，请先执行 initialize。')
+            cur.execute(source)
+        cur.execute(migration)
+        marker=f'lele-schema-v3:{upgraded_hash}:{PostgresStore._catalog(cur)}'
         cur.execute(psycopg.sql.SQL('COMMENT ON SCHEMA lele IS {}').format(psycopg.sql.Literal(marker)))
-        return {'initialized':True,'version':2}
+        return {'initialized':not bool(namespace),'upgraded':bool(namespace),'version':3}
     return service.transaction(run,exclusive=True,schema_check=False)
 
 
@@ -521,7 +544,7 @@ def import_child(config_path,owner_id,record):
         child=service.create_child(cur,owner_id,record['data']['settings']['childName'],copy.deepcopy(record))
         rebuilt=service.store.read(cur,child['id'])
         require(canonical_bytes(record)==canonical_bytes(rebuilt),409,'导入后内容校验不一致，已回滚。')
-        cur.execute('INSERT INTO lele.migration_runs(child_id,source_sha256,source_revision,source_updated_at_raw,target_revision,migrated_at,entity_counts,business_sha256,db_schema_version) VALUES(%s,%s,%s,%s,%s,now(),%s,%s,2)',(child['id'],source_hash,record['revision'],record['updatedAt'],record['revision'],Jsonb(PostgresStore._counts(record['data'])),canonical_sha256(record['data'])))
+        cur.execute('INSERT INTO lele.migration_runs(child_id,source_sha256,source_revision,source_updated_at_raw,target_revision,migrated_at,entity_counts,business_sha256,db_schema_version) VALUES(%s,%s,%s,%s,%s,now(),%s,%s,3)',(child['id'],source_hash,record['revision'],record['updatedAt'],record['revision'],Jsonb(PostgresStore._counts(record['data'])),canonical_sha256(record['data'])))
         service.audit(cur,owner_id,'migration.import',child['id'],{'sourceSha256':source_hash,'sourceRevision':record['revision']})
         return child
     return service.transaction(run,exclusive=True)
@@ -535,6 +558,7 @@ def main():
     parser.add_argument('--config',required=True)
     commands=parser.add_subparsers(dest='command',required=True)
     commands.add_parser('initialize')
+    commands.add_parser('upgrade')
     admin=commands.add_parser('bootstrap')
     admin.add_argument('--login-name',required=True)
     admin.add_argument('--nickname',required=True)
@@ -543,8 +567,8 @@ def main():
     migration.add_argument('--source',required=True)
     args=parser.parse_args()
     try:
-        if args.command=='initialize':
-            result=initialize(args.config)
+        if args.command in ('initialize','upgrade'):
+            result=initialize(args.config,upgrade_only=args.command=='upgrade')
         elif args.command=='bootstrap':
             password=getpass.getpass('初始管理员密码（6–128 位，须含字母和数字）：')
             require(password==getpass.getpass('再次输入密码：'),400,'两次密码不一致。')

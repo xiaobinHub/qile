@@ -3,7 +3,7 @@ from postgres_store import ARRAY_TABLES, BUSINESS_TABLES, KNOWN_DATA_KEYS, KNOWN
 from storage import StoreError, BACKUP_LIMIT
 from http import HTTPStatus
 from psycopg.types.json import Jsonb
-DB_SCHEMA_VERSION = 2
+DB_SCHEMA_VERSION = 3
 
 class ChildStore:
     @staticmethod

@@ -10,6 +10,7 @@ export type Dependencies = {
   api: <T>(path: string, method?: string, body?: unknown) => Promise<T>
   show: () => void
   home: () => void
+  forgetChild: (id: string) => void
   selectChild: (id: string) => Promise<void>
   sync: (reload: boolean) => Promise<boolean>
   repaint: () => void

@@ -12,6 +12,7 @@ import tempfile
 import unittest
 import uuid
 from pathlib import Path
+from unittest.mock import patch
 from fastapi.testclient import TestClient
 from accounts_app import create_app
 from child_service import ChildService, initialize, bootstrap, import_child, ApiError, canonical_bytes, password_value
@@ -76,6 +77,10 @@ class ChildBackendTests(unittest.TestCase):
         r=self.call(self.a,'POST','/api/children',{'name':'测试孩子'})
         self.assertEqual(r.status_code,200,r.text)
         return r.json()['child']
+
+    def archive_fixture(self,child,archived):
+        # Compatibility fixture only: the public archive/restore API is removed.
+        self.service.transaction(lambda cur:cur.execute('UPDATE lele.children SET archived=%s WHERE id=%s',(archived,child['id'])))
 
     def data(self,child,client=None):
         r=(client or self.a).get('/api/children/'+child['id']+'/data')
@@ -241,14 +246,90 @@ class ChildBackendTests(unittest.TestCase):
         current=self.data(child)
         restore=dict(expectedRevision=current['revision'],membershipVersion=self.data(child,self.b)['context']['membershipVersion'],operationId=str(uuid.uuid4()),data=current['data'])
         self.assertEqual(self.call(self.b,'POST','/api/children/'+child['id']+'/data/restore',restore).status_code,403)
-        self.assertEqual(self.call(self.a,'PATCH','/api/children/'+child['id'],{'archived':True}).status_code,200)
+        self.archive_fixture(child,True)
         self.assertEqual(self.b.get('/api/children/'+child['id']+'/data').status_code,200)
         self.assertEqual(self.call(self.a,'POST','/api/children/'+child['id']+'/operations',self.operation(child)).json()['kind'],'archived')
-        self.assertEqual(self.call(self.b,'PATCH','/api/children/'+child['id'],{'archived':False}).status_code,403)
-        self.assertEqual(self.call(self.a,'PATCH','/api/children/'+child['id'],{'archived':False}).status_code,200)
+        self.assertEqual(self.call(self.b,'PATCH','/api/children/'+child['id'],{'archived':False}).status_code,400)
+        self.archive_fixture(child,False)
         self.assertEqual(self.call(self.a,'POST','/api/children/'+child['id']+'/transfer',{'userId':self.bu['id']}).status_code,200)
         self.assertEqual(self.call(self.a,'PATCH','/api/children/'+child['id'],{'name':'No'}).status_code,403)
         self.assertEqual(self.call(self.b,'PATCH','/api/children/'+child['id'],{'name':'New name'}).status_code,200)
+
+    def test_delete_child_revokes_all_access_and_retains_business(self):
+        child=self.child(); self.join(child); other=self.child()
+        root='/api/children/'+child['id']
+        saved=self.call(self.a,'POST',root+'/operations',self.operation(child))
+        self.assertEqual(saved.status_code,200)
+        previous=self.data(child); operation=self.operation(child,previous)
+        replay=self.operation(child,self.data(child))
+        self.assertEqual(self.call(self.a,'POST',root+'/operations',replay).status_code,200)
+        invite=self.invite(child,target='outsider')
+        before=self.data(child); other_before=self.data(other)
+        def retained(cur):
+            record=self.service.store.read(cur,child['id'])
+            cur.execute('SELECT revision,snapshot_json FROM lele.data_snapshots WHERE child_id=%s ORDER BY revision',(child['id'],))
+            return record,cur.fetchall()
+        retained_before=self.service.transaction(retained)
+        for client in (self.b,self.outsider,self.admin):
+            self.assertEqual(self.call(client,'DELETE',root).status_code,403)
+        self.assertEqual(self.a.delete(root,headers={'Origin':self.service.config['parent_origin'],'X-CSRF-Token':'bad'}).status_code,403)
+        self.assertEqual(self.a.delete(root,headers={'Origin':'https://untrusted.example'}).status_code,403)
+        for _ in range(2):
+            self.assertEqual(self.call(self.a,'DELETE',root).json(),{'ok':True})
+        for client in (self.a,self.b):
+            self.assertNotIn(child['id'],[c['id'] for c in client.get('/api/children').json()['children']])
+            for suffix in ('data','data/export','context','members','invitations'):
+                self.assertEqual(client.get(root+'/'+suffix).status_code,403,suffix)
+        for suffix,method,body in [('operations','POST',operation),('operations','POST',replay),('data/restore','POST',dict(expectedRevision=before['revision'],membershipVersion=before['context']['membershipVersion'],operationId=str(uuid.uuid4()),data=before['data'])),('transfer','POST',{'userId':self.bu['id']}),('invitations','POST',{'loginName':'outsider'}),('members/'+self.bu['id'],'DELETE',{}),('','PATCH',{'name':'Hidden'})]:
+            self.assertEqual(self.call(self.a,method,root+('/'+suffix if suffix else ''),body).status_code,403,suffix)
+        self.assertNotIn(invite,[i['id'] for i in self.outsider.get('/api/invitations').json()['invitations']])
+        for answer in ('accept','reject'):
+            self.assertEqual(self.call(self.outsider,'POST','/api/invitations/'+invite+'/'+answer,{}).status_code,403)
+        self.assertEqual(self.service.transaction(retained),retained_before)
+        self.assertEqual(self.data(other),other_before)
+        def inspect(cur):
+            cur.execute("SELECT count(*) FROM lele.audit_events WHERE child_id=%s AND action='child.delete'",(child['id'],))
+            count=cur.fetchone()[0]
+            cur.execute('SELECT deleted_at IS NOT NULL,deleted_by FROM lele.children WHERE id=%s',(child['id'],))
+            return count,cur.fetchone()
+        self.assertEqual(self.service.transaction(inspect),(1,(True,self.au['id'])))
+
+    def test_archive_api_removed_but_legacy_archived_child_deletable(self):
+        child=self.child(); root='/api/children/'+child['id']
+        for value in (True,False):
+            self.assertEqual(self.call(self.a,'PATCH',root,{'archived':value}).status_code,400)
+        self.archive_fixture(child,True)
+        self.assertEqual(self.call(self.a,'DELETE',root).status_code,200)
+        self.assertEqual(self.a.get(root+'/data').status_code,403)
+
+    def test_delete_rolls_back_if_audit_fails(self):
+        child=self.child(); invite=self.invite(child)
+        root='/api/children/'+child['id']; before=self.data(child)
+        service=self.parent_app.state.service; audit=service.audit
+        def failing_audit(cur,actor,action,child=None,detail=None):
+            if action=='child.delete':
+                raise ApiError(503,'模拟审计失败')
+            return audit(cur,actor,action,child,detail)
+        with patch.object(service,'audit',side_effect=failing_audit):
+            self.assertEqual(self.call(self.a,'DELETE',root).status_code,503)
+        self.assertEqual(self.data(child),before)
+        self.assertIn(invite,[row['id'] for row in self.b.get('/api/invitations').json()['invitations']])
+
+    def test_concurrent_delete_save_and_invitation(self):
+        for mode in ('save','accept'):
+            child=self.child(); root='/api/children/'+child['id']
+            command=self.operation(child)
+            invite=self.invite(child)
+            def competing():
+                return self.call(self.a,'POST',root+'/operations',command) if mode=='save' else self.call(self.b,'POST','/api/invitations/'+invite+'/accept',{})
+            with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+                mutation=pool.submit(competing)
+                deletion=pool.submit(self.call,self.a,'DELETE',root)
+                self.assertEqual(deletion.result().status_code,200)
+                self.assertIn(mutation.result().status_code,(200,403))
+            self.assertEqual(self.a.get(root+'/data').status_code,403)
+            self.assertEqual(self.b.get(root+'/data').status_code,403)
+            self.assertEqual(self.call(self.a,'POST',root+'/operations',command).status_code,403)
 
     def test_restore_retains_target_name_and_backup_is_child_scoped(self):
         child=self.child(); other=self.child(); current=self.data(child)
@@ -302,9 +383,9 @@ class ChildBackendTests(unittest.TestCase):
         other=self.child()
         self.assertEqual(self.call(self.a,'DELETE','/api/children/'+other['id']+'/invitations/'+rejected).status_code,409)
         self.assertEqual(self.call(self.a,'DELETE',root+'/invitations/'+accepted).status_code,409)
-        self.assertEqual(self.call(self.a,'PATCH',root,{'archived':True}).status_code,200)
+        self.archive_fixture(child,True)
         self.assertEqual(self.call(self.a,'DELETE',path).status_code,409)
-        self.assertEqual(self.call(self.a,'PATCH',root,{'archived':False}).status_code,200)
+        self.archive_fixture(child,False)
         self.assertEqual(self.call(self.a,'DELETE',path).status_code,200)
         self.assertEqual(self.call(self.a,'DELETE',path).status_code,409)
         self.assertNotIn(rejected,[row['id'] for row in self.a.get(root+'/invitations').json()['invitations']])
@@ -340,7 +421,7 @@ class ChildBackendTests(unittest.TestCase):
         read=self.a.get('/api/children/'+imported['id']+'/data/export').json()
         self.assertEqual(canonical_bytes(read),canonical_bytes(raw))
         with self.assertRaises(ApiError):import_child(CONFIG,self.au['id'],raw)
-        self.assertEqual(initialize(CONFIG),{'initialized':False,'version':2})
+        self.assertEqual(initialize(CONFIG),{'initialized':False,'upgraded':False,'version':3})
 
     def test_backup_retention_and_actor_audit(self):
         child=self.child()
@@ -445,7 +526,7 @@ class ChildBackendTests(unittest.TestCase):
     def test_archived_nonowner_can_leave_but_cannot_remove_others(self):
         child=self.child();self.join(child)
         base='/api/children/'+child['id']
-        self.assertEqual(self.call(self.a,'PATCH',base,{'archived':True}).status_code,200)
+        self.archive_fixture(child,True)
         self.assertEqual(self.call(self.a,'DELETE',base+'/members/'+self.bu['id']).status_code,409)
         self.assertEqual(self.call(self.b,'DELETE',base+'/members/'+self.bu['id']).status_code,200)
         self.assertEqual(self.b.get(base+'/data').status_code,403)

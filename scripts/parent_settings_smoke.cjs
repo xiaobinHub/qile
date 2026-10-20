@@ -85,16 +85,15 @@ async function exerciseParentSettings({browser,admin,dad,mom,firstId,secondId,pa
   const downloaded=dad.waitForEvent('download');await dad.locator('#settingsExportBtn').click();
   assert.match((await downloaded).suggestedFilename(),/成长备份.*json$/);
 
-  // Reversible archive checks use the fixture child only, keeping its business history intact.
-  await open(dad,'child/profile');await dad.locator('.settings-more summary').click();await dad.locator('#archiveChild').click();
-  await dad.waitForFunction(()=>document.querySelector('#archiveChild')?.textContent==='恢复孩子');
-  await open(dad,'tasks/categories');assert.equal(await dad.locator('#settingsAddCategory').isDisabled(),true);
-  assert.equal(await dad.locator('#settingsCategoryList input:enabled').count(),0);
-  await open(dad,'tasks/presets');assert.equal(await dad.locator('#settingsAddPreset').isDisabled(),true);
-  assert.equal(await dad.locator('#settingsTaskPresetsList button:enabled').count(),0);
-  await open(dad,'tasks/backup');assert.equal(await dad.locator('#settingsImportBtn').isDisabled(),true);
-  await open(dad,'child/profile');await dad.locator('.settings-more summary').click();await dad.locator('#archiveChild').click();
-  await dad.waitForFunction(()=>document.querySelector('#archiveChild')?.textContent==='归档孩子');
+  // The former archive entry is replaced by an accessible custom confirmation.
+  await open(dad,'child/profile');await dad.locator('.settings-more summary').click();
+  assert.equal(await dad.locator('#archiveChild').count(),0);
+  await dad.locator('#deleteChild').click();await dad.locator('#deleteChildDialog').waitFor();
+  assert.equal(await dad.locator('#deleteChildDialog[data-slot="alert-dialog-content"]').count(),1);
+  assert.equal(await dad.locator('#cancelDeleteChild').evaluate(el=>el===document.activeElement),true);
+  await dad.locator('#cancelDeleteChild').click();await dad.locator('#deleteChildDialog').waitFor({state:'hidden'});
+  await dad.locator('#deleteChild').click();await dad.keyboard.press('Escape');
+  await dad.locator('#deleteChildDialog').waitFor({state:'hidden'});
 
   await mom.goto(`http://127.0.0.1:18887/children/${firstId}`);await mom.locator('#openChildrenDialog').waitFor();
   await mom.getByRole('button',{name:'设置',exact:true}).click();

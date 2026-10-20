@@ -592,6 +592,9 @@
         const error=new StoreError(result.error||'操作失败，请重试。',response.status===401?'unauthorized':response.status===409?'conflict':response.status===403?'forbidden':'connection');
         error.status=response.status;
         if(response.status===401&&authUser){clearContext(true);renderLogin('登录已失效，请重新登录。')}
+        if(response.status===403&&result.kind==='membership_revoked'&&currentChild&&(path===`/api/children/${currentChild.id}`||path.startsWith(`/api/children/${currentChild.id}/`))){
+          forgetChild(currentChild.id);await showCalendarHome();toast('该孩子已不可访问，请选择其他孩子。');error.kind='stale';
+        }
         throw error;
       }
       return result;
@@ -640,6 +643,10 @@
     async function logout(){const token=csrfToken;clearContext(true);history.replaceState(null,'','/');try{await parentApi('/api/auth/logout','POST',{},token);authBroadcast?.postMessage('logout');renderLogin()}catch(error){authBroadcast?.postMessage('logout');if(error.kind!=='stale')renderLogin(error.kind==='unauthorized'?'':'退出请求未完成，请重新登录后重试。')}}
     function preferredChildId(){try{return localStorage.getItem('lele-preferred-child:'+authUser.id)}catch{return null}}
     function rememberChild(id){try{localStorage.setItem('lele-preferred-child:'+authUser.id,id)}catch{}}
+    function forgetChild(id){
+      childList=childList.filter(child=>child.id!==id);
+      try{if(preferredChildId()===id)localStorage.removeItem('lele-preferred-child:'+authUser.id)}catch{}
+    }
     async function showCalendarHome(){history.replaceState(null,'','/');await enterAccount()}
     function renderUnboundHome(message='',failed=false){
       settingsUI?.invalidate();
@@ -801,6 +808,7 @@
         else{uiGeneration++;renderUnboundHome()}
       },
       home:()=>showCalendarHome(),selectChild,
+      forgetChild,
       sync:async reloadData=>{
         const id=currentChild?.id;
         const result=await parentApi('/api/children');childList=result.children;
@@ -860,7 +868,7 @@
           if(document.querySelector('dialog[open]')||pendingOperation){if(notifiedRevision!==status.revision){notifiedRevision=status.revision;toast('其他家长已更新数据，请完成当前编辑后刷新。')}}
           else{data=await Store.load();notifiedRevision=null;render()}
         }
-      }catch(error){if(error.kind==='forbidden'){await showCalendarHome();toast('你已不再拥有该孩子的管理权限。')}}
+      }catch(error){if(error.kind==='forbidden'){forgetChild(currentChild?.id);await showCalendarHome();toast('该孩子已不可访问，请选择其他孩子。')}}
       finally{checkingContext=false}
     }
     if(!SELFTEST){setInterval(checkChildContext,30000);window.addEventListener('focus',checkChildContext);document.addEventListener('visibilitychange',checkChildContext)}
