@@ -1,5 +1,5 @@
 import { CircleAlert, CircleCheck } from "lucide-react"
-import { cn } from "@/lib/utils"
+import { cn } from "@shared/lib/utils"
 
 export function FormFeedback({ message, success = false, id, className }: { message: string; success?: boolean; id?: string; className?: string }) {
   if (!message) return null

@@ -10,6 +10,7 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   resolve: {
     alias: {
+      "@shared": fileURLToPath(new URL("../shared-ui/src", import.meta.url)),
       "@": fileURLToPath(new URL("./src", import.meta.url)),
     },
   },

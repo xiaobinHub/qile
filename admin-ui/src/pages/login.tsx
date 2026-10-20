@@ -1,12 +1,12 @@
 import { useRef, useState, type FormEvent } from "react"
 import { ArrowRight, LoaderCircle, ShieldCheck } from "lucide-react"
 import { Brand } from "@/components/brand"
-import { FormFeedback } from "@/components/form-feedback"
-import { PasswordInput } from "@/components/password-input"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
+import { FormFeedback } from "@shared/components/form-feedback"
+import { PasswordInput } from "@shared/components/password-input"
+import { Button } from "@shared/components/ui/button"
+import { Card, CardContent } from "@shared/components/ui/card"
+import { Input } from "@shared/components/ui/input"
+import { Label } from "@shared/components/ui/label"
 import { errorMessage, isIgnoredError, useSession } from "@/lib/session"
 import type { Session } from "@/lib/types"
 import { useMounted } from "@/lib/use-mounted"
@@ -47,6 +47,6 @@ export function LoginPage() {
       </CardContent>
       <div className="border-t bg-muted/30 px-7 py-3.5 text-center text-xs text-muted-foreground">乐乐成长 · 账号管理</div>
     </Card>
-    <p className="mt-7 text-xs text-muted-foreground/75">让每一步成长，都被看见。</p>
+    <p className="mt-7 text-xs text-muted-foreground">让每一步成长，都被看见。</p>
   </main>
 }

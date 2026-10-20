@@ -67,7 +67,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     if (epoch.current !== startedAt) throw new StaleRequest()
     if (!response.ok) {
       if (response.status === 401 && path !== "auth/login") {
-        clearSession("会话已失效，请重新登录。")
+        clearSession(token.current ? "会话已失效，请重新登录。" : "")
         throw new StaleRequest()
       }
       throw new Error(result.error || "操作未能完成，请稍后重试。")
