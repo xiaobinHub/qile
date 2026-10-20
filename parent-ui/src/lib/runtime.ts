@@ -127,7 +127,6 @@ export class Runtime {
           path.startsWith(`/api/children/${this.state.child.id}`)
         ) {
           this.forgetChild(this.state.child.id)
-          this.reset()
           void this.home()
           throw new ApiError("该孩子已不可访问。", "stale", 403)
         }
@@ -181,7 +180,9 @@ export class Runtime {
       if (this.preferred() === id)
         localStorage.removeItem("lele-preferred-child:" + this.state.user?.id)
     } catch {}
-    this.patch({ children: this.state.children.filter((c) => c.id !== id) })
+    const children = this.state.children.filter((c) => c.id !== id)
+    if (this.state.child?.id === id) this.reset()
+    this.patch({ children })
   }
   enter = async () => {
     if (this.state.busy || this.pending) {

@@ -27,7 +27,7 @@ export function PrintDialog({ data, onClose }: { data: BusinessData; onClose: ()
     (("standalone" in navigator && navigator.standalone) ||
       matchMedia("(display-mode: standalone)").matches)
   const overflow = pages.some((p) => p.density === "overflow"),
-    valid = pages.length > 0 && !overflow && pages.length <= 53
+    valid = pages.length > 0 && !overflow
   useEffect(() => {
     setPdf("")
     setBusy(false)
@@ -96,7 +96,7 @@ export function PrintDialog({ data, onClose }: { data: BusinessData; onClose: ()
             ? `将打印 ${pages.length} 页自然周计划，共 ${pages.reduce((n, p) => n + p.items.length, 0)} 项任务。`
             : overflow
               ? "该周任务过多，无法完整放入一页，请调整日期或任务。"
-              : "请选择正确的起止日期，最多打印 53 周。"}
+              : "请选择正确的起止日期。"}
         </div>
         <ErrorText id="printError" message={error} />
         <div className="form-actions">

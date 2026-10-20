@@ -232,7 +232,7 @@ export function Family({ controller, child }: { controller: Controller; child: C
         }}
         title={
           memberAction?.type === "transfer"
-            ? `将负责身份转让给「${memberAction.member.nickname}」？`
+            ? `将管理员身份转让给「${memberAction.member.nickname}」？`
             : `移除「${memberAction?.member.nickname || "家长"}」？`
         }
         description={
@@ -334,7 +334,7 @@ export function Family({ controller, child }: { controller: Controller; child: C
                       disabled={!!action.busy}
                       onSelect={() => setMemberAction({ type: "transfer", member })}
                     >
-                      转让负责身份
+                      转让管理员身份
                     </DropdownMenuItem>
                     <DropdownMenuItem
                       variant="destructive"
