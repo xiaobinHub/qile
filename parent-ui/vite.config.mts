@@ -1,24 +1,22 @@
 import { fileURLToPath, URL } from "node:url"
 import react from "@vitejs/plugin-react"
+import tailwindcss from "@tailwindcss/vite"
 import { defineConfig } from "vite"
-
 export default defineConfig({
   root: fileURLToPath(new URL(".", import.meta.url)),
+  base: "/parent-assets/",
   publicDir: false,
-  plugins: [react()],
-  define: { "process.env.NODE_ENV": JSON.stringify("production") },
+  plugins: [react(), tailwindcss()],
   resolve: {
-    alias: { "@": fileURLToPath(new URL("../admin-ui/src", import.meta.url)) },
+    alias: {
+      "@": fileURLToPath(new URL("./src", import.meta.url)),
+      "@shared": fileURLToPath(new URL("../shared-ui/src", import.meta.url)),
+    },
   },
   build: {
     outDir: fileURLToPath(new URL("../web/parent-dist", import.meta.url)),
+    assetsDir: "",
     emptyOutDir: true,
     sourcemap: false,
-    lib: {
-      entry: fileURLToPath(new URL("./src/index.ts", import.meta.url)),
-      name: "LeleParentUI",
-      formats: ["iife"],
-      fileName: () => "parent-ui.js",
-    },
   },
 })

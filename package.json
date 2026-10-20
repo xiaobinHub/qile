@@ -2,19 +2,24 @@
   "name": "lele-growth-local-qa",
   "private": true,
   "scripts": {
-    "test:browser": "node scripts/browser_smoke.cjs",
+    "test:browser": "node scripts/unified_browser_smoke.cjs",
     "check:admin": "tsc --project admin-ui/tsconfig.json --noEmit",
     "build:admin": "npm run check:admin && vite build --config admin-ui/vite.config.mts",
     "check:parent": "tsc --project parent-ui/tsconfig.json --noEmit",
-    "build:parent": "npm run check:parent && vite build --config parent-ui/vite.config.mts"
+    "build:parent": "npm run check:parent && vite build --config parent-ui/vite.config.mts",
+    "test:domain": "node scripts/domain_tests.cjs && node scripts/runtime_tests.cjs",
+    "check:format": "prettier --check parent-ui/src shared-ui/src",
+    "build": "npm run build:admin && npm run build:parent"
   },
   "devDependencies": {
+    "@axe-core/playwright": "4.14.0",
     "@tailwindcss/vite": "4.3.3",
     "@types/node": "22.20.5",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
     "@vitejs/plugin-react": "6.1.2",
     "playwright": "1.61.1",
+    "prettier": "3.9.10",
     "tailwindcss": "4.3.3",
     "typescript": "5.9.3",
     "vite": "8.3.4"
@@ -22,6 +27,7 @@
   "dependencies": {
     "class-variance-authority": "0.7.1",
     "clsx": "2.1.1",
+    "cmdk": "1.1.1",
     "lucide-react": "1.58.0",
     "radix-ui": "1.8.1",
     "react": "19.3.1",

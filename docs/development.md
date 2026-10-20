@@ -55,17 +55,25 @@ npm run build:admin
 
 `npm run check:admin` 只检查 TypeScript 类型。后台构建产物纳入 Git，后续部署使用同一份已验证的产物；服务器运行服务不需要 Node.js。新增生产发布前需先在本机重新构建并测试。
 
-家长设置页和首次或重置后的密码设置页源码在 `parent-ui/`，通过 React 复用 `admin-ui/src/components/ui/` 的 shadcn/ui Card、Input、Label、Button 和 Badge。设置按账号、孩子、任务拆分组件，沿用原家长端样式，不加载全局 Tailwind reset。日历、商城、初始引导和已有编辑弹窗继续由原脚本管理；设置内容由 React 独立挂载，退出或切换上下文前卸载。任务配置编辑器通过业务回调刷新 React 列表，不直接改写其 DOM。修改后执行 `npm run build:parent`（包含 TypeScript 检查），统一构建文件为 `web/parent-dist/parent-ui.js`，纳入 Git 并由家长端同源精确白名单提供。`npm run check:parent` 只检查类型。首次替换静态路由后需要重启本地开发服务，后续仅修改这些页面时构建并刷新即可。
-
-浏览器回归使用额外的 `lele_test_browser` 隔离库和临时端口 18887/18888，覆盖后台操作弹窗、搜索筛选、账号资料、窄屏，以及账号开通、首次改密、多孩子隔离、邀请、任务、礼品、备份权限及退出：
+家长端完整源码在 `parent-ui/`，后台在 `admin-ui/`，两端共同使用 `shared-ui/src` 的 shadcn/ui 组件和主题。家长端为单一 React 根节点，日期/重复规则/历史快照/积分/打印计算独立为 TypeScript 模块；没有旧 DOM 渲染或独立挂载桥接。通用控件修改只在共享目录进行，业务日历、孩子卡牌和打印纸张布局仍由功能模块组合。
 
 ```sh
 npm ci
+npm run build
+npm run test:domain
+npm run check:format
+```
+
+`build` 同时检查并构建两端；也可分别执行 `check:parent`、`check:admin`、`build:parent`、`build:admin`。产物为 `web/parent-dist/` 与 `web/admin-dist/`，包含内容哈希，纳入 Git，服务端运行不需要 Node.js。家长页面由 `/` 和 `/children/{id}` 提供，资源仅开放 `/parent-assets/`；后台资源仅开放 `/admin-assets/`。源码、配置和 source map 不公开。修改 Python 路由后需重启本地开发服务，纯前端修改构建后刷新即可；构建期间不要同时运行浏览器回归，以免旧页面请求已替换的分块。
+
+浏览器回归使用专用 `lele_test_unified_ui` 和临时端口 18887/18888，覆盖真实登录、账号、孩子、邀请、任务、积分商城、备份恢复、打印、并发与权限，以及后台原有操作回归：
+
+```sh
 npx playwright install chromium
 npm run test:browser
 ```
 
-浏览器脚本只会重建明确命名的本机 `lele_test_browser`，测试结束停止临时 Web 进程。截图写入已忽略的 `output/playwright/`。新版页面在 `/?selftest=1` 还保留 47 项纯业务自测，不读取业务数据库。
+脚本在重建前检查端口，且只会清理明确命名的本机测试库；结束后停止临时 Web 进程。它使用随机测试密码，截图与 JSON 结果保存在 `output/playwright/shadcn-unified/`。`scripts/browser_smoke.cjs` 保留为新测试的兼容入口。原 `/?selftest=1` 页内自测已由 `npm run test:domain` 的旧实现等值测试和请求状态测试替代。更多组件规则及本次验收见 [共享组件说明](../shared-ui/README.md) 和 [迁移验收报告](shadcn-ui-migration.md)。
 
 测试命令使用 `lele_test_accounts` 和 `lele_test`，测试数据允许清理；不清理 `lele_dev`。数据库保留运行以便后续开发，需停止时可执行：
 
@@ -107,7 +115,7 @@ npm run test:browser
 
 孩子账号改造前回滚基线为 `df70724`，原 RDS 工作版本为 `dcd0cc9`。原 RDS 稳定代码现已纳入 `main`，正式发布固定为 `local-prod-20261018-rds`。保留 `server.py`、`postgres_store.py`、`index.html` 和旧建表文件供版本对照；原启动器已改为操作独立生产目录。正式服务仍连接原 RDS，未升级为新版多孩子结构。
 
-新入口为 `accounts_app.py`，事务与授权为 `child_service.py`，孩子存储为 `child_store.py`，业务命令为 `business_operations.py`，家长前端为 `web/parent.*`，后台源码为 `admin-ui/`，后台运行产物为 `web/admin-dist/`，账号结构基线为 `db/schema_v2.sql`，当前增量升级为 `db/migrate_v2_to_v3.sql`。
+新入口为 `accounts_app.py`，事务与授权为 `child_service.py`，孩子存储为 `child_store.py`，业务命令为 `business_operations.py`，家长前端源码为 `parent-ui/`，共享组件为 `shared-ui/`，后台源码为 `admin-ui/`，后台运行产物为 `web/admin-dist/`，账号结构基线为 `db/schema_v2.sql`，当前增量升级为 `db/migrate_v2_to_v3.sql`。
 
 本次后台重构前回滚点为 `79d7757`。后台只调整界面与静态资源提供方式，不改变账号、授权或孩子业务表结构。
 

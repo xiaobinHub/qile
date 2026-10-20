@@ -1,9 +1,31 @@
 export type Child = { id: string; name: string; role: "owner" | "parent"; archived: boolean }
 export type User = { id: string; nickname: string; loginName: string }
 export type Category = { id: string; name: string; color: string; active: boolean }
-export type Preset = { id: string; title: string; categoryId: string; startTime: string; endTime: string; points: number }
-export type Context = { child: Child | null; user: User; data: { categories: Category[]; taskPresets: Preset[] } | null; updatedAt: string | null }
-export type Invitation = { id: string; childId: string; childName: string; userId: string; nickname: string; loginName: string; status: string; createdAt: string; expiresAt: string }
+export type Preset = {
+  id: string
+  title: string
+  categoryId: string
+  startTime: string
+  endTime: string
+  points: number
+}
+export type Context = {
+  child: Child | null
+  user: User
+  data: { categories: Category[]; taskPresets: Preset[] } | null
+  updatedAt: string | null
+}
+export type Invitation = {
+  id: string
+  childId: string
+  childName: string
+  userId: string
+  nickname: string
+  loginName: string
+  status: string
+  createdAt: string
+  expiresAt: string
+}
 export type Member = Omit<User, "id"> & { userId: string; role: "owner" | "parent" }
 export type Dependencies = {
   context: () => Context

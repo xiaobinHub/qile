@@ -2,7 +2,7 @@
   "extends": "../admin-ui/tsconfig.json",
   "compilerOptions": {
     "baseUrl": ".",
-    "paths": { "@/*": ["../admin-ui/src/*"] }
+    "paths": { "@/*": ["./src/*"], "@shared/*": ["../shared-ui/src/*"] }
   },
-  "include": ["src", "vite.config.mts"]
+  "include": ["src", "vite.config.mts", "../shared-ui/src"]
 }

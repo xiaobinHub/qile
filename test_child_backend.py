@@ -112,11 +112,17 @@ class ChildBackendTests(unittest.TestCase):
         self.assertEqual(unauth.get('/api/children').status_code,401)
 
     def test_admin_built_assets_are_surface_scoped(self):
-        for asset,content_type in (('parent-settings.js','javascript'),('parent-settings.css','text/css'),('parent-ui.js','javascript')):
-            served=self.a.get('/static/'+asset)
+        parent_page=self.a.get('/')
+        self.assertEqual(parent_page.status_code,200)
+        for pattern,content_type in ((r'src="(/parent-assets/[^"/]+\.js)"','javascript'),(r'href="(/parent-assets/[^"/]+\.css)"','text/css')):
+            asset=re.search(pattern,parent_page.text)
+            self.assertIsNotNone(asset,'Parent must serve locally built assets')
+            served=self.a.get(asset.group(1))
             self.assertEqual(served.status_code,200)
             self.assertIn(content_type,served.headers['content-type'])
-            self.assertEqual(self.admin.get('/static/'+asset).status_code,404)
+            self.assertEqual(self.admin.get(asset.group(1)).status_code,404)
+        for path in ('/static/parent.js','/static/parent-ui.js','/parent-assets/index.html','/parent-assets/%2e%2e%2fchild_service.py','/parent-assets/index.js.map','/parent-ui/src/App.tsx','/shared-ui/src/theme.css'):
+            self.assertEqual(self.a.get(path).status_code,404)
         response=self.admin.get('/')
         self.assertEqual(response.status_code,200)
         script=re.search(r'src="(/admin-assets/[^"/]+\.js)"',response.text)
