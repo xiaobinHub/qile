@@ -1,3 +1,4 @@
+import "./calendar.css"
 import { TaskTitle } from "./task-title"
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { ChevronLeft, ChevronRight, Plus, Printer, Check, ArrowUp, ArrowDown } from "lucide-react"
@@ -44,6 +45,12 @@ import {
   today,
 } from "../domain/calendar"
 import type { BusinessData, Child, Occurrence, Task } from "../domain/types"
+type CalendarPreferences = {
+  mode: string
+  cursor: string
+  monthPosition?: { date: string; offset: number }
+  weekPosition?: { first: string; top: number; left: number }
+}
 type Options = { date?: string; startTime?: string; endTime?: string; occurrence?: Occurrence }
 export function CalendarPage({
   data,
@@ -52,7 +59,7 @@ export function CalendarPage({
   openPrint,
   prefs,
 }: {
-  prefs: { mode: string; cursor: string }
+  prefs: CalendarPreferences
   data: BusinessData
   child: Child
   openTask: (o: Options) => void
@@ -65,10 +72,13 @@ export function CalendarPage({
     [day, setDay] = useState<string | null>(null),
     [actionError, setActionError] = useState("")
   const action = useAsync(),
-    weekRef = useRef<HTMLDivElement>(null)
+    weekRef = useRef<HTMLDivElement>(null),
+    visibleDate = useRef(prefs.cursor),
+    weekNavigation = useRef(navigation)
   useEffect(() => {
     prefs.mode = mode
     prefs.cursor = cursor
+    visibleDate.current = cursor
   }, [mode, cursor])
   const dayReturn = useRef<HTMLElement | null>(null)
   const openDay = (date: string) => {
@@ -83,10 +93,23 @@ export function CalendarPage({
     items = useMemo(() => occurrences(data, first, end), [data, first, end])
   useEffect(() => {
     if (mode === "week" && weekRef.current) {
-      const earliest = items.reduce((n, o) => Math.min(n, minutes(o.startTime)), Infinity)
-      weekRef.current.scrollTop = Number.isFinite(earliest) ? Math.max(0, earliest - 8) : 540
+      const saved = prefs.weekPosition
+      const focusDate = today() >= first && today() <= end ? today() : cursor
+      const relevant = items.filter((o) => o.date === focusDate)
+      const earliest = (relevant.length ? relevant : items).reduce(
+        (n, o) => Math.min(n, minutes(o.startTime)),
+        Infinity,
+      )
+      weekRef.current.scrollTop =
+        saved?.first === first && weekNavigation.current === navigation
+          ? saved.top
+          : Number.isFinite(earliest)
+            ? Math.max(0, earliest - 30)
+            : 540
+      weekRef.current.scrollLeft = saved?.first === first ? saved.left : 0
+      weekNavigation.current = navigation
     }
-  }, [mode, cursor])
+  }, [mode, cursor, navigation])
   useEffect(() => {
     if (day) runtime.setEditing(true)
     return () => {
@@ -96,6 +119,7 @@ export function CalendarPage({
   const category = (id: string) =>
     data.categories.find((c) => c.id === id) || { color: "#68716c", name: "已停用类型" }
   const move = (n: number) => {
+    prefs.monthPosition = undefined
     setCursor(mode === "month" ? shiftMonth(visibleMonth, n) + "-01" : addDays(cursor, n * 7))
     setNavigation((v) => v + 1)
   }
@@ -166,6 +190,7 @@ export function CalendarPage({
             id="todayBtn"
             variant="outline"
             onClick={() => {
+              prefs.monthPosition = undefined
               setCursor(today())
               setNavigation((v) => v + 1)
             }}
@@ -187,8 +212,8 @@ export function CalendarPage({
           value={mode}
           onValueChange={(value) => {
             if (value) {
-              if (value === "week" && cursor.slice(0, 7) !== visibleMonth)
-                setCursor(visibleMonth + "-01")
+              if (value === "week") setCursor(visibleDate.current)
+              else setVisibleMonth(cursor.slice(0, 7))
               setMode(value)
             }
           }}
@@ -222,20 +247,43 @@ export function CalendarPage({
           target={cursor}
           navigation={navigation}
           openDay={openDay}
-          onMonth={(month) => {
+          savedPosition={prefs.monthPosition}
+          onPosition={(position) => {
+            prefs.monthPosition = position
+          }}
+          onMonth={(month, date) => {
             setVisibleMonth(month)
-            prefs.cursor = month + "-01"
+            visibleDate.current = date
+            prefs.cursor = date
           }}
         />
       ) : (
-        <div id="weekCalendar" ref={weekRef} className="week-wrap">
+        <div
+          id="weekCalendar"
+          ref={weekRef}
+          className="week-wrap"
+          onScroll={(event) => {
+            prefs.weekPosition = {
+              first,
+              top: event.currentTarget.scrollTop,
+              left: event.currentTarget.scrollLeft,
+            }
+          }}
+        >
           <div className="week-board">
             <div className="week-head" />
             {rangeDates(first, end).map((d) => (
-              <div key={d} className={`week-head ${d === today() ? "today" : ""}`}>
+              <Button
+                key={d}
+                variant="ghost"
+                className={`week-head week-day-entry ${d === today() ? "today" : ""}`}
+                data-week-day={d}
+                aria-label={`${fmtFull(d)}，查看当天任务`}
+                onClick={() => openDay(d)}
+              >
                 <strong>{fmtDate(d)}</strong>
                 <small>周{"日一二三四五六"[parseDate(d).getDay()]}</small>
-              </div>
+              </Button>
             ))}
             <div className="time-axis">
               {Array.from({ length: 25 }, (_, hr) => (
@@ -267,11 +315,11 @@ export function CalendarPage({
                     <Button
                       key={o.occurrenceKey}
                       variant="ghost"
-                      className={`week-event ${isDone(data, o) ? "done" : ""}`}
+                      className={`week-event ${layout.end - layout.start < 24 ? "short-event" : ""} ${isDone(data, o) ? "done" : ""}`}
                       data-occ={o.occurrenceKey}
                       style={{
                         top: layout.start,
-                        height: Math.max(24, layout.end - layout.start),
+                        height: layout.end - layout.start,
                         left: Math.min(layout.depth, 3) * 9 + 3,
                         zIndex: layout.depth + 2,
                         background: category(o.categoryId).color + "22",
@@ -364,7 +412,8 @@ export function TaskEditor({
   const [task, setTask] = useState<Task>(() => initialTask(data, options)),
     [scope, setScope] = useState(""),
     [deleting, setDeleting] = useState(false),
-    [overlap, setOverlap] = useState(false)
+    [overlap, setOverlap] = useState(false),
+    [notesOpen, setNotesOpen] = useState(() => !!options.occurrence?.note)
   const action = useAsync(),
     o = options.occurrence
   const update = (next: Partial<Task>) => {
@@ -399,15 +448,54 @@ export function TaskEditor({
   const setRule = (next: Partial<NonNullable<Task["recurrence"]>>) =>
     update({ recurrence: { ...rule!, ...next } })
   return (
-    <Modal title={o ? "编辑任务" : "新建任务"} id="taskDialog" onClose={onClose}>
+    <Modal
+      title={o ? "编辑任务" : "新建任务"}
+      id="taskDialog"
+      size="complex"
+      onClose={onClose}
+      footer={
+        <>
+          {o && (
+            <Button
+              id="deleteTaskBtn"
+              type="button"
+              variant="destructive"
+              className="task-delete-action"
+              disabled={action.busy || child.archived || deleting}
+              onClick={() => setDeleting(true)}
+            >
+              删除任务
+            </Button>
+          )}
+          <Button
+            type="button"
+            variant="outline"
+            disabled={action.busy || deleting}
+            onClick={onClose}
+          >
+            取消
+          </Button>
+          <Button
+            type="submit"
+            form="taskForm"
+            disabled={action.busy || child.archived || deleting}
+          >
+            {action.busy ? "正在保存…" : "保存任务"}
+          </Button>
+        </>
+      }
+    >
       <form
         id="taskForm"
         onSubmit={(e) => {
           e.preventDefault()
-          void action.run(save)
+          if (!deleting) void action.run(save)
         }}
       >
-        <fieldset disabled={action.busy || child.archived}>
+        <fieldset
+          disabled={action.busy || child.archived || deleting}
+          className="task-editor-fields"
+        >
           <Field label="任务名称" id="taskTitle">
             {o ? (
               <Input
@@ -436,7 +524,7 @@ export function TaskEditor({
               />
             )}
           </Field>
-          <div className="form-grid">
+          <div className="form-grid task-details-grid">
             <Field label="日期" id="taskDate">
               <DatePicker
                 id="taskDate"
@@ -455,6 +543,8 @@ export function TaskEditor({
                   .map((c) => ({ value: c.id, label: c.name + (c.active ? "" : "（已停用）") }))}
               />
             </Field>
+          </div>
+          <div className="task-time-grid">
             <Field label="开始时间" id="taskStart">
               <TimePicker
                 id="taskStart"
@@ -469,26 +559,40 @@ export function TaskEditor({
                 onChange={(endTime) => update({ endTime })}
               />
             </Field>
+            <Field label="奖励积分" id="taskPoints">
+              <Input
+                id="taskPoints"
+                type="number"
+                min={0}
+                step={1}
+                value={task.points}
+                onChange={(e) => update({ points: Number(e.target.value) })}
+                required
+              />
+            </Field>
           </div>
-          <Field label="奖励积分" id="taskPoints">
-            <Input
-              id="taskPoints"
-              type="number"
-              min={0}
-              step={1}
-              value={task.points}
-              onChange={(e) => update({ points: Number(e.target.value) })}
-              required
-            />
-          </Field>
-          <Field label="备注" id="taskNote">
-            <Textarea
-              id="taskNote"
-              value={task.note}
-              onChange={(e) => update({ note: e.target.value })}
-              maxLength={5000}
-            />
-          </Field>
+          <div className="task-notes">
+            <Button
+              type="button"
+              variant="ghost"
+              className="task-notes-toggle"
+              aria-expanded={notesOpen}
+              aria-controls="taskNotePanel"
+              onClick={() => setNotesOpen((open) => !open)}
+            >
+              {notesOpen ? "收起备注" : task.note ? "查看备注" : "添加备注（选填）"}
+            </Button>
+            <div id="taskNotePanel" hidden={!notesOpen}>
+              <Field label="备注" id="taskNote">
+                <Textarea
+                  id="taskNote"
+                  value={task.note}
+                  onChange={(e) => update({ note: e.target.value })}
+                  maxLength={5000}
+                />
+              </Field>
+            </div>
+          </div>
           <div className="switch-field">
             <label htmlFor="taskRepeat">重复任务</label>
             <Switch
@@ -637,22 +741,6 @@ export function TaskEditor({
             </p>
           )}
           <ErrorText message={action.error} id="taskError" />
-          <div className="form-actions">
-            {o && (
-              <Button
-                id="deleteTaskBtn"
-                type="button"
-                variant="destructive"
-                onClick={() => setDeleting(true)}
-              >
-                删除任务
-              </Button>
-            )}
-            <Button type="button" variant="outline" onClick={onClose}>
-              取消
-            </Button>
-            <Button type="submit">{action.busy ? "正在保存…" : "保存任务"}</Button>
-          </div>
         </fieldset>
       </form>
       {deleting && <DeleteTask o={o!} onClose={() => setDeleting(false)} finish={onClose} />}
@@ -724,8 +812,19 @@ export function PresetEditor({
       id="taskPresetEditorDialog"
       title={p ? "编辑常用任务" : "添加常用任务"}
       onClose={onClose}
+      footer={
+        <>
+          <Button variant="outline" type="button" disabled={action.busy} onClick={onClose}>
+            取消
+          </Button>
+          <Button type="submit" form="taskPresetForm" disabled={action.busy}>
+            {action.busy ? "正在保存…" : "保存配置"}
+          </Button>
+        </>
+      }
     >
       <form
+        id="taskPresetForm"
         onSubmit={(e) => {
           e.preventDefault()
           void action.run(async () => {
@@ -786,12 +885,6 @@ export function PresetEditor({
             />
           </Field>
           <ErrorText message={action.error} id="taskPresetEditorError" />
-          <div className="form-actions">
-            <Button variant="outline" type="button" onClick={onClose}>
-              取消
-            </Button>
-            <Button type="submit">保存配置</Button>
-          </div>
         </fieldset>
       </form>
     </Modal>
@@ -802,8 +895,24 @@ export function CategoryEditor({ onClose }: { onClose: () => void }) {
     [color, setColor] = useState("#5b8def"),
     action = useAsync()
   return (
-    <Modal id="categoryCreateDialog" title="添加任务类型" onClose={onClose}>
+    <Modal
+      id="categoryCreateDialog"
+      title="添加任务类型"
+      size="small"
+      onClose={onClose}
+      footer={
+        <>
+          <Button type="button" variant="outline" disabled={action.busy} onClick={onClose}>
+            取消
+          </Button>
+          <Button type="submit" form="categoryCreateForm" disabled={action.busy}>
+            {action.busy ? "正在添加…" : "添加类型"}
+          </Button>
+        </>
+      }
+    >
       <form
+        id="categoryCreateForm"
         onSubmit={(e) => {
           e.preventDefault()
           void action.run(async () => {
@@ -831,9 +940,6 @@ export function CategoryEditor({ onClose }: { onClose: () => void }) {
             />
           </Field>
           <ErrorText message={action.error} />
-          <div className="form-actions">
-            <Button type="submit">添加类型</Button>
-          </div>
         </fieldset>
       </form>
     </Modal>
@@ -846,36 +952,50 @@ function MonthCalendar({
   navigation,
   openDay,
   onMonth,
+  savedPosition,
+  onPosition,
 }: {
   data: BusinessData
   target: string
   navigation: number
   openDay: (d: string) => void
-  onMonth: (m: string) => void
+  onMonth: (m: string, date: string) => void
+  savedPosition?: { date: string; offset: number }
+  onPosition: (position: { date: string; offset: number }) => void
 }) {
   const windowFor = (date: string) => ({ start: shiftMonth(date, -2), end: shiftMonth(date, 3) })
   const [windowRange, setWindowRange] = useState(() => windowFor(target)),
     scroll = useRef<HTMLDivElement>(null),
-    position = useRef<string | null>(target),
+    position = useRef<{ date: string; offset?: number } | null>(savedPosition || { date: target }),
     prepend = useRef<{ top: number; height: number } | null>(null),
-    frame = useRef(0)
+    frame = useRef(0),
+    [touch, setTouch] = useState(() => window.matchMedia("(pointer: coarse)").matches)
+  useEffect(() => {
+    const query = window.matchMedia("(pointer: coarse)")
+    const sync = () => setTouch(query.matches)
+    query.addEventListener("change", sync)
+    return () => query.removeEventListener("change", sync)
+  }, [])
   const from = startWeek(windowRange.start + "-01"),
     to = addDays(startWeek(addDays(shiftMonth(windowRange.end, 1) + "-01", -1)), 6),
     items = useMemo(() => occurrences(data, from, to), [data, from, to]),
     byDay = new Map<string, Occurrence[]>()
   for (const o of items) byDay.set(o.date, [...(byDay.get(o.date) || []), o])
   useLayoutEffect(() => {
-    position.current = target
+    position.current = savedPosition?.date === target ? savedPosition : { date: target }
     setWindowRange(windowFor(target))
   }, [target, navigation])
   useLayoutEffect(() => {
     const el = scroll.current
     if (!el) return
     if (position.current) {
-      const cell = el.querySelector<HTMLElement>(`[data-cell-day="${position.current}"]`)
+      const cell = el.querySelector<HTMLElement>(`[data-cell-day="${position.current.date}"]`)
       if (cell) {
         const top = cell.getBoundingClientRect().top - el.getBoundingClientRect().top + el.scrollTop
-        el.scrollTop = Math.max(0, top - (target === today() ? cell.offsetHeight : 45))
+        el.scrollTop = Math.max(
+          0,
+          top - (position.current.offset ?? (target === today() ? cell.offsetHeight : 45)),
+        )
         position.current = null
       }
     } else if (prepend.current) {
@@ -897,7 +1017,14 @@ function MonthCalendar({
           return rect.top <= line && rect.bottom > line
         }),
         cell = row.find((c) => c.dataset.cellDay?.endsWith("-01")) || row[0]
-      if (cell) onMonth(cell.dataset.cellDay!.slice(0, 7))
+      if (cell) {
+        const date = cell.dataset.cellDay!
+        onMonth(date.slice(0, 7), date)
+        onPosition({
+          date,
+          offset: cell.getBoundingClientRect().top - el.getBoundingClientRect().top,
+        })
+      }
       if (el.scrollTop < 360) {
         prepend.current = { top: el.scrollTop, height: el.scrollHeight }
         setWindowRange((r) => ({ ...r, start: shiftMonth(r.start, -1) }))
@@ -907,7 +1034,7 @@ function MonthCalendar({
   }
   return (
     <div
-      className="month-scroll"
+      className={`month-scroll ${touch ? "touch-month" : "pointer-month"}`}
       id="monthCalendar"
       ref={scroll}
       onScroll={onScroll}
@@ -925,7 +1052,7 @@ function MonthCalendar({
             first = date.endsWith("-01")
           return (
             <div
-              className={`month-cell ${date === today() ? "today" : ""} ${first ? "month-start" : ""}`}
+              className={`month-cell month-band-${Number(date.slice(5, 7)) % 2} ${date === today() ? "today" : ""} ${first ? "month-start" : ""}`}
               key={date}
               data-cell-day={date}
             >
@@ -939,34 +1066,49 @@ function MonthCalendar({
                 <span>{first ? `${Number(date.slice(5, 7))}月1日` : Number(date.slice(8))}</span>
                 {date === today() && <span className="today-label">今天</span>}
               </Button>
-              <div className="month-tasks">
-                {tasks.slice(0, 3).map((o) => (
-                  <Button
-                    key={o.occurrenceKey}
-                    variant="ghost"
-                    className={`month-task ${isDone(data, o) ? "done" : ""}`}
-                    data-month-occ={o.occurrenceKey}
-                    style={
-                      {
-                        "--task-color":
-                          data.categories.find((c) => c.id === o.categoryId)?.color || "#68716c",
-                      } as React.CSSProperties
-                    }
-                    onClick={() => openDay(date)}
-                    title={`${o.startTime} ${o.title}`}
-                  >
-                    <i aria-hidden />
-                    {isDone(data, o) && <Check aria-hidden />}
-                    <span>
-                      {o.startTime} {o.title}
-                    </span>
-                  </Button>
-                ))}
-                {tasks.length > 3 && (
-                  <Button variant="ghost" className="more-tasks" onClick={() => openDay(date)}>
-                    还有 {tasks.length - 3} 项
-                  </Button>
-                )}
+              <div className="month-tasks" aria-hidden={touch || undefined}>
+                {tasks.slice(0, 3).map((o) => {
+                  const props = {
+                    className: `month-task ${isDone(data, o) ? "done" : ""}`,
+                    "data-month-occ": o.occurrenceKey,
+                    style: {
+                      "--task-color":
+                        data.categories.find((c) => c.id === o.categoryId)?.color || "#68716c",
+                    } as React.CSSProperties,
+                    title: `${o.startTime} ${o.title}`,
+                  }
+                  const content = (
+                    <>
+                      <i aria-hidden />
+                      {isDone(data, o) && <Check aria-hidden />}
+                      <span>
+                        {o.startTime} {o.title}
+                      </span>
+                    </>
+                  )
+                  return touch ? (
+                    <div key={o.occurrenceKey} {...props}>
+                      {content}
+                    </div>
+                  ) : (
+                    <Button
+                      key={o.occurrenceKey}
+                      variant="ghost"
+                      {...props}
+                      onClick={() => openDay(date)}
+                    >
+                      {content}
+                    </Button>
+                  )
+                })}
+                {tasks.length > 3 &&
+                  (touch ? (
+                    <span className="more-tasks">还有 {tasks.length - 3} 项</span>
+                  ) : (
+                    <Button variant="ghost" className="more-tasks" onClick={() => openDay(date)}>
+                      还有 {tasks.length - 3} 项
+                    </Button>
+                  ))}
               </div>
             </div>
           )

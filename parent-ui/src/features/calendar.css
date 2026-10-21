@@ -1,0 +1,186 @@
+/* Calendar-owned layout: business geometry stays in calendar.tsx. */
+#taskDialog[data-modal-size="complex"] {
+  width: min(720px, calc(100vw - 32px));
+}
+#taskForm .task-editor-fields {
+  display: block;
+  min-width: 0;
+}
+#taskForm .form-field {
+  gap: 6px;
+  margin-bottom: 16px;
+  min-width: 0;
+}
+#taskForm .task-details-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 16px;
+}
+#taskForm .task-time-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) minmax(100px, 0.7fr);
+  gap: 0 16px;
+}
+#taskForm .task-notes {
+  margin: -2px 0 8px;
+}
+#taskForm .task-notes-toggle {
+  padding-inline: 0;
+  justify-content: flex-start;
+  color: var(--text-secondary);
+}
+#taskForm #taskNote {
+  min-height: 84px;
+  max-height: 200px;
+  resize: vertical;
+}
+#taskForm .switch-field {
+  border-top: 1px solid var(--border);
+  padding: 12px 0;
+  min-height: 48px;
+}
+#taskForm .recurrence-fields {
+  padding: 16px;
+  margin-bottom: 16px;
+  border: 1px solid var(--border);
+}
+#taskForm .recurrence-fields .form-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 16px;
+}
+#taskForm .recurrence-fields > .form-field:last-child {
+  margin-bottom: 0;
+}
+#taskForm .weekday-picks {
+  gap: 4px 12px;
+  margin-bottom: 12px;
+}
+#taskForm .weekday-picks legend {
+  margin-bottom: 6px;
+}
+#taskForm .weekday-picks label {
+  min-height: 36px;
+}
+#taskDialog .task-delete-action {
+  margin-right: auto;
+}
+#taskPresetForm .form-field,
+#categoryCreateForm .form-field {
+  margin-bottom: 16px;
+}
+.calendar-panel .month-cell {
+  position: relative;
+}
+.calendar-panel .month-band-0 {
+  background: color-mix(in srgb, var(--muted) 38%, var(--card));
+}
+.calendar-panel .month-start {
+  border-top: 2px solid color-mix(in srgb, var(--brand-ink) 45%, var(--border));
+}
+.calendar-panel .month-start .day-open > span:first-child {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  border-radius: 5px;
+  padding-inline: 5px;
+  background: var(--accent);
+}
+.calendar-panel .today.month-start .day-open > span:first-child {
+  background: var(--primary);
+}
+.calendar-panel .week-day-entry {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0;
+  height: 65px;
+  min-height: 44px;
+  border-radius: 0;
+  white-space: normal;
+}
+.calendar-panel .week-day-entry:hover {
+  background: var(--accent);
+}
+.calendar-panel .week-event {
+  min-height: 0;
+  min-width: 0;
+  box-sizing: border-box;
+}
+.calendar-panel .week-event.short-event {
+  padding-block: 0;
+  justify-content: center;
+}
+.calendar-panel .week-event.short-event strong {
+  font-size: 11px;
+  line-height: 1;
+  white-space: nowrap;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* One day interaction on touch devices; task rows are previews below it. */
+.calendar-panel .touch-month .month-cell {
+  min-height: 156px;
+  padding-top: 44px;
+}
+.calendar-panel .touch-month .day-open {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  min-height: 44px;
+  align-items: flex-start;
+  justify-content: flex-start;
+  padding: 8px;
+  border-radius: 0;
+}
+.calendar-panel .touch-month .day-open:focus-visible {
+  outline-offset: -3px;
+}
+.calendar-panel .touch-month .month-tasks {
+  position: relative;
+  z-index: 2;
+  pointer-events: none;
+  margin-top: 0;
+}
+.calendar-panel .touch-month .month-task {
+  display: flex;
+  align-items: center;
+  border-radius: 5px;
+  white-space: nowrap;
+  box-sizing: border-box;
+}
+.calendar-panel .touch-month .more-tasks {
+  display: block;
+  text-align: left;
+  color: var(--text-secondary);
+}
+@media (pointer: coarse) {
+  #taskForm .weekday-picks label {
+    min-height: 44px;
+  }
+  #taskForm .task-notes-toggle {
+    min-height: 44px;
+  }
+}
+@media (max-width: 600px) {
+  #taskDialog[data-modal-size="complex"] {
+    width: calc(100vw - 24px);
+  }
+  #taskForm .task-time-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  #taskForm .task-time-grid > .form-field:last-child {
+    grid-column: 1 / -1;
+  }
+  #taskForm .recurrence-fields {
+    padding: 12px;
+  }
+  .calendar-panel .touch-month .month-cell {
+    min-height: 138px;
+  }
+  .calendar-panel .touch-month .day-open {
+    padding: 7px 3px;
+    font-size: 12px;
+  }
+}
