@@ -2,7 +2,7 @@ import { useEffect, useState } from "react"
 import { AccountPassword, AccountProfile } from "./account"
 import { ChildProfile, Family, Invitations } from "./children"
 import { Backup, Categories, Presets } from "./tasks"
-import { Button, Card, CardContent, CardHeader, CardTitle, Icon, initial } from "./primitives"
+import { Button, Card, CardContent, CardHeader, CardTitle, Icon } from "./primitives"
 import type { Context, Controller } from "./types"
 
 const groups = [
@@ -73,7 +73,7 @@ function Settings({
   navigate: (key: string) => void
 }) {
   const context = controller.deps.context(),
-    { child, user } = context
+    { child } = context
   const visible = child ? groups : groups.filter((group) => group.title === "账号管理")
   const item = visible.flatMap((group) => group.items).find((item) => item[0] === selected)!
   return (
@@ -99,7 +99,8 @@ function Settings({
                 <h2>{group.title}</h2>
                 {group.items.map(([key, label, icon, id]) => (
                   <Button
-                    variant="ghost"
+                    variant="sidebar-navigation"
+                    size="menu"
                     type="button"
                     id={id}
                     data-settings-page={key}
@@ -118,13 +119,6 @@ function Settings({
               </div>
             ))}
           </nav>
-          <div className="settings-sidebar-account">
-            <span className="settings-mini-avatar">{initial(user.nickname)}</span>
-            <div>
-              <strong>{user.nickname}</strong>
-              <small>{user.loginName}</small>
-            </div>
-          </div>
         </Card>
         <Card
           className="settings-detail gap-0 py-0"

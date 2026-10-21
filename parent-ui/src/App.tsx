@@ -187,8 +187,8 @@ function Application() {
                 <Button
                   key={view}
                   data-view={view}
-                  variant="ghost"
-                  className={snapshot.view === view ? "active" : ""}
+                  variant="navigation"
+                  size="navigation"
                   aria-current={snapshot.view === view ? "page" : undefined}
                   onClick={() => runtime.setView(view as "calendar" | "store" | "settings")}
                 >

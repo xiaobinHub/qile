@@ -31,7 +31,7 @@ Use AlertDialog/AsyncConfirm for business confirmations. Use Dialog for editing 
 
 ## Preset b2BplS640
 
-The exact official preset response is retained in `preset.json`, including both light and dark CSS variables. The public application remains in its existing light mode. Both apps import one theme; do not override the preset variables in page CSS.
+The exact official preset response is retained in `preset.json`, including both light and dark CSS variables. The public application remains in its existing light mode. Both apps import the shared theme. The approved 2026-10-22 parent reference adds a single app-level semantic token mapping in `parent-ui/src/styles.css`; individual pages must not invent separate palettes.
 
 The preset selects `base-vega`. To retain the existing Radix accessibility, focus and event contracts, the project uses the official matching `radix-vega` component sources, rather than replacing the runtime with Base UI. All three `components.json` files record this adaptation. Local adjustments retain Chinese accessible labels, layer ordering, 40px controls and 44px touch targets; the calendar retains Chinese, Monday-first and local-date handling. `shadcn-variants.css` is the vendored shadcn 4.22.1 variant CSS needed by the current official sources.
 
@@ -50,3 +50,12 @@ Inter is bundled from `@fontsource-variable/inter` with `Inter-OFL.txt`; Chinese
 - 设置保持左右分栏，详情内所有输入/选择/密码控件填满所在列；操作行统一在末尾右对齐。列表删除放入带中文名称的行菜单，排序按钮保持可见。菜单先释放焦点再打开确认。
 - 月历保留七列连续滚动；触控设备整日单元只有一个交互入口，任务条仅预览；周历短事件维持真实分钟高度，通过 44px 以上日期入口查看当天详情。
 - PC 验收尺寸：1280×720、1280×900、1440×900。iPad 模拟尺寸：820×1180、1180×820、1024×1366、1366×1024。手机布局保留既有兼容，不在本轮另做专用设计。
+
+## 已确认设计稿还原（2026-10-22）
+
+- 以 `docs/ui/reference-20261022/` 的设置 V2、日历 V2、商城原稿为视觉基准。1487×1058 下设置侧栏宽 308px，主区横向边距 34px、栏间距 26px，白色顶部高 112px；iPad 按现有断点缩放，保持两栏和 44px 操作入口。
+- 家长工作区 `#EEF1F3`、内容及设置侧栏/星期表头 `#FFFFFF`、正文 `#1F2933`、普通导航 `#374151`、主操作 `#FACC15`、选中面 `#FFF0B3`。日历任务类型颜色保留业务配置。
+- `Button variant="navigation" size="navigation"` 使用 `aria-current="page"` 表示顶部选中项，呈现浅黄底和黄色下划线；`variant="sidebar-navigation" size="menu"` 表示设置导航。控件颜色、选中和焦点由共享组件负责。
+- `Badge variant="role"` 用于孩子管理员角色；普通成员使用 secondary。商城与设置不恢复先前删掉的总标题或额外入口。
+- `TabsTrigger` 未选中项使用完整的语义文字颜色，不再用文字透明度。outline 按钮使用白色内容表面，避免灰色工作区透进控件。
+- 设计稿中的任务、图片和积分是示例，不覆盖用户内容。只读视觉响应样例位于 `scripts/reference_ui_capture.cjs`；全部非 GET 请求被拒绝，样例不落库。实际业务回归仍使用独立测试数据库和真实 API。

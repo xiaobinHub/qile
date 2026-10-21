@@ -71,7 +71,7 @@
   position: relative;
 }
 .calendar-panel .month-band-0 {
-  background: color-mix(in srgb, var(--muted) 38%, var(--card));
+  background: var(--card);
 }
 .calendar-panel .month-start {
   border-top: 2px solid color-mix(in srgb, var(--brand-ink) 45%, var(--border));
@@ -182,5 +182,40 @@
   .calendar-panel .touch-month .day-open {
     padding: 7px 3px;
     font-size: 12px;
+  }
+}
+
+.calendar-panel .month-cell.weekend {
+  background: #f8fafc;
+}
+.calendar-panel .month-start {
+  border-top: 1px solid var(--border);
+}
+.calendar-panel .month-start .day-open {
+  color: var(--foreground);
+  font-weight: 400;
+}
+.calendar-panel .month-start .day-open > span:first-child {
+  background: transparent;
+  padding: 0;
+  font-size: inherit;
+}
+.calendar-panel .today.month-start .day-open > span:first-child {
+  background: var(--primary);
+}
+.calendar-panel .touch-month .day-open {
+  padding: 8px 12px;
+}
+.calendar-panel .week-head {
+  background: var(--card);
+  color: var(--foreground);
+  border-bottom-color: var(--input);
+}
+.calendar-panel .touch-month .month-task {
+  border-radius: var(--radius-control);
+}
+@media (max-width: 680px) {
+  .calendar-panel .touch-month .day-open {
+    padding: 7px 3px;
   }
 }

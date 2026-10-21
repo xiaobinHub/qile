@@ -121,7 +121,7 @@ export function StorePage({
                           disabled={child.archived || current < g.points}
                           onClick={() => setConfirm({ gift: g, kind: "redeem" })}
                         >
-                          {current >= g.points ? "兑换礼品" : "积分不足"}
+                          {current >= g.points ? "立即兑换" : "积分不足"}
                         </Button>
                       </div>
                     </div>
@@ -151,7 +151,6 @@ export function StorePage({
                   兑换记录<Badge variant="secondary">{redeemed.length}</Badge>
                 </span>
                 <span className="gift-history-state">
-                  {historyOpen ? "收起" : "展开"}
                   <ChevronDown aria-hidden className={historyOpen ? "rotate-180" : undefined} />
                 </span>
               </Button>

@@ -1,7 +1,16 @@
 import "./calendar.css"
 import { TaskTitle } from "./task-title"
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
-import { ChevronLeft, ChevronRight, Plus, Printer, Check, ArrowUp, ArrowDown } from "lucide-react"
+import {
+  ChevronLeft,
+  ChevronRight,
+  Plus,
+  Printer,
+  Circle,
+  CircleCheck,
+  ArrowUp,
+  ArrowDown,
+} from "lucide-react"
 import {
   Sheet,
   SheetContent,
@@ -1056,7 +1065,7 @@ function MonthCalendar({
             first = date.endsWith("-01")
           return (
             <div
-              className={`month-cell month-band-${Number(date.slice(5, 7)) % 2} ${date === today() ? "today" : ""} ${first ? "month-start" : ""}`}
+              className={`month-cell month-band-${Number(date.slice(5, 7)) % 2} ${parseDate(date).getDay() % 6 === 0 ? "weekend" : ""} ${date === today() ? "today" : ""} ${first ? "month-start" : ""}`}
               key={date}
               data-cell-day={date}
             >
@@ -1064,11 +1073,10 @@ function MonthCalendar({
                 variant="ghost"
                 className="day-open"
                 data-day={date}
-                aria-label={`${fmtFull(date)}，${tasks.length}项任务`}
+                aria-label={`${date === today() ? "今天，" : ""}${fmtFull(date)}，${tasks.length}项任务`}
                 onClick={() => openDay(date)}
               >
                 <span>{first ? `${Number(date.slice(5, 7))}月1日` : Number(date.slice(8))}</span>
-                {date === today() && <span className="today-label">今天</span>}
               </Button>
               <div className="month-tasks" aria-hidden={touch || undefined}>
                 {tasks.slice(0, 3).map((o) => {
@@ -1083,8 +1091,7 @@ function MonthCalendar({
                   }
                   const content = (
                     <>
-                      <i aria-hidden />
-                      {isDone(data, o) && <Check aria-hidden />}
+                      {isDone(data, o) ? <CircleCheck aria-hidden /> : <Circle aria-hidden />}
                       <span>
                         {o.startTime} {o.title}
                       </span>

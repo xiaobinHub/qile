@@ -20,6 +20,7 @@ import {
 } from "./primitives"
 import type { Child, Controller, Invitation, Member } from "./types"
 import { AsyncConfirm } from "@shared/components/async-confirm"
+import { Crown } from "lucide-react"
 
 export function ChildProfile({ controller, child }: { controller: Controller; child: Child }) {
   const { deps } = controller,
@@ -72,10 +73,11 @@ export function ChildProfile({ controller, child }: { controller: Controller; ch
         <span className="settings-large-avatar">{initial(child.name)}</span>
         <div>
           <strong>{child.name}</strong>
-          <p>
-            {owner ? "我是管理员" : "成员"}
+          <Badge variant={owner ? "role" : "secondary"} className="settings-role-badge">
+            {owner && <Crown aria-hidden="true" />}
+            {owner ? "管理员" : "成员"}
             {child.archived ? " · 已归档" : ""}
-          </p>
+          </Badge>
         </div>
       </div>
       {!editable && (
@@ -91,6 +93,7 @@ export function ChildProfile({ controller, child }: { controller: Controller; ch
             className="settings-field"
             id="renameChild"
             label="孩子昵称"
+            required
             help="用于孩子卡片、日历和导出记录，最多 40 个字。"
           >
             <Input

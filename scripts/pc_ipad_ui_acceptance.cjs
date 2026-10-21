@@ -2,8 +2,9 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const {captureReferenceUI}=require('./reference_ui_capture.cjs');
 const viewports = [
-  [1280,720,false], [1280,900,false], [1440,900,false],
+  [1280,720,false], [1280,900,false], [1440,900,false], [1487,1058,false],
   [820,1180,true], [1180,820,true], [1024,1366,true], [1366,1024,true],
 ];
 async function exercisePCIPad({ browser, dad, admin, origin, adminOrigin, firstId, out, axe, stage }) {
@@ -22,6 +23,8 @@ async function exercisePCIPad({ browser, dad, admin, origin, adminOrigin, firstI
       // These windows inspect or deliberately reject writes; all genuine regression writes remain in the main test context.
       await page.route('**/api/**', route => route.request().method()==='GET' ? route.continue() : route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({error:'隔离验收：保存暂时失败，请保留输入重试。'})}));
       await page.goto(`${origin}/children/${firstId}`);await page.locator('#calendarTitle').waitFor();
+      assert.equal(await page.locator('.weekday-row').evaluate(el=>getComputedStyle(el).backgroundColor),'rgb(255, 255, 255)','Weekday header is white, distinct from the workspace');
+      assert.equal(await page.locator('.nav [aria-current="page"]').count(),1,'Exactly one primary navigation item is selected');
       if(touch) {
         assert.equal(await page.locator('.touch-month').count(),1);
         const targets=await page.locator('.month-cell').first().locator('button').count();assert.equal(targets,1,'Touch day cell has a single entry');
@@ -57,7 +60,15 @@ async function exercisePCIPad({ browser, dad, admin, origin, adminOrigin, firstI
       const before=await page.locator('.week-wrap').evaluate(el=>{el.scrollTop=680;el.scrollLeft=100;return {top:el.scrollTop,left:el.scrollLeft}});
       await page.locator('[data-view="settings"]').click();await page.locator('#openPasswordSettings').click();
       const full=await page.locator('#passwordNew').evaluate(el=>({input:el.parentElement.getBoundingClientRect().width,form:el.closest('form').getBoundingClientRect().width}));assert.ok(Math.abs(full.input-full.form)<2,'Password field spans available content');
-      const sidebar=await page.locator('.settings-sidebar').boundingBox();assert.ok(Math.abs(sidebar.width-(width<=1000?184:224))<=2,'Settings split sidebar width');
+      const sidebar=await page.locator('.settings-sidebar').boundingBox();assert.ok(Math.abs(sidebar.width-(width<=1000?184:Math.min(308,Math.max(224,width*.2072))))<=2,'Reference settings split sidebar width');
+      assert.equal(await page.locator('.settings-sidebar').evaluate(el=>getComputedStyle(el).backgroundColor),'rgb(255, 255, 255)','Settings sidebar stays white');
+      await page.locator('#openChildNicknameSettings').click();
+      assert.equal(await page.locator('.settings-nav-item[aria-current="page"]').evaluate(el=>getComputedStyle(el).backgroundColor),'rgb(255, 240, 179)','Selected settings entry has the approved pale yellow surface');
+      if(width===1487){
+        const detail=await page.locator('.settings-detail').boundingBox();
+        assert.ok(Math.abs(detail.x-368)<2&&Math.abs(detail.y-136)<2,'Settings frame matches the approved 1487px reference');
+      }
+      await shot(page,`reference-${tag}-child-profile`);
       await shot(page,`pc-ipad-${tag}-settings`);
       await page.locator('[data-view="calendar"]').click();
       await page.waitForFunction(expected=>{const el=document.querySelector('.week-wrap');return el&&Math.abs(el.scrollTop-expected.top)<2&&Math.abs(el.scrollLeft-expected.left)<2},before);
@@ -65,6 +76,7 @@ async function exercisePCIPad({ browser, dad, admin, origin, adminOrigin, firstI
       await page.locator('[data-view="store"]').click();await page.locator('[data-store-tab="gifts"]').waitFor();
       assert.equal(await page.locator('[aria-label="商城内容"] [role="tab"]').count(),2);
       assert.equal(await page.locator('#giftManageBtn').isVisible(),true);assert.equal(await page.locator('#manualBtn').count(),0);assert.equal(await page.getByText('当前积分',{exact:true}).count(),0);
+      assert.equal(await page.locator('.gift-card').first().evaluate(el=>getComputedStyle(el).borderTopWidth),'1px','Gift cards retain their visible boundary');
       assert.equal(await page.locator('#giftHistoryToggle').getAttribute('aria-expanded'),'false');await page.locator('#giftHistoryToggle').press('Enter');assert.equal(await page.locator('#giftHistoryToggle').getAttribute('aria-expanded'),'true');await page.locator('#giftHistoryToggle').press('Space');assert.equal(await page.locator('#giftHistoryToggle').getAttribute('aria-expanded'),'false');
       if(width===820)await axe(page,'store-gifts-ipad');
       await shot(page,`pc-ipad-${tag}-store`);await page.locator('[data-store-tab="ledger"]').click();
@@ -88,6 +100,7 @@ async function exercisePCIPad({ browser, dad, admin, origin, adminOrigin, firstI
     const ac=await browser.newContext({storageState:adminState,viewport:{width,height},hasTouch:touch,isMobile:touch});
     try{const p=await ac.newPage();await p.goto(adminOrigin);await p.locator('#userRows tr[data-user-id]').first().waitFor();await shot(p,`pc-ipad-${tag}-admin`);if(width===1280&&height===900)await axe(p,'pc-ipad-admin');await p.locator('#openCreateUser').click();const rect=await p.getByRole('dialog').boundingBox();assert.ok(rect.y>=0&&rect.y+rect.height<=height);await shot(p,`pc-ipad-${tag}-admin-create`);if(width===820)await axe(p,'pc-ipad-admin-create');}finally{await ac.close();}
   }
+  await captureReferenceUI({browser,state,origin,firstId,out,axe});
   fs.writeFileSync(path.join(out,'pc-ipad-acceptance.json'),JSON.stringify({passed:true,viewports:evidence,physicalIPad:'Not tested: physical keyboard/PWA resume/system print still require device acceptance.'},null,2));
 }
 module.exports={exercisePCIPad};
