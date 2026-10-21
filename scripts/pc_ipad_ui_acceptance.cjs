@@ -62,8 +62,13 @@ async function exercisePCIPad({ browser, dad, admin, origin, adminOrigin, firstI
       await page.locator('[data-view="calendar"]').click();
       await page.waitForFunction(expected=>{const el=document.querySelector('.week-wrap');return el&&Math.abs(el.scrollTop-expected.top)<2&&Math.abs(el.scrollLeft-expected.left)<2},before);
       await shot(page,`pc-ipad-${tag}-week`);
-      await page.locator('[data-view="store"]').click();await page.locator('[data-store-tab="available"]').waitFor();
+      await page.locator('[data-view="store"]').click();await page.locator('[data-store-tab="gifts"]').waitFor();
+      assert.equal(await page.locator('[aria-label="商城内容"] [role="tab"]').count(),2);
+      assert.equal(await page.locator('#giftManageBtn').isVisible(),true);assert.equal(await page.locator('#manualBtn').count(),0);assert.equal(await page.getByText('当前积分',{exact:true}).count(),0);
+      assert.equal(await page.locator('#giftHistoryToggle').getAttribute('aria-expanded'),'false');await page.locator('#giftHistoryToggle').press('Enter');assert.equal(await page.locator('#giftHistoryToggle').getAttribute('aria-expanded'),'true');await page.locator('#giftHistoryToggle').press('Space');assert.equal(await page.locator('#giftHistoryToggle').getAttribute('aria-expanded'),'false');
+      if(width===820)await axe(page,'store-gifts-ipad');
       await shot(page,`pc-ipad-${tag}-store`);await page.locator('[data-store-tab="ledger"]').click();
+      assert.equal(await page.locator('#giftManageBtn').count(),0);assert.equal(await page.locator('#manualBtn').isVisible(),true);
       assert.equal(await page.locator('.ledger-desktop td.ledger-number').first().evaluate(el=>getComputedStyle(el).textAlign),'right');
       await shot(page,`pc-ipad-${tag}-ledger`);
       if(width===820){await axe(page,'pc-ipad-settings-ledger');}

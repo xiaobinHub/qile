@@ -1,5 +1,7 @@
 import { useState, useRef, useEffect } from "react"
-import { Gift as GiftIcon, Plus, Settings2, Coins } from "lucide-react"
+import { Gift as GiftIcon, Plus, Settings2, ChevronDown, History } from "lucide-react"
+import { Badge } from "@shared/components/ui/badge"
+import { EmptyState } from "@shared/components/empty-state"
 import { PageHeading } from "@shared/components/page-heading"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@shared/components/ui/tabs"
 import {
@@ -46,7 +48,8 @@ export function StorePage({
   child: Child
   notify: (s: string) => void
 }) {
-  const [tab, setTab] = useState("available"),
+  const [tab, setTab] = useState("gifts"),
+    [historyOpen, setHistoryOpen] = useState(false),
     [manager, setManager] = useState(false),
     [editing, setEditing] = useState<Gift | true | null>(null),
     [manual, setManual] = useState(false),
@@ -56,107 +59,144 @@ export function StorePage({
   const current = balance(data),
     available = data.gifts.filter((g) => g.status === "available"),
     redeemed = data.gifts.filter((g) => g.status === "redeemed")
-  const cards = (gifts: Gift[]) =>
-    gifts.length ? (
-      <div className="gift-grid">
-        {gifts.map((g) => (
-          <Card className="gift-card" key={g.id} data-gift={g.id}>
-            <div className="gift-image" data-has-image={Boolean(g.imageData)}>
-              {g.imageData ? <img src={g.imageData} alt={g.name} /> : <GiftIcon aria-hidden />}
-            </div>
-            <div className="gift-card-body">
-              <h2 title={g.name}>{g.name}</h2>
-              <p className="gift-cost">
-                {g.points} <small>积分</small>
-              </p>
-              {g.status === "available" ? (
-                <div className="gift-card-actions">
-                  {current < g.points && (
-                    <p className="gift-shortage">还差 {g.points - current} 积分</p>
-                  )}
-                  <Button
-                    data-redeem={g.id}
-                    variant={current < g.points ? "secondary" : "default"}
-                    disabled={child.archived || current < g.points}
-                    onClick={() => setConfirm({ gift: g, kind: "redeem" })}
-                  >
-                    {current >= g.points ? "兑换礼品" : "积分不足"}
-                  </Button>
-                </div>
-              ) : (
-                <div className="gift-card-actions">
-                  <p className="field-help">
-                    {g.redeemedAt ? new Date(g.redeemedAt).toLocaleString("zh-CN") : ""} 已兑换
-                  </p>
-                  <Button
-                    variant="outline"
-                    disabled={child.archived}
-                    data-undo-gift={g.id}
-                    onClick={() => setConfirm({ gift: g, kind: "reverse" })}
-                  >
-                    撤销兑换
-                  </Button>
-                </div>
-              )}
-            </div>
-          </Card>
-        ))}
-      </div>
-    ) : (
-      <div className="empty-state">
-        <GiftIcon />
-        <h2>{tab === "redeemed" ? "还没有兑换记录" : "暂无可兑换礼品"}</h2>
-        <p>让每一份努力，都有值得期待的奖励。</p>
-      </div>
-    )
   return (
     <section className="store-page">
-      <PageHeading
-        title="积分商城"
-        className="store-heading"
-        actions={
-          <>
-            <span className="balance-pill">
-              <Coins aria-hidden />
-              当前积分 <b>{current}</b>
-            </span>
-            <Button
-              variant="outline"
-              id="manualBtn"
-              disabled={child.archived}
-              onClick={() => setManual(true)}
-            >
-              手动调整
-            </Button>
-            <Button
-              variant="outline"
-              id="giftManageBtn"
-              disabled={child.archived}
-              onClick={() => setManager(true)}
-            >
-              <Settings2 />
-              管理礼品
-            </Button>
-          </>
-        }
-      />
+      <PageHeading title="积分商城" className="store-heading" />
       {child.archived && <p className="notice">孩子已归档，商城仅可查看。</p>}
-      <Tabs value={tab} onValueChange={setTab}>
-        <TabsList aria-label="商城内容">
-          <TabsTrigger value="available" data-store-tab="available">
-            可兑换 {available.length}
-          </TabsTrigger>
-          <TabsTrigger value="redeemed" data-store-tab="redeemed">
-            已兑换 {redeemed.length}
+      <Tabs value={tab} onValueChange={setTab} className="store-tabs">
+        <TabsList variant="line" aria-label="商城内容" className="store-tabs-list">
+          <TabsTrigger value="gifts" data-store-tab="gifts">
+            礼品兑换
           </TabsTrigger>
           <TabsTrigger value="ledger" data-store-tab="ledger">
             积分流水
           </TabsTrigger>
         </TabsList>
-        <TabsContent value="available">{cards(available)}</TabsContent>
-        <TabsContent value="redeemed">{cards(redeemed)}</TabsContent>
-        <TabsContent value="ledger">
-          <LedgerPanel data={data} />
+        <TabsContent value="gifts" className="store-tab-content">
+          <section aria-labelledby="availableGiftsTitle">
+            <header className="store-section-heading">
+              <div className="store-section-title">
+                <h2 id="availableGiftsTitle">可兑换礼品</h2>
+                <Badge variant="secondary">{available.length}</Badge>
+              </div>
+              <Button
+                variant="outline"
+                id="giftManageBtn"
+                disabled={child.archived}
+                onClick={() => setManager(true)}
+              >
+                <Settings2 data-icon="inline-start" />
+                管理礼品
+              </Button>
+            </header>
+            {available.length ? (
+              <div className="gift-grid">
+                {available.map((g) => (
+                  <Card className="gift-card" key={g.id} data-gift={g.id}>
+                    <div className="gift-image" data-has-image={Boolean(g.imageData)}>
+                      {g.imageData ? (
+                        <img src={g.imageData} alt={g.name} />
+                      ) : (
+                        <GiftIcon aria-hidden />
+                      )}
+                    </div>
+                    <div className="gift-card-body">
+                      <h3 title={g.name}>{g.name}</h3>
+                      <p className="gift-cost">
+                        {g.points} <small>积分</small>
+                      </p>
+                      <div className="gift-card-actions">
+                        {current < g.points && (
+                          <p className="gift-shortage">还差 {g.points - current} 积分</p>
+                        )}
+                        <Button
+                          data-redeem={g.id}
+                          variant={current < g.points ? "secondary" : "default"}
+                          disabled={child.archived || current < g.points}
+                          onClick={() => setConfirm({ gift: g, kind: "redeem" })}
+                        >
+                          {current >= g.points ? "兑换礼品" : "积分不足"}
+                        </Button>
+                      </div>
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            ) : (
+              <EmptyState
+                title="暂无可兑换礼品"
+                description="添加礼品，为孩子准备下一份奖励。"
+                icon={<GiftIcon aria-hidden />}
+              />
+            )}
+          </section>
+          <section className="gift-history" aria-labelledby="giftHistoryTitle">
+            <h2 id="giftHistoryTitle">
+              <Button
+                id="giftHistoryToggle"
+                variant="ghost"
+                className="gift-history-toggle"
+                aria-expanded={historyOpen}
+                aria-controls="giftHistoryList"
+                onClick={() => setHistoryOpen((open) => !open)}
+              >
+                <span className="gift-history-label">
+                  <History aria-hidden />
+                  兑换记录<Badge variant="secondary">{redeemed.length}</Badge>
+                </span>
+                <span className="gift-history-state">
+                  {historyOpen ? "收起" : "展开"}
+                  <ChevronDown aria-hidden className={historyOpen ? "rotate-180" : undefined} />
+                </span>
+              </Button>
+            </h2>
+            <div id="giftHistoryList" hidden={!historyOpen}>
+              {redeemed.length ? (
+                <ul className="gift-history-list">
+                  {redeemed.map((g) => (
+                    <li className="gift-history-row" key={g.id} data-redeemed-gift={g.id}>
+                      <div className="gift-history-image">
+                        {g.imageData ? <img src={g.imageData} alt="" /> : <GiftIcon aria-hidden />}
+                      </div>
+                      <div className="gift-history-copy">
+                        <h3>{g.name}</h3>
+                        <p>
+                          {g.redeemedAt ? (
+                            <time dateTime={g.redeemedAt}>
+                              {new Date(g.redeemedAt).toLocaleString("zh-CN")}
+                            </time>
+                          ) : (
+                            "已兑换"
+                          )}
+                        </p>
+                      </div>
+                      <p className="gift-history-cost">
+                        {g.points}
+                        <span>积分</span>
+                      </p>
+                      <Button
+                        variant="outline"
+                        disabled={child.archived}
+                        data-undo-gift={g.id}
+                        onClick={() => setConfirm({ gift: g, kind: "reverse" })}
+                      >
+                        撤销兑换
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <EmptyState
+                  title="还没有兑换记录"
+                  description="兑换礼品后，记录会显示在这里。"
+                  icon={<History aria-hidden />}
+                />
+              )}
+            </div>
+          </section>
+        </TabsContent>
+        <TabsContent value="ledger" className="store-tab-content">
+          <LedgerPanel data={data} archived={child.archived} onAdjust={() => setManual(true)} />
         </TabsContent>
       </Tabs>
       {manager && !editing && (
@@ -238,7 +278,15 @@ export function StorePage({
     </section>
   )
 }
-function LedgerPanel({ data }: { data: BusinessData }) {
+function LedgerPanel({
+  data,
+  archived,
+  onAdjust,
+}: {
+  data: BusinessData
+  archived: boolean
+  onAdjust: () => void
+}) {
   const [range, setRange] = useState<{ from?: string; to?: string }>({}),
     [kind, setKind] = useState("all"),
     [direction, setDirection] = useState("all")
@@ -255,7 +303,13 @@ function LedgerPanel({ data }: { data: BusinessData }) {
     )
     .reverse()
   return (
-    <section className="store-ledger">
+    <section className="store-ledger" aria-labelledby="ledgerOverviewTitle">
+      <header className="store-section-heading">
+        <h2 id="ledgerOverviewTitle">积分概览</h2>
+        <Button variant="outline" id="manualBtn" disabled={archived} onClick={onAdjust}>
+          手动调整
+        </Button>
+      </header>
       <div className="stats">
         <Card>
           <span>当前积分</span>
