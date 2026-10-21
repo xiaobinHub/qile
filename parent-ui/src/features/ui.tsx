@@ -85,6 +85,7 @@ export function Modal({
   id,
   footer,
   size = "default",
+  returnFocusTo,
 }: {
   title: string
   description?: string
@@ -93,6 +94,7 @@ export function Modal({
   id?: string
   footer?: ReactNode
   size?: "small" | "default" | "complex"
+  returnFocusTo?: HTMLElement | null | false
 }) {
   const returnFocus = useRef<HTMLElement | null>(document.activeElement as HTMLElement)
   useEffect(() => {
@@ -112,7 +114,8 @@ export function Modal({
         data-modal-size={size}
         onCloseAutoFocus={(event) => {
           event.preventDefault()
-          if (returnFocus.current?.isConnected) returnFocus.current.focus()
+          const target = returnFocusTo === undefined ? returnFocus.current : returnFocusTo
+          if (target && target.isConnected) target.focus({ preventScroll: true })
         }}
         onEscapeKeyDown={(e) => {
           if (runtime.getSnapshot().busy) e.preventDefault()

@@ -56,7 +56,7 @@
       "upstreamPath": "registry/radix-vega/ui/dialog.tsx",
       "upstreamSha256": "27dfce4ba4f1ccd59e6d554a3d2dfe98ab70f209b4f6287bb51bdfc3b8a65621",
       "localPath": "src/components/ui/dialog.tsx",
-      "localSha256": "5d6ce5a920760de49180ea471c6510cc07ebdcd5f50ddf2e017063dcaa8bbbaa"
+      "localSha256": "ff623f279f63176dcf4f947c25fc4528a4c4a3a53852b94b018d6d3e1429b9de"
     },
     {
       "name": "alert-dialog",
@@ -64,7 +64,7 @@
       "upstreamPath": "registry/radix-vega/ui/alert-dialog.tsx",
       "upstreamSha256": "08d08254d5cd1de94a44ab8ada8769f697c78e1691305f4e8f8b797ce46b3e6a",
       "localPath": "src/components/ui/alert-dialog.tsx",
-      "localSha256": "120c4795a7a0875357e3ba86df8a6b8833293fba981490801ea2d73880be754f"
+      "localSha256": "4426128432aa22706172e295c17647dcd06532e968863dbe78c446734bad61dd"
     },
     {
       "name": "sheet",
@@ -72,7 +72,7 @@
       "upstreamPath": "registry/radix-vega/ui/sheet.tsx",
       "upstreamSha256": "5732472e2d0168995ed3bb7df606f52f1bbe5969ead933a1ac2ebc3c7c37e490",
       "localPath": "src/components/ui/sheet.tsx",
-      "localSha256": "1ae24257d6b2dd5b1b9733471943e557d89c978dd7253064269f93901d6ce981"
+      "localSha256": "df4be64aac064a2bc95213e631b48c6ce88224001210e240216fbbb284a675e9"
     },
     {
       "name": "select",

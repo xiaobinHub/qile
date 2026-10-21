@@ -4,7 +4,15 @@ import { Button, DateRangePicker, ErrorText, Modal } from "./ui"
 import { printEngine } from "../domain/print"
 import { addDays, fmtDate, isDone, parseDate, startWeek, today } from "../domain/calendar"
 import type { BusinessData } from "../domain/types"
-export function PrintDialog({ data, onClose }: { data: BusinessData; onClose: () => void }) {
+export function PrintDialog({
+  data,
+  onClose,
+  returnFocusTo,
+}: {
+  data: BusinessData
+  onClose: () => void
+  returnFocusTo?: HTMLElement | null
+}) {
   const [range, setRange] = useState<{ from?: string; to?: string }>({
       from: startWeek(today()),
       to: addDays(startWeek(today()), 6),
@@ -72,6 +80,7 @@ export function PrintDialog({ data, onClose }: { data: BusinessData; onClose: ()
         title="打印成长计划"
         description="按自然周生成 A4 横向计划，保留任务和完成标记。"
         onClose={onClose}
+        returnFocusTo={returnFocusTo}
         footer={
           <>
             <Button variant="outline" onClick={onClose}>

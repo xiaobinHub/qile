@@ -63,7 +63,7 @@ export function CalendarPage({
   data: BusinessData
   child: Child
   openTask: (o: Options) => void
-  openPrint: () => void
+  openPrint: (trigger: HTMLButtonElement) => void
 }) {
   const [mode, setMode] = useState(prefs.mode),
     [cursor, setCursor] = useState(prefs.cursor),
@@ -227,7 +227,11 @@ export function CalendarPage({
           </ToggleGroupItem>
         </ToggleGroup>
         <div className="calendar-toolbar-actions">
-          <Button id="printBtn" variant="outline" onClick={openPrint}>
+          <Button
+            id="printBtn"
+            variant="outline"
+            onClick={(event) => openPrint(event.currentTarget)}
+          >
             <Printer />
             打印
           </Button>

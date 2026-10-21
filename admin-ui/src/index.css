@@ -26,13 +26,6 @@
   .profile-icon {
     @apply flex size-10 shrink-0 items-center justify-center rounded-lg border bg-muted/25 text-muted-foreground;
   }
-  .login-page {
-    background: radial-gradient(
-      ellipse at 50% 20%,
-      color-mix(in srgb, var(--primary) 12%, var(--background)) 0,
-      var(--background) 52%
-    );
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {

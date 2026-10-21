@@ -38,3 +38,15 @@ The preset selects `base-vega`. To retain the existing Radix accessibility, focu
 Brand backgrounds use `primary` with `primary-foreground`; text links and active labels on white use `brand-ink` to avoid yellow-on-white. `success` and `warning` describe business status, not brand color. `destructive-ink` deepens danger text on tinted surfaces without changing the preset destructive token. The unchanged preset muted text is retained as `muted-foreground`; rendered secondary copy uses `text-secondary` (90% muted text mixed with foreground), including Tailwind `text-muted-foreground`, to pass contrast on muted surfaces. The full preset radius scale remains available; Vega components intentionally use md controls and xl cards/dialogs.
 
 Inter is bundled from `@fontsource-variable/inter` with `Inter-OFL.txt`; Chinese uses the local system font fallback. Fonts and icons never require a CDN. Printing retains its separate paper CSS.
+
+## PC 与 iPad 页面组合规范（2026-10-21）
+
+- 页面标题使用 `PageHeading`（24/32px）；普通弹窗标题 20/28px，正文/字段 14/22px，说明 13/20px，元信息最低 12px。孩子卡牌标题保留独立的 28px 展示层级。
+- `StatusBadge` 提供 neutral/success/warning/danger/brand 语义；黄色用于主操作和少量选中状态，退出登录使用次要按钮。内容白底，Mist 用于表头、工具栏和辅助区；业务任务类型颜色保留。
+- 编辑弹窗用 `.ui-modal-frame` + `.ui-modal-header` + `.ui-modal-body` + `.ui-modal-footer`。标题、操作区不滚动，仅中间内容滚动。默认宽 560px，small 440px，complex 720px，四周至少 16px。普通遮罩黑色 35%；卡牌切换传 `backdrop="immersive"` 使用 72% 独立遮罩。
+- 家长端 `Modal` 通过 `footer` 与 `size` 组合；底部按钮位于表单外时必须设置 `form`，并显式维护 `disabled`，不可依赖字段集的禁用继承。所有确认使用 AlertDialog，失败保留输入和错误，取消默认聚焦。
+- 懒加载弹窗必须保留原触发按钮：`Modal.returnFocusTo` 可显式指定返回目标；临时加载框传 `false`，避免内容交接时错误恢复背景焦点。取消加载时由宿主恢复原触发点。
+- 两端入口用 `ViewportBounds` 跟随可用视口；最大高度包含安全区，缩放时不重算。它为 iPad 软键盘布局提供基础，不代替真机验收。
+- 设置保持左右分栏，详情内所有输入/选择/密码控件填满所在列；操作行统一在末尾右对齐。列表删除放入带中文名称的行菜单，排序按钮保持可见。菜单先释放焦点再打开确认。
+- 月历保留七列连续滚动；触控设备整日单元只有一个交互入口，任务条仅预览；周历短事件维持真实分钟高度，通过 44px 以上日期入口查看当天详情。
+- PC 验收尺寸：1280×720、1280×900、1440×900。iPad 模拟尺寸：820×1180、1180×820、1024×1366、1366×1024。手机布局保留既有兼容，不在本轮另做专用设计。

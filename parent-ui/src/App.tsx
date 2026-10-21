@@ -33,6 +33,7 @@ function Application() {
       work: () => Promise<unknown>
     } | null>(null)
   const calendarPrefs = useRef({ mode: "month", cursor: today() })
+  const printReturnFocus = useRef<HTMLElement | null>(null)
   const notify = (message: string) => toast({ title: message })
   useEffect(() => {
     void runtime.bootstrap()
@@ -266,7 +267,10 @@ function Application() {
                       data={data}
                       child={child}
                       openTask={(options) => setEditor({ type: "task", ...options })}
-                      openPrint={() => setEditor({ type: "print" })}
+                      openPrint={(trigger) => {
+                        printReturnFocus.current = trigger
+                        setEditor({ type: "print" })
+                      }}
                     />
                   ) : (
                     <Suspense
@@ -316,7 +320,15 @@ function Application() {
           ) : (
             <Suspense
               fallback={
-                <Modal id="printLoadingDialog" title="打印成长计划" onClose={() => setEditor(null)}>
+                <Modal
+                  id="printLoadingDialog"
+                  title="打印成长计划"
+                  returnFocusTo={false}
+                  onClose={() => {
+                    setEditor(null)
+                    requestAnimationFrame(() => printReturnFocus.current?.focus())
+                  }}
+                >
                   <div role="status" className="print-loading">
                     <Skeleton className="h-10 w-full" />
                     <Skeleton className="h-20 w-full" />
@@ -325,7 +337,11 @@ function Application() {
                 </Modal>
               }
             >
-              <PrintDialog data={data} onClose={() => setEditor(null)} />
+              <PrintDialog
+                data={data}
+                returnFocusTo={printReturnFocus.current}
+                onClose={() => setEditor(null)}
+              />
             </Suspense>
           )}
         </>

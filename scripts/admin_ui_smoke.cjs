@@ -68,7 +68,7 @@ async function exerciseAdminUI({admin, browser, port, passwords, out, createPare
   await admin.waitForFunction(id=>document.querySelector(`[data-actions="${id}"]`)===document.activeElement,extra.id);
   await openAction(extra.id,'reset');
   await admin.locator('#resetValue').fill('Q7test');
-  await admin.locator('#resetPassword button[type="submit"]').click();
+  await admin.locator('button[form="resetPassword"][type="submit"]').click();
   await admin.getByRole('dialog').waitFor({state:'hidden'});
   const context=await browser.newContext(),parent=await context.newPage();
   try {
@@ -93,8 +93,9 @@ async function exerciseAdminUI({admin, browser, port, passwords, out, createPare
   await admin.evaluate(()=>window.scrollTo(0,0));
   await admin.screenshot({path:path.join(out,'admin-accounts.png'),fullPage:true});
   await admin.setViewportSize({width:815,height:954});
-  assert.equal(await admin.locator('#usersNav').isVisible(),false);
+  assert.equal(await admin.locator('#usersNav').isVisible(),true);
   assert.equal(await admin.locator('#userRows').evaluate(el=>{const area=el.closest('table').parentElement;return area.scrollWidth<=area.clientWidth+1}),true,'Table fits medium window without horizontal scrolling');
+  await admin.setViewportSize({width:767,height:954});
   await admin.getByRole('button',{name:'打开导航',exact:true}).click();
   await admin.locator('#mobileProfileNav').click();
   await admin.getByRole('dialog').waitFor({state:'hidden'});

@@ -1,0 +1,242 @@
+{
+  "date": "2026-10-21",
+  "browser": {
+    "passed": true,
+    "scenarios": [
+      "admin bootstrap and real account creation",
+      "parent login, minimum password policy, visibility and logout cancel",
+      "isolated second child and portrait switcher",
+      "archived child is read-only with export and no obsolete restore action",
+      "settings presets, category reorder and keyboard sort",
+      "task recurrence, explicit edit scopes, completion and reversal",
+      "integrated task title suggestions, composition and keyboard",
+      "recurring future and whole-series edit scopes",
+      "continuous month scroll, Today recentering and retained week navigation",
+      "responsive 360,390,430,768,1280 and seven aligned day columns",
+      "mobile seven aligned day columns and sheet",
+      "gift image create, redeem, reversal, manual adjustment and ledger",
+      "committed response loss, read-only refresh and idempotent original retry",
+      "invitation reject, delete, accept and member permissions",
+      "backup actual download, owner restore, and print",
+      "emulated iPad PWA generates real PDF and clears stale links for partial range",
+      "PC and iPad viewport, fixed actions, cards, settings, rewards and admin acceptance",
+      "two browser revision conflict preserves editor, refresh retries",
+      "delayed read never exposes previous child after switching",
+      "delayed authenticated read cannot revive content after logout",
+      "child deletion cancel, server failure, retry, duplicate protection and member access removal",
+      "logout confirmation and authenticated content clearing",
+      "existing admin search, state, reset, mobile, profile and stale response regression"
+    ],
+    "pageErrors": [],
+    "accessibility": [
+      {
+        "name": "login",
+        "violations": 0
+      },
+      {
+        "name": "calendar",
+        "violations": 0
+      },
+      {
+        "name": "task-suggestions",
+        "violations": 0
+      },
+      {
+        "name": "task-modal",
+        "violations": 0
+      },
+      {
+        "name": "ledger-mobile",
+        "violations": 0
+      },
+      {
+        "name": "settings-family",
+        "violations": 0
+      },
+      {
+        "name": "pc-ipad-task-error",
+        "violations": 0
+      },
+      {
+        "name": "pc-ipad-child-cards",
+        "violations": 0
+      },
+      {
+        "name": "pc-ipad-category-menus",
+        "violations": 0
+      },
+      {
+        "name": "pc-ipad-admin",
+        "violations": 0
+      },
+      {
+        "name": "pc-ipad-settings-ledger",
+        "violations": 0
+      },
+      {
+        "name": "pc-ipad-admin-create",
+        "violations": 0
+      },
+      {
+        "name": "delete-confirm",
+        "violations": 0
+      },
+      {
+        "name": "delete-confirm-hover",
+        "violations": 0
+      },
+      {
+        "name": "signed-out",
+        "violations": 0
+      }
+    ]
+  },
+  "accessibility": [
+    {
+      "name": "login",
+      "violations": []
+    },
+    {
+      "name": "calendar",
+      "violations": []
+    },
+    {
+      "name": "task-suggestions",
+      "violations": []
+    },
+    {
+      "name": "task-modal",
+      "violations": []
+    },
+    {
+      "name": "ledger-mobile",
+      "violations": []
+    },
+    {
+      "name": "settings-family",
+      "violations": []
+    },
+    {
+      "name": "pc-ipad-task-error",
+      "violations": []
+    },
+    {
+      "name": "pc-ipad-child-cards",
+      "violations": []
+    },
+    {
+      "name": "pc-ipad-category-menus",
+      "violations": []
+    },
+    {
+      "name": "pc-ipad-admin",
+      "violations": []
+    },
+    {
+      "name": "pc-ipad-settings-ledger",
+      "violations": []
+    },
+    {
+      "name": "pc-ipad-admin-create",
+      "violations": []
+    },
+    {
+      "name": "delete-confirm",
+      "violations": []
+    },
+    {
+      "name": "delete-confirm-hover",
+      "violations": []
+    },
+    {
+      "name": "signed-out",
+      "violations": []
+    }
+  ],
+  "pcIPad": {
+    "passed": true,
+    "viewports": [
+      {
+        "viewport": [
+          1280,
+          720
+        ],
+        "touch": false,
+        "passed": true
+      },
+      {
+        "viewport": [
+          1280,
+          900
+        ],
+        "touch": false,
+        "passed": true
+      },
+      {
+        "viewport": [
+          1440,
+          900
+        ],
+        "touch": false,
+        "passed": true
+      },
+      {
+        "viewport": [
+          820,
+          1180
+        ],
+        "touch": true,
+        "passed": true
+      },
+      {
+        "viewport": [
+          1180,
+          820
+        ],
+        "touch": true,
+        "passed": true
+      },
+      {
+        "viewport": [
+          1024,
+          1366
+        ],
+        "touch": true,
+        "passed": true
+      },
+      {
+        "viewport": [
+          1366,
+          1024
+        ],
+        "touch": true,
+        "passed": true
+      }
+    ],
+    "physicalIPad": "Not tested: physical keyboard/PWA resume/system print still require device acceptance."
+  },
+  "ipadPDF": {
+    "passed": true,
+    "environment": "Chromium emulates an iPad PWA; no physical-device verification",
+    "header": "%PDF-1.4",
+    "bytes": 141867,
+    "pages": 1,
+    "partialRangeDisablesButton": true,
+    "staleHrefRemoved": true,
+    "staleObjectUrlRevoked": true
+  },
+  "backend": {
+    "tests": 88,
+    "passed": true
+  },
+  "domain": {
+    "legacyComparisons": 33,
+    "runtimeProtectionChecksPassed": true
+  },
+  "dataFingerprint": {
+    "tables": 15,
+    "rows": 594,
+    "sha256": "0540e917de031a1c85224d524aac684009d078480472f22b4a2220f43b2c8dfd"
+  },
+  "deployment": "local development only; no production deployment"
+}

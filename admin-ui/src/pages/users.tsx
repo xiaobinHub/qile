@@ -324,22 +324,22 @@ export function UsersPage() {
           </div>
         )}
         <div className="admin-user-table min-w-0" aria-busy={loading}>
-          <Table className="min-w-[600px]">
+          <Table className="w-full table-fixed">
             <TableHeader className="sticky top-0 z-10 bg-card">
               <TableRow className="bg-muted/30 hover:bg-muted/30">
-                <TableHead className="h-11 w-[30%] pl-5 text-xs font-normal text-muted-foreground">
+                <TableHead className="h-11 w-[34%] pl-3 text-xs font-normal text-muted-foreground sm:pl-5 xl:w-[30%]">
                   昵称
                 </TableHead>
-                <TableHead className="w-[24%] text-xs font-normal text-muted-foreground">
+                <TableHead className="w-[27%] text-xs font-normal text-muted-foreground xl:w-[24%]">
                   登录名
                 </TableHead>
-                <TableHead className="w-[20%] text-xs font-normal text-muted-foreground">
+                <TableHead className="hidden w-[18%] text-xs font-normal text-muted-foreground xl:table-cell">
                   账号类型
                 </TableHead>
                 <TableHead className="text-xs font-normal text-muted-foreground">
                   账号状态
                 </TableHead>
-                <TableHead className="w-14 pr-5">
+                <TableHead className="w-14 pr-3 pl-0">
                   <span className="sr-only">操作</span>
                 </TableHead>
               </TableRow>
@@ -348,47 +348,52 @@ export function UsersPage() {
               {!users && loading
                 ? Array.from({ length: 4 }, (_, index) => (
                     <TableRow key={index}>
-                      <TableCell className="py-4 pl-5">
+                      <TableCell className="py-4 pl-3 sm:pl-5">
                         <div className="flex items-center gap-3">
-                          <Skeleton className="size-9 rounded-full" />
-                          <Skeleton className="h-3 w-20" />
+                          <Skeleton className="hidden size-9 shrink-0 rounded-full sm:block" />
+                          <Skeleton className="h-3 w-20 max-w-full" />
                         </div>
                       </TableCell>
                       <TableCell>
-                        <Skeleton className="h-3 w-24" />
+                        <Skeleton className="h-3 w-24 max-w-full" />
+                      </TableCell>
+                      <TableCell className="hidden xl:table-cell">
+                        <Skeleton className="h-3 w-16 max-w-full" />
                       </TableCell>
                       <TableCell>
-                        <Skeleton className="h-3 w-16" />
-                      </TableCell>
-                      <TableCell>
-                        <Skeleton className="h-5 w-16 rounded-full" />
+                        <Skeleton className="h-5 w-16 max-w-full rounded-full" />
                       </TableCell>
                       <TableCell />
                     </TableRow>
                   ))
                 : visible.map((user) => (
                     <TableRow key={user.id} data-user-id={user.id} className="h-16">
-                      <TableCell className="max-w-[240px] py-2 pl-5">
+                      <TableCell className="py-2 pl-3 sm:pl-5">
                         <div className="flex min-w-0 items-center gap-3">
                           <div
-                            className={`flex size-9 shrink-0 items-center justify-center rounded-full text-[13px] font-medium ${user.role === "admin" ? "bg-primary/10 text-brand-ink" : "bg-muted text-muted-foreground"}`}
+                            className={`hidden size-9 shrink-0 sm:flex items-center justify-center rounded-full text-[13px] font-medium ${user.role === "admin" ? "bg-primary/10 text-brand-ink" : "bg-muted text-muted-foreground"}`}
                           >
                             {Array.from(user.nickname || user.loginName)[0]}
                           </div>
-                          <span
-                            className="max-w-[155px] truncate text-[13px] font-medium"
-                            title={user.nickname}
-                          >
-                            {user.nickname}
-                          </span>
+                          <div className="min-w-0">
+                            <span
+                              className="block truncate text-[13px] font-medium"
+                              title={user.nickname}
+                            >
+                              {user.nickname}
+                            </span>
+                            <span className="mt-0.5 block text-xs text-muted-foreground xl:hidden">
+                              {user.role === "admin" ? "管理员" : "成员"}
+                            </span>
+                          </div>
                         </div>
                       </TableCell>
-                      <TableCell className="max-w-[180px] text-[12px] text-muted-foreground">
+                      <TableCell className="text-xs text-muted-foreground">
                         <span className="block truncate" title={user.loginName}>
                           {user.loginName}
                         </span>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="hidden xl:table-cell">
                         <span
                           className={`inline-flex items-center gap-1.5 text-xs ${user.role === "admin" ? "text-foreground/75" : "text-muted-foreground"}`}
                         >
@@ -409,13 +414,13 @@ export function UsersPage() {
                                 ? "warning"
                                 : "neutral"
                           }
-                          className="gap-1.5"
+                          className="gap-1 px-1.5"
                         >
                           <span className="size-1.5 rounded-full bg-current opacity-80" />
                           {statusLabels[accountStatus(user)]}
                         </StatusBadge>
                       </TableCell>
-                      <TableCell className="pr-5 text-right">
+                      <TableCell className="pr-3 pl-0 text-right">
                         {user.role === "parent" ? (
                           <UserActions
                             user={user}
