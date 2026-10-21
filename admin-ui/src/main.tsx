@@ -6,6 +6,8 @@ import "@/index.css"
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <ToastProvider><App /></ToastProvider>
+    <ToastProvider>
+      <App />
+    </ToastProvider>
   </StrictMode>,
 )

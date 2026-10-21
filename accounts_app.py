@@ -105,7 +105,7 @@ def create_app(config_path, surface='parent'):
     asset_prefix = '/admin-assets/{asset}' if surface == 'admin' else '/parent-assets/{asset}'
     @app.get(asset_prefix)
     def frontend_asset(asset: str):
-        if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.-]*\.(?:js|css)', asset):
+        if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.-]*\.(?:js|css|woff2)', asset):
             raise ApiError(404, '文件不存在。')
         root = (web_root / ('admin-dist' if surface == 'admin' else 'parent-dist')).resolve()
         file = (root / asset).resolve()

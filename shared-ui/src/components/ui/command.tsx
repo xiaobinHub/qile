@@ -6,7 +6,7 @@ export function Command({ className, ...props }: ComponentProps<typeof Primitive
     <Primitive
       data-slot="command"
       className={cn(
-        "flex w-full flex-col overflow-hidden rounded-md bg-popover text-popover-foreground",
+        "flex w-full flex-col overflow-hidden rounded-2xl bg-popover text-popover-foreground",
         className,
       )}
       {...props}
@@ -32,7 +32,7 @@ export function CommandItem({ className, ...props }: ComponentProps<typeof Primi
     <Primitive.Item
       data-slot="command-item"
       className={cn(
-        "relative flex min-h-10 cursor-default flex-col items-start gap-1 rounded-sm px-3 py-2 text-sm outline-none select-none data-[selected=true]:bg-accent data-[selected=true]:text-accent-foreground data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-50",
+        "relative flex min-h-10 cursor-default flex-col items-start gap-1 rounded-xl px-3 py-2 text-sm outline-none select-none data-[selected=true]:bg-accent data-[selected=true]:text-accent-foreground data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-50",
         className,
       )}
       {...props}

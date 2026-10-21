@@ -145,7 +145,7 @@ function Settings({
             </div>
           </div>
         </Card>
-        <Card className="settings-detail" aria-labelledby="settingsDetailTitle">
+        <Card className="settings-detail" role="region" aria-labelledby="settingsDetailTitle">
           <CardHeader className="settings-detail-heading">
             <CardTitle>
               <h2 id="settingsDetailTitle" tabIndex={-1}>

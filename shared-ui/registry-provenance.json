@@ -1,0 +1,166 @@
+{
+  "preset": "b2C8W74qG",
+  "style": "radix-maia",
+  "components": [
+    {
+      "name": "button",
+      "registryUrl": "https://ui.shadcn.com/r/styles/radix-maia/button.json",
+      "upstreamPath": "registry/radix-maia/ui/button.tsx",
+      "upstreamSha256": "ae453f25a6401b8b8934990d909045a2426b5e3245cdffe700e7c8384556159d",
+      "localPath": "src/components/ui/button.tsx",
+      "localSha256": "cb8677bfc3c0f51c93f48a55f1538291eb493a5fe6dc1e8272ea3a6baa9c406f"
+    },
+    {
+      "name": "card",
+      "registryUrl": "https://ui.shadcn.com/r/styles/radix-maia/card.json",
+      "upstreamPath": "registry/radix-maia/ui/card.tsx",
+      "upstreamSha256": "12da2b59a654b2eeafb06fecfc0ddcd18af4c3f89d2c24bb36a67dbdb9807779",
+      "localPath": "src/components/ui/card.tsx",
+      "localSha256": "457fd34bcdec25bd2d6a3ce6bc6b5961b79bab41d4aafa3735354cade9c2cff8"
+    },
+    {
+      "name": "input",
+      "registryUrl": "https://ui.shadcn.com/r/styles/radix-maia/input.json",
+      "upstreamPath": "registry/radix-maia/ui/input.tsx",
+      "upstreamSha256": "8b4102e35e3f5721cacd8ffe04225a34e240e761737e62428205a7a3e50a257c",
+      "localPath": "src/components/ui/input.tsx",
+      "localSha256": "060a7ee79d57527432db0186c86bd8ac78e61dc035697df186b63267710cf0a9"
+    },
+    {
+      "name": "textarea",
+      "registryUrl": "https://ui.shadcn.com/r/styles/radix-maia/textarea.json",
+      "upstreamPath": "registry/radix-maia/ui/textarea.tsx",
+      "upstreamSha256": "6d6d804c693303795f819b7d4d3323720e0f69830f160e55e45286d6e7e4d7db",
+      "localPath": "src/components/ui/textarea.tsx",
+      "localSha256": "07b238b640c117903cf9c83784d0ec0476026e26a1b92873281b9a9c9a59806d"
+    },
+    {
+      "name": "label",
+      "registryUrl": "https://ui.shadcn.com/r/styles/radix-maia/label.json",
+      "upstreamPath": "registry/radix-maia/ui/label.tsx",
+      "upstreamSha256": "344bde38b8531615dbf8e14af3895517c24d8ef6ce56ddeda7e2e6fe4b5d0c00",
+      "localPath": "src/components/ui/label.tsx",
+      "localSha256": "aed2bf26185dcb764a8c25af710b4a38df98befd26e93a010409b73cfa29703b"
+    },
+    {
+      "name": "badge",
+      "registryUrl": "https://ui.shadcn.com/r/styles/radix-maia/badge.json",
+      "upstreamPath": "registry/radix-maia/ui/badge.tsx",
+      "upstreamSha256": "577981c7aa41607c57d21cce867970b6e98d725902c3a9510472b7e090107bf0",
+      "localPath": "src/components/ui/badge.tsx",
+      "localSha256": "53664e626f850b35dc79f803fd8d604696792998e421a9bb9647280074e36c76"
+    },
+    {
+      "name": "dialog",
+      "registryUrl": "https://ui.shadcn.com/r/styles/radix-maia/dialog.json",
+      "upstreamPath": "registry/radix-maia/ui/dialog.tsx",
+      "upstreamSha256": "ebd9c1ec515b054085f1bb444e990de3539743c99ebda0fe8276587d65de205e",
+      "localPath": "src/components/ui/dialog.tsx",
+      "localSha256": "9293b3227e5e1060e24afa1c31d14f68dc6a5845a2f49da5a4e7514b70c0227b"
+    },
+    {
+      "name": "alert-dialog",
+      "registryUrl": "https://ui.shadcn.com/r/styles/radix-maia/alert-dialog.json",
+      "upstreamPath": "registry/radix-maia/ui/alert-dialog.tsx",
+      "upstreamSha256": "5403045e084e4cd118d450b737f7e45ffd6f96ab44cfb41142fa0a63aea97adb",
+      "localPath": "src/components/ui/alert-dialog.tsx",
+      "localSha256": "21f9f56743e925840abbe48cbfc95b4bcd8f596558ffdbd748a66d86ddce2b21"
+    },
+    {
+      "name": "sheet",
+      "registryUrl": "https://ui.shadcn.com/r/styles/radix-maia/sheet.json",
+      "upstreamPath": "registry/radix-maia/ui/sheet.tsx",
+      "upstreamSha256": "410b8911abb094c062f80a9c7bcc8601b495ede618e83533702594f2fb781e8b",
+      "localPath": "src/components/ui/sheet.tsx",
+      "localSha256": "b5fd4f2a8b6c5c49ef895f01415b448efd93f1362ed1f0491396971d13b71352"
+    },
+    {
+      "name": "select",
+      "registryUrl": "https://ui.shadcn.com/r/styles/radix-maia/select.json",
+      "upstreamPath": "registry/radix-maia/ui/select.tsx",
+      "upstreamSha256": "5a1e06d87c27de8f6862e1ba12dba7677bcee98bfbb93f9173986f9633226ac4",
+      "localPath": "src/components/ui/select.tsx",
+      "localSha256": "7f7ad1312cb46d3501d8c5e57b31c347f3da41c1795e28abf1945376f9bb6d79"
+    },
+    {
+      "name": "dropdown-menu",
+      "registryUrl": "https://ui.shadcn.com/r/styles/radix-maia/dropdown-menu.json",
+      "upstreamPath": "registry/radix-maia/ui/dropdown-menu.tsx",
+      "upstreamSha256": "3f063a9b9b80b9486cd421702bc38ac82984e5c5be95b3b3bd360b86ae3c30c0",
+      "localPath": "src/components/ui/dropdown-menu.tsx",
+      "localSha256": "5ce2cea3c344ed7a60f4d669a658958cc3e7031d0e741d25890a5fbb5658dd3a"
+    },
+    {
+      "name": "separator",
+      "registryUrl": "https://ui.shadcn.com/r/styles/radix-maia/separator.json",
+      "upstreamPath": "registry/radix-maia/ui/separator.tsx",
+      "upstreamSha256": "b5b5460e5337c2d5f361c1512001615b2e5eacb38c7449a4418bb9ddb47c4bba",
+      "localPath": "src/components/ui/separator.tsx",
+      "localSha256": "fe2cf161496b3e2a6f7bcf693e12cd0c3cea6041e9f18def4c9610f185cf0383"
+    },
+    {
+      "name": "table",
+      "registryUrl": "https://ui.shadcn.com/r/styles/radix-maia/table.json",
+      "upstreamPath": "registry/radix-maia/ui/table.tsx",
+      "upstreamSha256": "ded9c3665446179ebb88257637582dfc2ff94800cc779177e45f909ef5067450",
+      "localPath": "src/components/ui/table.tsx",
+      "localSha256": "1b65922f08a071778a02a3e89feb8d8be3f1239cb2a58e6f40da5dbef2d6e67c"
+    },
+    {
+      "name": "skeleton",
+      "registryUrl": "https://ui.shadcn.com/r/styles/radix-maia/skeleton.json",
+      "upstreamPath": "registry/radix-maia/ui/skeleton.tsx",
+      "upstreamSha256": "b3c3c2b5449693bc6f4805b92012a9fee64690cabdf77b9640fb45b5f9ac0d43",
+      "localPath": "src/components/ui/skeleton.tsx",
+      "localSha256": "7a46f67d444fbbc90bd2abc66ba051fc815c8efacbe7a0250ad5067adaba3284"
+    },
+    {
+      "name": "checkbox",
+      "registryUrl": "https://ui.shadcn.com/r/styles/radix-maia/checkbox.json",
+      "upstreamPath": "registry/radix-maia/ui/checkbox.tsx",
+      "upstreamSha256": "973de66059655b1e13f1a01ad7b9ad6ce3210e394c81491628e5437f6d5c4113",
+      "localPath": "src/components/ui/checkbox.tsx",
+      "localSha256": "6b7a5524d79b28f3c6c01c88bf10654204c9709494530526a4f7048c554cefe8"
+    },
+    {
+      "name": "switch",
+      "registryUrl": "https://ui.shadcn.com/r/styles/radix-maia/switch.json",
+      "upstreamPath": "registry/radix-maia/ui/switch.tsx",
+      "upstreamSha256": "99bc6adffed180bded29035985c5b7551666fcc3f42cdb81415e4d0a0aacf298",
+      "localPath": "src/components/ui/switch.tsx",
+      "localSha256": "6ca8791a0b7592e18cd771fd3249b7936e005255b3f7558f8fc21aaa6d2487f8"
+    },
+    {
+      "name": "tabs",
+      "registryUrl": "https://ui.shadcn.com/r/styles/radix-maia/tabs.json",
+      "upstreamPath": "registry/radix-maia/ui/tabs.tsx",
+      "upstreamSha256": "89c2212866b828dd8845ac56c6f5ee570b114d6ea18337216926d166b5e58e3e",
+      "localPath": "src/components/ui/tabs.tsx",
+      "localSha256": "7de7e6c09bb45f0f0b2f13e120c4f6678d5af564dddebf8c7c63a31b8a1e9017"
+    },
+    {
+      "name": "toggle-group",
+      "registryUrl": "https://ui.shadcn.com/r/styles/radix-maia/toggle-group.json",
+      "upstreamPath": "registry/radix-maia/ui/toggle-group.tsx",
+      "upstreamSha256": "40cb6683a80ae9c741ff1b7cb9ffc752cd1606aa97cfa818711dcffff593d9c0",
+      "localPath": "src/components/ui/toggle-group.tsx",
+      "localSha256": "7598dee62e34b3c8a4963fd220ac0bf5c2354af3b2158f9363ad13c496d114ee"
+    },
+    {
+      "name": "popover",
+      "registryUrl": "https://ui.shadcn.com/r/styles/radix-maia/popover.json",
+      "upstreamPath": "registry/radix-maia/ui/popover.tsx",
+      "upstreamSha256": "d71362b6bb1278dba99a87cb0b93318a77e09aef8fb8f39fa70782d30fb6de7f",
+      "localPath": "src/components/ui/popover.tsx",
+      "localSha256": "66e36f62b8ef6c44a0539d97d753fdc3a101aab2456db02dea0012e71bd37de7"
+    },
+    {
+      "name": "toggle",
+      "registryUrl": "https://ui.shadcn.com/r/styles/radix-maia/toggle.json",
+      "upstreamPath": "registry/radix-maia/ui/toggle.tsx",
+      "upstreamSha256": "0eda08021a97acc5753dcc8ed9f0ee03a8e0ca9a4e8b1bc5d0add7756421afb9",
+      "localPath": "src/components/ui/toggle.tsx",
+      "localSha256": "063d442dc41b94542544d3bc04fb904ea455d5ef587f8520bdb578e37cdc001f"
+    }
+  ]
+}

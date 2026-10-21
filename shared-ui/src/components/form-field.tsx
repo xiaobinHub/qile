@@ -36,7 +36,7 @@ export function FormField({
       <Label id={fieldId + "-label"} htmlFor={fieldId}>
         {label}
         {required && (
-          <span aria-hidden="true" className="text-destructive">
+          <span aria-hidden="true" className="text-destructive-ink">
             {" "}
             *
           </span>
@@ -54,7 +54,7 @@ export function FormField({
         </p>
       )}
       {error && (
-        <p id={`${fieldId}-error`} role="alert" className="text-xs leading-5 text-destructive">
+        <p id={`${fieldId}-error`} role="alert" className="text-xs leading-5 text-destructive-ink">
           {error}
         </p>
       )}

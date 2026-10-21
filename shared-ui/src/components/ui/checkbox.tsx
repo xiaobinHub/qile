@@ -1,21 +1,28 @@
-import type { ComponentProps } from "react"
-import { Checkbox as Primitive } from "radix-ui"
-import { Check } from "lucide-react"
-import { cn } from "@shared/lib/utils"
+import { CheckIcon } from "lucide-react"
+;("use client")
 
-export function Checkbox({ className, ...props }: ComponentProps<typeof Primitive.Root>) {
+import * as React from "react"
+import { cn } from "@shared/lib/utils"
+import { Checkbox as CheckboxPrimitive } from "radix-ui"
+
+function Checkbox({ className, ...props }: React.ComponentProps<typeof CheckboxPrimitive.Root>) {
   return (
-    <Primitive.Root
+    <CheckboxPrimitive.Root
       data-slot="checkbox"
       className={cn(
-        "relative flex size-5 shrink-0 items-center justify-center rounded border border-input outline-none before:absolute before:-inset-3 focus-visible:ring-[3px] focus-visible:ring-ring/50 data-[state=checked]:border-primary data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive",
+        "peer relative flex size-4 shrink-0 items-center justify-center rounded-[6px] border border-input transition-shadow outline-none group-has-disabled/field:opacity-50 group-has-[:focus-visible]/field-label:ring-0 group-has-[:focus-visible]/field-label:not-data-checked:border-input after:absolute after:-inset-x-3 after:-inset-y-2 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-[3px] aria-invalid:ring-destructive/20 aria-invalid:aria-checked:border-primary dark:bg-input/30 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 data-checked:border-primary data-checked:bg-primary data-checked:text-primary-foreground group-has-[:focus-visible]/field-label:data-checked:border-primary dark:data-checked:bg-primary",
         className,
       )}
       {...props}
     >
-      <Primitive.Indicator>
-        <Check className="size-4" />
-      </Primitive.Indicator>
-    </Primitive.Root>
+      <CheckboxPrimitive.Indicator
+        data-slot="checkbox-indicator"
+        className="grid place-content-center text-current transition-none [&>svg]:size-3.5"
+      >
+        <CheckIcon />
+      </CheckboxPrimitive.Indicator>
+    </CheckboxPrimitive.Root>
   )
 }
+
+export { Checkbox }

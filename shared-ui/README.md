@@ -1,8 +1,8 @@
 # Shared UI
 
-Both React apps resolve `@shared/*` to `shared-ui/src/*`; `@/*` remains app-local. UI sources live here only. The registry-derived sources and hashes are recorded in `admin-ui/registry-provenance.json`; new additions compose the existing Radix dependency and DayPicker.
+Both React apps resolve `@shared/*` to `shared-ui/src/*`; `@/*` remains app-local. UI sources live here only. The current Maia registry sources and hashes are recorded in `shared-ui/registry-provenance.json`; the pre-Maia origin remains in `admin-ui/registry-provenance.json`. New additions compose the existing Radix dependency and DayPicker.
 
-Each app imports `shared-ui/src/theme.css` after Tailwind and includes `@source` for `shared-ui/src`. The shared theme uses `#39734F`, 14px body text, at least 12px helpers, 40px controls, and 44px targets on coarse pointers. The root font remains 16px so Tailwind spacing retains its standard dimensions. Text inputs use 16px on narrow screens to avoid automatic zoom.
+Each app imports `shared-ui/src/theme.css` after Tailwind and includes `@source` for `shared-ui/src`. The shared theme follows preset `b2C8W74qG` (Maia, Mist, yellow, locally bundled Inter Variable), with 14px body text, at least 12px helpers, 40px controls, and 44px targets on coarse pointers. The root font remains 16px so Tailwind spacing retains its standard dimensions. Text inputs use 16px on narrow screens to avoid automatic zoom.
 
 Import individual modules:
 
@@ -28,3 +28,13 @@ Use AlertDialog/AsyncConfirm for business confirmations. Use Dialog for editing 
 - 按钮使用 variant 表达普通、次要、危险操作，业务样式只控制布局，不单独绘制另一套按钮。日期不经过 UTC 序列化，时间不自动四舍五入。
 - UI 由 React 管理；允许业务组件通过 ref 测量滚动和恢复焦点，不允许用 innerHTML 或另一个 React 根节点改写当前界面。
 - 纸张排版使用专门的 A4 样式，不把屏幕主题色强加到打印内容。
+
+## Preset b2C8W74qG
+
+The exact official preset response is retained in `preset.json`, including both light and dark CSS variables. The public application remains in its existing light mode. Both apps import one theme; do not override the preset variables in page CSS.
+
+The preset selects `base-maia`. To retain the existing Radix accessibility, focus and event contracts, the project uses the official matching `radix-maia` component sources, rather than replacing the runtime with Base UI. All three `components.json` files record this adaptation. Local adjustments retain Chinese accessible labels, layer ordering, 40px controls and 44px touch targets; the calendar retains Chinese, Monday-first and local-date handling. `shadcn-variants.css` is the vendored shadcn 4.22.1 variant CSS needed by the current official sources.
+
+Brand backgrounds use `primary` with `primary-foreground`; text links and active labels on white use `brand-ink` to avoid yellow-on-white. `success` and `warning` describe business status, not brand color. `destructive-ink` deepens danger text on tinted surfaces without changing the preset destructive token. The unchanged preset muted text is retained as `muted-foreground`; rendered secondary copy uses `text-secondary` (90% muted text mixed with foreground), including Tailwind `text-muted-foreground`, to pass contrast on muted surfaces. The full preset radius scale remains available; Maia components intentionally use pill controls, 2xl cards and 4xl dialogs.
+
+Inter is bundled from `@fontsource-variable/inter` with `Inter-OFL.txt`; Chinese uses the local system font fallback. Fonts and icons never require a CDN. Printing retains its separate paper CSS.

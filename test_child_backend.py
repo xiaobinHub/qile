@@ -123,6 +123,16 @@ class ChildBackendTests(unittest.TestCase):
             self.assertEqual(self.admin.get(asset.group(1)).status_code,404)
         for path in ('/static/parent.js','/static/parent-ui.js','/parent-assets/index.html','/parent-assets/%2e%2e%2fchild_service.py','/parent-assets/index.js.map','/parent-ui/src/App.tsx','/shared-ui/src/theme.css'):
             self.assertEqual(self.a.get(path).status_code,404)
+        from pathlib import Path
+        for surface,client,other in [('parent',self.a,self.admin),('admin',self.admin,self.a)]:
+            font_files=list((Path(__file__).parent/'web'/(surface+'-dist')).glob('*.woff2'))
+            self.assertTrue(font_files,'Inter must be bundled locally')
+            font_path='/'+surface+'-assets/'+font_files[0].name
+            font=client.get(font_path)
+            self.assertEqual(font.status_code,200)
+            self.assertEqual(font.content,font_files[0].read_bytes())
+            self.assertIn('font/',font.headers['content-type'])
+            self.assertEqual(other.get(font_path).status_code,404)
         response=self.admin.get('/')
         self.assertEqual(response.status_code,200)
         script=re.search(r'src="(/admin-assets/[^"/]+\.js)"',response.text)

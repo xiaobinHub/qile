@@ -1,25 +1,84 @@
 import { useCallback, useEffect, useRef, useState } from "react"
-import { ArrowUpRight, CircleCheck, Clock3, Ellipsis, KeyRound, LockKeyhole, RefreshCw, Search, ShieldCheck, UserRound, UsersRound, UserX, X } from "lucide-react"
+import {
+  ArrowUpRight,
+  CircleCheck,
+  Clock3,
+  Ellipsis,
+  KeyRound,
+  LockKeyhole,
+  RefreshCw,
+  Search,
+  ShieldCheck,
+  UserRound,
+  UsersRound,
+  UserX,
+  X,
+} from "lucide-react"
 import { Badge } from "@shared/components/ui/badge"
 import { Button } from "@shared/components/ui/button"
 import { Card } from "@shared/components/ui/card"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@shared/components/ui/dropdown-menu"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@shared/components/ui/dropdown-menu"
 import { Input } from "@shared/components/ui/input"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@shared/components/ui/select"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@shared/components/ui/select"
 import { Skeleton } from "@shared/components/ui/skeleton"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@shared/components/ui/table"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@shared/components/ui/table"
 import { FormFeedback } from "@shared/components/form-feedback"
 import { errorMessage, isIgnoredError, useSession } from "@/lib/session"
 import { accountStatus, statusLabels, type AccountStatus, type User } from "@/lib/types"
 import { useMounted } from "@/lib/use-mounted"
-import { CreateUserDialog, ResetPasswordDialog, StatusDialog, type DialogTarget } from "@/pages/user-dialogs"
+import {
+  CreateUserDialog,
+  ResetPasswordDialog,
+  StatusDialog,
+  type DialogTarget,
+} from "@/pages/user-dialogs"
 
 function StatusBadge({ user }: { user: User }) {
   const status = accountStatus(user)
-  const appearance = { active: "bg-[#edf7f1] text-[#276844]", pending: "bg-[#fff7e6] text-[#785514]", disabled: "bg-[#f0f1f3] text-[#596571]" }
-  return <Badge variant="outline" className={`gap-1.5 rounded-md border-transparent px-2 py-1 text-xs leading-3 font-normal ${appearance[status]}`}><span className="size-1.5 rounded-full bg-current opacity-80" />{statusLabels[status]}</Badge>
+  const appearance = {
+    active: "bg-success/10 text-success",
+    pending: "bg-warning-foreground text-warning",
+    disabled: "bg-muted text-muted-foreground",
+  }
+  return (
+    <Badge
+      variant="outline"
+      className={`gap-1.5 rounded-md border-transparent px-2 py-1 text-xs leading-3 font-normal ${appearance[status]}`}
+    >
+      <span className="size-1.5 rounded-full bg-current opacity-80" />
+      {statusLabels[status]}
+    </Badge>
+  )
 }
-function UserActions({ user, onReset, onStatus }: { user: User; onReset: (target: DialogTarget) => void; onStatus: (target: DialogTarget) => void }) {
+function UserActions({
+  user,
+  onReset,
+  onStatus,
+}: {
+  user: User
+  onReset: (target: DialogTarget) => void
+  onStatus: (target: DialogTarget) => void
+}) {
   const trigger = useRef<HTMLButtonElement>(null)
   const pendingAction = useRef<"reset" | "status" | null>(null)
   const [open, setOpen] = useState(false)
@@ -41,26 +100,58 @@ function UserActions({ user, onReset, onStatus }: { user: User; onReset: (target
   }
 
   return (
-    <DropdownMenu open={open} onOpenChange={next => {
-      if (!next || !pendingAction.current) setOpen(next)
-    }}>
+    <DropdownMenu
+      open={open}
+      onOpenChange={(next) => {
+        if (!next || !pendingAction.current) setOpen(next)
+      }}
+    >
       <DropdownMenuTrigger asChild>
-        <Button ref={trigger} type="button" variant="ghost" size="icon-sm"
-          data-actions={user.id} aria-label={`管理 ${user.nickname} 的账号`}
-          disabled={Boolean(pendingAction.current)} className="text-muted-foreground">
+        <Button
+          ref={trigger}
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          data-actions={user.id}
+          aria-label={`管理 ${user.nickname} 的账号`}
+          disabled={Boolean(pendingAction.current)}
+          className="text-muted-foreground"
+        >
           <Ellipsis className="size-4" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-40" onCloseAutoFocus={handOff}>
-        <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">账号操作</DropdownMenuLabel>
-        <DropdownMenuItem data-reset={user.id} onSelect={() => { pendingAction.current = "reset" }}>
-          <KeyRound />重置密码
+        <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
+          账号操作
+        </DropdownMenuLabel>
+        <DropdownMenuItem
+          data-reset={user.id}
+          onSelect={() => {
+            pendingAction.current = "reset"
+          }}
+        >
+          <KeyRound />
+          重置密码
         </DropdownMenuItem>
         <DropdownMenuSeparator />
-        <DropdownMenuItem data-status={user.id}
+        <DropdownMenuItem
+          data-status={user.id}
           variant={user.status === "disabled" ? "default" : "destructive"}
-          onSelect={() => { pendingAction.current = "status" }}>
-          {user.status === "disabled" ? <><CircleCheck />启用账号</> : <><UserX />停用账号</>}
+          onSelect={() => {
+            pendingAction.current = "status"
+          }}
+        >
+          {user.status === "disabled" ? (
+            <>
+              <CircleCheck />
+              启用账号
+            </>
+          ) : (
+            <>
+              <UserX />
+              停用账号
+            </>
+          )}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
@@ -86,49 +177,334 @@ export function UsersPage() {
     controller.current?.abort()
     const nextController = new AbortController()
     controller.current = nextController
-    setLoading(true); setError("")
+    setLoading(true)
+    setError("")
     try {
-      const result = await request<{ users: User[] }>("admin/users", "GET", undefined, nextController.signal)
+      const result = await request<{ users: User[] }>(
+        "admin/users",
+        "GET",
+        undefined,
+        nextController.signal,
+      )
       if (mounted.current && current === sequence.current) setUsers(result.users)
     } catch (error) {
-      if (mounted.current && current === sequence.current && !isIgnoredError(error)) setError(errorMessage(error))
-    } finally { if (mounted.current && current === sequence.current) setLoading(false) }
+      if (mounted.current && current === sequence.current && !isIgnoredError(error))
+        setError(errorMessage(error))
+    } finally {
+      if (mounted.current && current === sequence.current) setLoading(false)
+    }
   }, [request, mounted])
   useEffect(() => {
     void loadUsers()
-    return () => { sequence.current += 1; controller.current?.abort() }
+    return () => {
+      sequence.current += 1
+      controller.current?.abort()
+    }
   }, [loadUsers])
-  const complete = async (message: string) => { if (mounted.current) { setFlash(message); await loadUsers() } }
+  const complete = async (message: string) => {
+    if (mounted.current) {
+      setFlash(message)
+      await loadUsers()
+    }
+  }
   const query = search.trim().toLocaleLowerCase()
-  const visible = (users || []).filter(user => (!query || [user.loginName, user.nickname].some(value => value.toLocaleLowerCase().includes(query))) && (filter === "all" || accountStatus(user) === filter))
-  const activeCount = users?.filter(user => accountStatus(user) === "active").length
-  const pendingCount = users?.filter(user => accountStatus(user) === "pending").length
-  const disabledCount = users?.filter(user => accountStatus(user) === "disabled").length
+  const visible = (users || []).filter(
+    (user) =>
+      (!query ||
+        [user.loginName, user.nickname].some((value) =>
+          value.toLocaleLowerCase().includes(query),
+        )) &&
+      (filter === "all" || accountStatus(user) === filter),
+  )
+  const activeCount = users?.filter((user) => accountStatus(user) === "active").length
+  const pendingCount = users?.filter((user) => accountStatus(user) === "pending").length
+  const disabledCount = users?.filter((user) => accountStatus(user) === "disabled").length
   const hasFilter = Boolean(query) || filter !== "all"
 
-  return <div className="space-y-6">
-    <div className="flex flex-wrap items-start justify-between gap-4"><div><h1 className="page-title">账号管理</h1><p className="page-description">开通与维护家长账号，管理账号的访问状态。</p></div><CreateUserDialog onComplete={complete} /></div>
-    <div className="overview-strip grid grid-cols-3 overflow-hidden rounded-xl border bg-card">
-      {[{ label: "全部账号", value: users?.length, icon: UsersRound, className: "text-slate-500" }, { label: "已启用", value: activeCount, icon: CircleCheck, className: "text-primary" }, { label: "待改密", value: pendingCount, icon: Clock3, className: "text-amber-600" }].map(({ label, value, icon: Icon, className }) => <div key={label} className="overview-cell min-w-0 px-4 py-5 sm:px-6"><div className="mb-3 flex items-center justify-between gap-2"><p className="text-xs text-muted-foreground">{label}</p><Icon className={`size-4 ${className}`} strokeWidth={1.7} /></div>{value === undefined ? <Skeleton className="h-8 w-12" /> : <p className="text-[28px] leading-none font-semibold tracking-tight tabular-nums">{value}<span className="ml-1.5 text-xs font-normal text-muted-foreground">个</span></p>}</div>)}
-    </div>
-    <FormFeedback message={flash} success />
-    <Card className="gap-0 overflow-hidden rounded-xl py-0 shadow-none">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b px-5 py-4"><div className="flex items-center gap-2.5"><h2 className="text-sm font-semibold">账号列表</h2>{users && <Badge variant="secondary" className="h-5 rounded-md px-1.5 text-xs font-normal tabular-nums">{users.length}</Badge>}</div><span className="text-xs text-muted-foreground">统一维护账号访问权限</span></div>
-      <div className="flex flex-wrap items-center gap-2.5 border-b bg-muted/15 px-5 py-4"><div className="relative min-w-0 flex-[1_1_210px] sm:max-w-[300px]"><Search className="pointer-events-none absolute top-2.5 left-3 size-4 text-muted-foreground" /><Input id="search" value={search} onChange={event => setSearch(event.target.value)} placeholder="搜索昵称或登录名" aria-label="搜索账号" className="h-10 bg-card pr-11 pl-9 text-xs" />{search && <Button type="button" variant="ghost" size="icon-xs" aria-label="清除搜索" className="absolute top-0 right-0 text-muted-foreground" onClick={() => setSearch("")}><X className="size-3.5" /></Button>}</div><Select value={filter} onValueChange={value => setFilter(value as AccountStatus | "all")}><SelectTrigger id="statusFilter" aria-label="筛选账号状态" className="h-10 w-[125px] bg-card text-xs"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">全部状态</SelectItem><SelectItem value="active">已启用</SelectItem><SelectItem value="pending">待改密</SelectItem><SelectItem value="disabled">已停用</SelectItem></SelectContent></Select><Button id="refreshUsers" type="button" variant="outline" disabled={loading} onClick={() => { setFlash(""); void loadUsers() }} className="ml-auto h-9 gap-2 bg-card px-3 text-xs"><RefreshCw className={`size-3.5 ${loading ? "animate-spin" : ""}`} />刷新</Button></div>
-      {error && <div className="border-b p-4"><FormFeedback id="listError" message={error} /><Button type="button" variant="link" size="sm" className="mt-1 h-7 px-0 text-xs" onClick={() => void loadUsers()}>重新加载<ArrowUpRight className="size-3" /></Button></div>}
-      <div className="min-w-0" aria-busy={loading}>
-        <Table className="min-w-[640px]"><TableHeader><TableRow className="bg-muted/30 hover:bg-muted/30"><TableHead className="h-11 w-[30%] pl-5 text-xs font-normal text-muted-foreground">昵称</TableHead><TableHead className="w-[24%] text-xs font-normal text-muted-foreground">登录名</TableHead><TableHead className="w-[20%] text-xs font-normal text-muted-foreground">账号类型</TableHead><TableHead className="text-xs font-normal text-muted-foreground">账号状态</TableHead><TableHead className="w-14 pr-5"><span className="sr-only">操作</span></TableHead></TableRow></TableHeader>
-          <TableBody id="userRows">
-            {!users && loading ? Array.from({ length: 4 }, (_, index) => <TableRow key={index}><TableCell className="py-4 pl-5"><div className="flex items-center gap-3"><Skeleton className="size-9 rounded-full" /><Skeleton className="h-3 w-20" /></div></TableCell><TableCell><Skeleton className="h-3 w-24" /></TableCell><TableCell><Skeleton className="h-3 w-16" /></TableCell><TableCell><Skeleton className="h-5 w-16 rounded-full" /></TableCell><TableCell /></TableRow>) : visible.map(user => <TableRow key={user.id} data-user-id={user.id} className="h-[76px]"><TableCell className="max-w-[240px] py-4 pl-5"><div className="flex min-w-0 items-center gap-3"><div className={`flex size-9 shrink-0 items-center justify-center rounded-full text-[13px] font-medium ${user.role === "admin" ? "bg-primary/10 text-primary" : "bg-[#edf0f4] text-[#667386]"}`}>{Array.from(user.nickname || user.loginName)[0]}</div><span className="max-w-[155px] truncate text-[13px] font-medium" title={user.nickname}>{user.nickname}</span></div></TableCell><TableCell className="max-w-[180px] text-[12px] text-muted-foreground"><span className="block truncate" title={user.loginName}>{user.loginName}</span></TableCell><TableCell><span className={`inline-flex items-center gap-1.5 text-xs ${user.role === "admin" ? "text-foreground/75" : "text-muted-foreground"}`}>{user.role === "admin" ? <ShieldCheck className="size-3.5 text-primary/70" /> : <UserRound className="size-3.5" />}{user.role === "admin" ? "平台管理员" : "家长"}</span></TableCell><TableCell><StatusBadge user={user} /></TableCell><TableCell className="pr-5 text-right">{user.role === "parent" ? <UserActions user={user} onReset={setResetTarget} onStatus={setStatusTarget} /> : <span className="inline-flex size-8 items-center justify-center text-muted-foreground/40" title="管理员账号由本人维护"><LockKeyhole className="size-3.5" aria-label="管理员账号由本人维护" /></span>}</TableCell></TableRow>)}
-          </TableBody>
-        </Table>
-        {users && !visible.length && <div role="status" className="flex min-h-[240px] flex-col items-center justify-center px-5 py-12 text-center"><div className="mb-3 flex size-11 items-center justify-center rounded-full bg-muted text-muted-foreground">{hasFilter ? <Search className="size-5" /> : <UsersRound className="size-5" />}</div><p className="text-sm font-medium">{hasFilter ? "没有匹配的账号" : "暂无账号"}</p><p className="mt-2 text-xs text-muted-foreground">{hasFilter ? "试试其他关键词，或调整账号状态。" : "点击“开通账号”，添加第一个家长账号。"}</p>{hasFilter && <Button type="button" variant="link" className="mt-2 h-8 text-xs" onClick={() => { setSearch(""); setFilter("all") }}>清除筛选</Button>}</div>}
-        {!users && !loading && error && <div className="py-14 text-center text-xs text-muted-foreground">账号列表暂时无法载入</div>}
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="page-title">账号管理</h1>
+          <p className="page-description">开通与维护家长账号，管理账号的访问状态。</p>
+        </div>
+        <CreateUserDialog onComplete={complete} />
       </div>
-      <div className="flex flex-wrap items-center justify-between gap-2 border-t bg-muted/15 px-5 py-3 text-xs text-muted-foreground"><p>{users ? `显示 ${visible.length} 个账号，共 ${users.length} 个` : "正在读取账号信息"}</p><p>{disabledCount ? `${disabledCount} 个账号已停用` : "账号状态以当前列表为准"}</p></div>
-    </Card>
-    <p className="flex items-start gap-2 px-1 text-xs leading-5 text-muted-foreground"><ShieldCheck className="mt-0.5 size-3.5 shrink-0" />新开通或重置密码的账号，首次登录时需设置自己的密码。</p>
-    {resetTarget && <ResetPasswordDialog target={resetTarget} onClose={() => setResetTarget(null)} onComplete={complete} />}
-    {statusTarget && <StatusDialog target={statusTarget} onClose={() => setStatusTarget(null)} onComplete={complete} />}
-  </div>
+      <div className="overview-strip grid grid-cols-3 overflow-hidden rounded-xl border bg-card">
+        {[
+          {
+            label: "全部账号",
+            value: users?.length,
+            icon: UsersRound,
+            className: "text-slate-500",
+          },
+          { label: "已启用", value: activeCount, icon: CircleCheck, className: "text-brand-ink" },
+          { label: "待改密", value: pendingCount, icon: Clock3, className: "text-amber-600" },
+        ].map(({ label, value, icon: Icon, className }) => (
+          <div key={label} className="overview-cell min-w-0 px-4 py-5 sm:px-6">
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <p className="text-xs text-muted-foreground">{label}</p>
+              <Icon className={`size-4 ${className}`} strokeWidth={1.7} />
+            </div>
+            {value === undefined ? (
+              <Skeleton className="h-8 w-12" />
+            ) : (
+              <p className="text-[28px] leading-none font-semibold tracking-tight tabular-nums">
+                {value}
+                <span className="ml-1.5 text-xs font-normal text-muted-foreground">个</span>
+              </p>
+            )}
+          </div>
+        ))}
+      </div>
+      <FormFeedback message={flash} success />
+      <Card className="gap-0 overflow-hidden rounded-2xl py-0 shadow-none">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b px-5 py-4">
+          <div className="flex items-center gap-2.5">
+            <h2 className="text-sm font-semibold">账号列表</h2>
+            {users && (
+              <Badge
+                variant="secondary"
+                className="h-5 rounded-md px-1.5 text-xs font-normal tabular-nums"
+              >
+                {users.length}
+              </Badge>
+            )}
+          </div>
+          <span className="text-xs text-muted-foreground">统一维护账号访问权限</span>
+        </div>
+        <div className="flex flex-wrap items-center gap-2.5 border-b bg-muted/15 px-5 py-4">
+          <div className="relative min-w-0 flex-[1_1_210px] sm:max-w-[300px]">
+            <Search className="pointer-events-none absolute top-2.5 left-3 size-4 text-muted-foreground" />
+            <Input
+              id="search"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="搜索昵称或登录名"
+              aria-label="搜索账号"
+              className="h-10 bg-card pr-11 pl-9 text-xs"
+            />
+            {search && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-xs"
+                aria-label="清除搜索"
+                className="absolute top-0 right-0 text-muted-foreground"
+                onClick={() => setSearch("")}
+              >
+                <X className="size-3.5" />
+              </Button>
+            )}
+          </div>
+          <Select
+            value={filter}
+            onValueChange={(value) => setFilter(value as AccountStatus | "all")}
+          >
+            <SelectTrigger
+              id="statusFilter"
+              aria-label="筛选账号状态"
+              className="h-10 w-[125px] bg-card text-xs"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">全部状态</SelectItem>
+              <SelectItem value="active">已启用</SelectItem>
+              <SelectItem value="pending">待改密</SelectItem>
+              <SelectItem value="disabled">已停用</SelectItem>
+            </SelectContent>
+          </Select>
+          <Button
+            id="refreshUsers"
+            type="button"
+            variant="outline"
+            disabled={loading}
+            onClick={() => {
+              setFlash("")
+              void loadUsers()
+            }}
+            className="ml-auto h-9 gap-2 bg-card px-3 text-xs"
+          >
+            <RefreshCw className={`size-3.5 ${loading ? "animate-spin" : ""}`} />
+            刷新
+          </Button>
+        </div>
+        {error && (
+          <div className="border-b p-4">
+            <FormFeedback id="listError" message={error} />
+            <Button
+              type="button"
+              variant="link"
+              size="sm"
+              className="mt-1 h-7 px-0 text-xs"
+              onClick={() => void loadUsers()}
+            >
+              重新加载
+              <ArrowUpRight className="size-3" />
+            </Button>
+          </div>
+        )}
+        <div className="min-w-0" aria-busy={loading}>
+          <Table className="min-w-[640px]">
+            <TableHeader>
+              <TableRow className="bg-muted/30 hover:bg-muted/30">
+                <TableHead className="h-11 w-[30%] pl-5 text-xs font-normal text-muted-foreground">
+                  昵称
+                </TableHead>
+                <TableHead className="w-[24%] text-xs font-normal text-muted-foreground">
+                  登录名
+                </TableHead>
+                <TableHead className="w-[20%] text-xs font-normal text-muted-foreground">
+                  账号类型
+                </TableHead>
+                <TableHead className="text-xs font-normal text-muted-foreground">
+                  账号状态
+                </TableHead>
+                <TableHead className="w-14 pr-5">
+                  <span className="sr-only">操作</span>
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody id="userRows">
+              {!users && loading
+                ? Array.from({ length: 4 }, (_, index) => (
+                    <TableRow key={index}>
+                      <TableCell className="py-4 pl-5">
+                        <div className="flex items-center gap-3">
+                          <Skeleton className="size-9 rounded-full" />
+                          <Skeleton className="h-3 w-20" />
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <Skeleton className="h-3 w-24" />
+                      </TableCell>
+                      <TableCell>
+                        <Skeleton className="h-3 w-16" />
+                      </TableCell>
+                      <TableCell>
+                        <Skeleton className="h-5 w-16 rounded-full" />
+                      </TableCell>
+                      <TableCell />
+                    </TableRow>
+                  ))
+                : visible.map((user) => (
+                    <TableRow key={user.id} data-user-id={user.id} className="h-[76px]">
+                      <TableCell className="max-w-[240px] py-4 pl-5">
+                        <div className="flex min-w-0 items-center gap-3">
+                          <div
+                            className={`flex size-9 shrink-0 items-center justify-center rounded-full text-[13px] font-medium ${user.role === "admin" ? "bg-primary/10 text-brand-ink" : "bg-muted text-muted-foreground"}`}
+                          >
+                            {Array.from(user.nickname || user.loginName)[0]}
+                          </div>
+                          <span
+                            className="max-w-[155px] truncate text-[13px] font-medium"
+                            title={user.nickname}
+                          >
+                            {user.nickname}
+                          </span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="max-w-[180px] text-[12px] text-muted-foreground">
+                        <span className="block truncate" title={user.loginName}>
+                          {user.loginName}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        <span
+                          className={`inline-flex items-center gap-1.5 text-xs ${user.role === "admin" ? "text-foreground/75" : "text-muted-foreground"}`}
+                        >
+                          {user.role === "admin" ? (
+                            <ShieldCheck className="size-3.5 text-brand-ink/70" />
+                          ) : (
+                            <UserRound className="size-3.5" />
+                          )}
+                          {user.role === "admin" ? "平台管理员" : "家长"}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        <StatusBadge user={user} />
+                      </TableCell>
+                      <TableCell className="pr-5 text-right">
+                        {user.role === "parent" ? (
+                          <UserActions
+                            user={user}
+                            onReset={setResetTarget}
+                            onStatus={setStatusTarget}
+                          />
+                        ) : (
+                          <span
+                            className="inline-flex size-8 items-center justify-center text-muted-foreground/40"
+                            title="管理员账号由本人维护"
+                          >
+                            <LockKeyhole className="size-3.5" aria-label="管理员账号由本人维护" />
+                          </span>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+            </TableBody>
+          </Table>
+          {users && !visible.length && (
+            <div
+              role="status"
+              className="flex min-h-[240px] flex-col items-center justify-center px-5 py-12 text-center"
+            >
+              <div className="mb-3 flex size-11 items-center justify-center rounded-full bg-muted text-muted-foreground">
+                {hasFilter ? <Search className="size-5" /> : <UsersRound className="size-5" />}
+              </div>
+              <p className="text-sm font-medium">{hasFilter ? "没有匹配的账号" : "暂无账号"}</p>
+              <p className="mt-2 text-xs text-muted-foreground">
+                {hasFilter
+                  ? "试试其他关键词，或调整账号状态。"
+                  : "点击“开通账号”，添加第一个家长账号。"}
+              </p>
+              {hasFilter && (
+                <Button
+                  type="button"
+                  variant="link"
+                  className="mt-2 h-8 text-xs"
+                  onClick={() => {
+                    setSearch("")
+                    setFilter("all")
+                  }}
+                >
+                  清除筛选
+                </Button>
+              )}
+            </div>
+          )}
+          {!users && !loading && error && (
+            <div className="py-14 text-center text-xs text-muted-foreground">
+              账号列表暂时无法载入
+            </div>
+          )}
+        </div>
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t bg-muted/15 px-5 py-3 text-xs text-muted-foreground">
+          <p>
+            {users ? `显示 ${visible.length} 个账号，共 ${users.length} 个` : "正在读取账号信息"}
+          </p>
+          <p>{disabledCount ? `${disabledCount} 个账号已停用` : "账号状态以当前列表为准"}</p>
+        </div>
+      </Card>
+      <p className="flex items-start gap-2 px-1 text-xs leading-5 text-muted-foreground">
+        <ShieldCheck className="mt-0.5 size-3.5 shrink-0" />
+        新开通或重置密码的账号，首次登录时需设置自己的密码。
+      </p>
+      {resetTarget && (
+        <ResetPasswordDialog
+          target={resetTarget}
+          onClose={() => setResetTarget(null)}
+          onComplete={complete}
+        />
+      )}
+      {statusTarget && (
+        <StatusDialog
+          target={statusTarget}
+          onClose={() => setStatusTarget(null)}
+          onComplete={complete}
+        />
+      )}
+    </div>
+  )
 }
