@@ -32,7 +32,10 @@ export function FormField({
       .filter(Boolean)
       .join(" ") || undefined
   return (
-    <div className={cn("space-y-2", className)}>
+    <div
+      data-invalid={error ? true : undefined}
+      className={cn("ui-field flex min-w-0 flex-col gap-2", className)}
+    >
       <Label id={fieldId + "-label"} htmlFor={fieldId}>
         {label}
         {required && (

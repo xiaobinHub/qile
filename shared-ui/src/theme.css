@@ -150,7 +150,7 @@
     min-width: 320px;
   }
   body {
-    @apply m-0 bg-background font-sans text-sm text-foreground antialiased;
+    @apply m-0 bg-background font-sans text-sm leading-[22px] text-foreground antialiased;
   }
   button,
   input,
@@ -211,5 +211,108 @@
   *::after {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
+  }
+}
+
+/* App compositions retain one control system across the two entry points. */
+.ui-page-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 24px;
+}
+.ui-page-heading h1 {
+  font-size: 24px;
+  line-height: 32px;
+  font-weight: 600;
+}
+.ui-page-heading p {
+  margin-top: 8px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 20px;
+}
+.ui-page-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.ui-field > [data-slot="label"] {
+  font-size: 14px;
+  line-height: 22px;
+}
+.ui-field [data-slot="select-trigger"] {
+  width: 100%;
+}
+.ui-overlay-immersive {
+  background: rgb(0 0 0 / 72%);
+}
+[data-slot="dialog-content"],
+[data-slot="alert-dialog-content"] {
+  top: calc(var(--app-visible-top, 0px) + var(--app-visible-height, 100dvh) / 2);
+  max-height: calc(
+    var(--app-visible-height, 100dvh) - 32px - env(safe-area-inset-top, 0px) -
+      env(safe-area-inset-bottom, 0px)
+  );
+}
+.ui-modal-frame {
+  display: flex;
+  flex-direction: column;
+  width: calc(100vw - 32px);
+  max-width: 560px;
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
+}
+.ui-modal-frame[data-modal-size="small"] {
+  max-width: 440px;
+}
+.ui-modal-frame[data-modal-size="complex"] {
+  max-width: 720px;
+}
+.ui-modal-header {
+  flex: none;
+  padding: 24px 64px 20px 24px;
+  border-bottom: 1px solid var(--border);
+}
+.ui-modal-header [data-slot="dialog-description"] {
+  font-size: 13px;
+  line-height: 20px;
+}
+.ui-modal-body {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 24px;
+  scrollbar-gutter: stable;
+}
+.ui-modal-footer {
+  flex: none;
+  display: flex;
+  justify-content: flex-end;
+  flex-direction: row;
+  gap: 12px;
+  padding: 16px 24px;
+  border-top: 1px solid var(--border);
+  background: var(--card);
+}
+.ui-modal-footer .ui-footer-message {
+  margin-right: auto;
+  align-self: center;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+.ui-modal-body .form-actions {
+  margin-bottom: 0;
+}
+@media (pointer: coarse) {
+  [data-slot="toggle-group-item"],
+  [data-slot="tabs-trigger"] {
+    min-width: 44px;
+  }
+  .ui-modal-footer {
+    padding-bottom: max(16px, env(safe-area-inset-bottom, 0px));
   }
 }

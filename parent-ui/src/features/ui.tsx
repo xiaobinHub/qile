@@ -5,6 +5,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogDescription,
+  DialogFooter,
 } from "@shared/components/ui/dialog"
 import { AsyncConfirm } from "@shared/components/async-confirm"
 import { FormField } from "@shared/components/form-field"
@@ -37,7 +38,7 @@ export function SaveResolution() {
   return (
     <div className="save-resolution">
       <p className="field-help">
-        保存结果尚未确认。刷新只读取数据；重试将沿用原操作编号，避免重复记账。
+        本次保存结果尚未确认，请先刷新核对。确认需要重试时，选择“重试原操作”可避免重复保存。
       </p>
       <div className="flex flex-wrap gap-2">
         <ResolutionButton action={action} work={runtime.refresh}>
@@ -82,12 +83,16 @@ export function Modal({
   children,
   onClose,
   id,
+  footer,
+  size = "default",
 }: {
   title: string
   description?: string
   children: ReactNode
   onClose: () => void
   id?: string
+  footer?: ReactNode
+  size?: "small" | "default" | "complex"
 }) {
   const returnFocus = useRef<HTMLElement | null>(document.activeElement as HTMLElement)
   useEffect(() => {
@@ -103,7 +108,8 @@ export function Modal({
     >
       <DialogContent
         id={id}
-        className="feature-dialog"
+        className="feature-dialog ui-modal-frame"
+        data-modal-size={size}
         onCloseAutoFocus={(event) => {
           event.preventDefault()
           if (returnFocus.current?.isConnected) returnFocus.current.focus()
@@ -115,13 +121,14 @@ export function Modal({
           if (runtime.getSnapshot().busy) e.preventDefault()
         }}
       >
-        <DialogHeader>
+        <DialogHeader className="ui-modal-header">
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription className={!description ? "sr-only" : ""}>
             {description || title + "，请填写以下内容。"}
           </DialogDescription>
         </DialogHeader>
-        {children}
+        <div className="ui-modal-body">{children}</div>
+        {footer && <DialogFooter className="ui-modal-footer">{footer}</DialogFooter>}
       </DialogContent>
     </Dialog>
   )
@@ -156,7 +163,7 @@ export function Confirm({
       title={title}
       description={description}
       confirmLabel={label}
-      destructive={/删除|撤销|退出/.test(label)}
+      destructive={/删除|撤销/.test(label)}
       onOpenChange={(open) => {
         if (!open) onClose()
       }}
@@ -246,7 +253,7 @@ export function Choice({
       onValueChange={(v) => onChange(v === "__empty" ? "" : v)}
       disabled={disabled}
     >
-      <SelectTrigger id={id} aria-label={label}>
+      <SelectTrigger id={id} aria-label={label} className="w-full">
         <SelectValue placeholder="请选择" />
       </SelectTrigger>
       <SelectContent>

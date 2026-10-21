@@ -209,23 +209,6 @@ a {
   width: 38px;
   height: 38px;
 }
-.feature-dialog {
-  max-width: 620px;
-  max-height: calc(100svh - 40px);
-  overflow-y: auto;
-  padding: 28px;
-  border-radius: var(--radius-dialog);
-}
-.feature-dialog [data-slot="dialog-header"] {
-  margin-bottom: 12px;
-}
-.feature-dialog [data-slot="dialog-title"] {
-  font-size: 22px;
-}
-.feature-dialog [data-slot="dialog-description"] {
-  font-size: 14px;
-  line-height: 1.7;
-}
 .switch-field {
   display: flex;
   align-items: center;

@@ -188,6 +188,7 @@ export function ChildSwitcher({
     >
       <DialogContent
         id="childrenDialog"
+        backdrop="immersive"
         className="child-switcher"
         onCloseAutoFocus={(event) => {
           event.preventDefault()
