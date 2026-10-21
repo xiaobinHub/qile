@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react"
 import { Gift as GiftIcon, Plus, Settings2, Coins } from "lucide-react"
+import { PageHeading } from "@shared/components/page-heading"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@shared/components/ui/tabs"
 import {
   Table,
@@ -60,24 +61,30 @@ export function StorePage({
       <div className="gift-grid">
         {gifts.map((g) => (
           <Card className="gift-card" key={g.id} data-gift={g.id}>
-            <div className="gift-image">
+            <div className="gift-image" data-has-image={Boolean(g.imageData)}>
               {g.imageData ? <img src={g.imageData} alt={g.name} /> : <GiftIcon aria-hidden />}
             </div>
             <div className="gift-card-body">
-              <h2>{g.name}</h2>
+              <h2 title={g.name}>{g.name}</h2>
               <p className="gift-cost">
                 {g.points} <small>积分</small>
               </p>
               {g.status === "available" ? (
-                <Button
-                  data-redeem={g.id}
-                  disabled={child.archived || current < g.points}
-                  onClick={() => setConfirm({ gift: g, kind: "redeem" })}
-                >
-                  {current >= g.points ? "兑换礼品" : `还差 ${g.points - current} 积分`}
-                </Button>
+                <div className="gift-card-actions">
+                  {current < g.points && (
+                    <p className="gift-shortage">还差 {g.points - current} 积分</p>
+                  )}
+                  <Button
+                    data-redeem={g.id}
+                    variant={current < g.points ? "secondary" : "default"}
+                    disabled={child.archived || current < g.points}
+                    onClick={() => setConfirm({ gift: g, kind: "redeem" })}
+                  >
+                    {current >= g.points ? "兑换礼品" : "积分不足"}
+                  </Button>
+                </div>
               ) : (
-                <>
+                <div className="gift-card-actions">
                   <p className="field-help">
                     {g.redeemedAt ? new Date(g.redeemedAt).toLocaleString("zh-CN") : ""} 已兑换
                   </p>
@@ -89,7 +96,7 @@ export function StorePage({
                   >
                     撤销兑换
                   </Button>
-                </>
+                </div>
               )}
             </div>
           </Card>
@@ -104,35 +111,35 @@ export function StorePage({
     )
   return (
     <section className="store-page">
-      <header className="store-heading">
-        <div>
-          <h1>积分商城</h1>
-          <p>积累努力，兑换小小心愿。</p>
-        </div>
-        <div className="store-heading-actions">
-          <span className="balance-pill">
-            <Coins aria-hidden />
-            当前积分 <b>{current}</b>
-          </span>
-          <Button
-            variant="outline"
-            id="manualBtn"
-            disabled={child.archived}
-            onClick={() => setManual(true)}
-          >
-            手动调整
-          </Button>
-          <Button
-            variant="outline"
-            id="giftManageBtn"
-            disabled={child.archived}
-            onClick={() => setManager(true)}
-          >
-            <Settings2 />
-            管理礼品
-          </Button>
-        </div>
-      </header>
+      <PageHeading
+        title="积分商城"
+        className="store-heading"
+        actions={
+          <>
+            <span className="balance-pill">
+              <Coins aria-hidden />
+              当前积分 <b>{current}</b>
+            </span>
+            <Button
+              variant="outline"
+              id="manualBtn"
+              disabled={child.archived}
+              onClick={() => setManual(true)}
+            >
+              手动调整
+            </Button>
+            <Button
+              variant="outline"
+              id="giftManageBtn"
+              disabled={child.archived}
+              onClick={() => setManager(true)}
+            >
+              <Settings2 />
+              管理礼品
+            </Button>
+          </>
+        }
+      />
       {child.archived && <p className="notice">孩子已归档，商城仅可查看。</p>}
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList aria-label="商城内容">
@@ -317,8 +324,8 @@ function LedgerPanel({ data }: { data: BusinessData }) {
               <TableHead>日期</TableHead>
               <TableHead>来源</TableHead>
               <TableHead>说明</TableHead>
-              <TableHead>变动</TableHead>
-              <TableHead>变动后</TableHead>
+              <TableHead className="ledger-number">变动</TableHead>
+              <TableHead className="ledger-number">变动后</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -330,11 +337,11 @@ function LedgerPanel({ data }: { data: BusinessData }) {
                   <strong>{l.source || ""}</strong>
                   <p className="field-help">{l.reason}</p>
                 </TableCell>
-                <TableCell className={l.amount >= 0 ? "positive" : "negative"}>
+                <TableCell className={`ledger-number ${l.amount >= 0 ? "positive" : "negative"}`}>
                   {l.amount > 0 ? "+" : ""}
                   {l.amount}
                 </TableCell>
-                <TableCell>{l.balanceAfter}</TableCell>
+                <TableCell className="ledger-number">{l.balanceAfter}</TableCell>
               </TableRow>
             ))}
           </TableBody>
@@ -373,8 +380,19 @@ function ManualEditor({ onClose }: { onClose: () => void }) {
       title="手动调整积分"
       description="正数增加，负数扣减；每次调整都会保留流水。"
       onClose={onClose}
+      footer={
+        <>
+          <Button variant="outline" disabled={action.busy} onClick={onClose}>
+            取消
+          </Button>
+          <Button type="submit" form="manualForm" disabled={action.busy}>
+            {action.busy ? "保存中…" : "保存调整"}
+          </Button>
+        </>
+      }
     >
       <form
+        id="manualForm"
         onSubmit={(e) => {
           e.preventDefault()
           void action.run(async () => {
@@ -415,9 +433,6 @@ function ManualEditor({ onClose }: { onClose: () => void }) {
             />
           </Field>
           <ErrorText message={action.error} id="manualError" />
-          <div className="form-actions">
-            <Button type="submit">保存调整</Button>
-          </div>
         </fieldset>
       </form>
     </Modal>
@@ -450,8 +465,28 @@ function GiftEditor({ gift, onClose }: { gift?: Gift; onClose: () => void }) {
     }
   }
   return (
-    <Modal id="giftEditorDialog" title={gift ? "编辑礼品" : "创建礼品"} onClose={onClose}>
+    <Modal
+      id="giftEditorDialog"
+      title={gift ? "编辑礼品" : "创建礼品"}
+      onClose={onClose}
+      footer={
+        <>
+          <Button variant="outline" disabled={action.busy || processing} onClick={onClose}>
+            取消
+          </Button>
+          <Button
+            id="saveGiftBtn"
+            type="submit"
+            form="giftEditorForm"
+            disabled={action.busy || processing}
+          >
+            {action.busy ? "保存中…" : "保存礼品"}
+          </Button>
+        </>
+      }
+    >
       <form
+        id="giftEditorForm"
         onSubmit={(e) => {
           e.preventDefault()
           void action.run(async () => {
@@ -527,11 +562,6 @@ function GiftEditor({ gift, onClose }: { gift?: Gift; onClose: () => void }) {
           </Field>
           <ErrorText id="giftEditorError" message={action.error} />
           {processing && <p role="status">正在处理图片…</p>}
-          <div className="form-actions">
-            <Button id="saveGiftBtn" type="submit">
-              保存礼品
-            </Button>
-          </div>
         </fieldset>
       </form>
     </Modal>

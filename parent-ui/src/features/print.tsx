@@ -72,6 +72,34 @@ export function PrintDialog({ data, onClose }: { data: BusinessData; onClose: ()
         title="打印成长计划"
         description="按自然周生成 A4 横向计划，保留任务和完成标记。"
         onClose={onClose}
+        footer={
+          <>
+            <Button variant="outline" onClick={onClose}>
+              取消
+            </Button>
+            {ipad ? (
+              valid && pdf && !busy ? (
+                <Button id="printConfirmBtn" asChild>
+                  <a href={pdf} target="_blank" rel="noopener">
+                    打开 PDF 文件
+                  </a>
+                </Button>
+              ) : (
+                <Button id="printConfirmBtn" disabled>
+                  {busy ? "正在准备 PDF…" : "打开 PDF 文件"}
+                </Button>
+              )
+            ) : (
+              <Button
+                id="printConfirmBtn"
+                disabled={!valid || printing}
+                onClick={() => setPrinting(true)}
+              >
+                {printing ? "正在打开打印…" : "打印 A4 横向计划"}
+              </Button>
+            )}
+          </>
+        }
       >
         <div className="form-field">
           <label htmlFor="printRange">打印日期范围</label>
@@ -99,28 +127,6 @@ export function PrintDialog({ data, onClose }: { data: BusinessData; onClose: ()
               : "请选择正确的起止日期。"}
         </div>
         <ErrorText id="printError" message={error} />
-        <div className="form-actions">
-          <Button variant="outline" onClick={onClose}>
-            取消
-          </Button>
-          {ipad ? (
-            valid && pdf && !busy ? (
-              <Button id="printConfirmBtn" asChild>
-                <a href={pdf} target="_blank" rel="noopener">
-                  打开 PDF 文件
-                </a>
-              </Button>
-            ) : (
-              <Button id="printConfirmBtn" disabled>
-                {busy ? "正在准备 PDF…" : "打开 PDF 文件"}
-              </Button>
-            )
-          ) : (
-            <Button id="printConfirmBtn" disabled={!valid} onClick={() => setPrinting(true)}>
-              打印 A4 横向计划
-            </Button>
-          )}
-        </div>
         {ipad && <p className="field-help">PDF 按 A4 横向排版，打开后可通过分享菜单打印。</p>}
       </Modal>
       {printing &&

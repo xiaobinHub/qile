@@ -1,6 +1,6 @@
 import { useRef, useState, type FormEvent } from "react"
-import { PasswordField } from "../password-setup"
-import { Button, Feedback, Input, Label, useAction } from "./primitives"
+import { PasswordInput, passwordPolicy } from "@shared/components/password-input"
+import { Button, Feedback, FormField, Input, useAction } from "./primitives"
 import type { Controller, User } from "./types"
 
 export function AccountProfile({ controller, user }: { controller: Controller; user: User }) {
@@ -26,21 +26,20 @@ export function AccountProfile({ controller, user }: { controller: Controller; u
   return (
     <form id="profileForm" className="settings-form" onSubmit={submit}>
       <fieldset disabled={!!action.busy}>
-        <div className="settings-field">
-          <Label htmlFor="profileLogin">登录名</Label>
-          <Input
-            id="profileLogin"
-            value={user.loginName}
-            readOnly
-            autoComplete="username"
-            aria-describedby="loginNameHelp"
-          />
-          <p id="loginNameHelp" className="settings-help">
-            登录名由管理员开通，不支持修改。
-          </p>
-        </div>
-        <div className="settings-field">
-          <Label htmlFor="profileNickname">账号昵称</Label>
+        <FormField
+          className="settings-field"
+          id="profileLogin"
+          label="登录名"
+          help="登录名由管理员开通，不支持修改。"
+        >
+          <Input id="profileLogin" value={user.loginName} readOnly autoComplete="username" />
+        </FormField>
+        <FormField
+          className="settings-field"
+          id="profileNickname"
+          label="账号昵称"
+          help="家人会通过这个昵称识别你，最多 40 个字。"
+        >
           <Input
             ref={nickname}
             id="profileNickname"
@@ -50,8 +49,7 @@ export function AccountProfile({ controller, user }: { controller: Controller; u
             autoComplete="nickname"
             placeholder="请输入你的昵称"
           />
-          <p className="settings-help">家人会通过这个昵称识别你，最多 40 个字。</p>
-        </div>
+        </FormField>
         <Feedback
           id="profileError"
           message={action.error || (success ? "账号昵称已更新。" : "")}
@@ -89,28 +87,50 @@ export function AccountPassword({ controller }: { controller: Controller }) {
   return (
     <form id="passwordForm" className="settings-form" onSubmit={submit}>
       <fieldset disabled={!!action.busy}>
-        <PasswordField
-          id="passwordCurrent"
-          label="当前密码"
-          placeholder="输入当前登录密码"
-          inputRef={current}
-          current
-        />
-        <PasswordField
-          id="passwordNew"
-          label="新密码"
-          placeholder="设置新密码"
-          inputRef={password}
-        />
-        <PasswordField
-          id="passwordRepeat"
-          label="再次输入新密码"
-          placeholder="再次输入新密码"
-          inputRef={repeat}
-        />
-        <p id="passwordHelp" className="settings-help">
-          密码至少 6 位，同时包含数字和字母
-        </p>
+        {[
+          {
+            id: "passwordCurrent",
+            label: "当前密码",
+            placeholder: "输入当前登录密码",
+            ref: current,
+            current: true,
+          },
+          {
+            id: "passwordNew",
+            label: "新密码",
+            placeholder: "设置新密码",
+            ref: password,
+            current: false,
+          },
+          {
+            id: "passwordRepeat",
+            label: "再次输入新密码",
+            placeholder: "再次输入新密码",
+            ref: repeat,
+            current: false,
+          },
+        ].map((field) => (
+          <FormField
+            key={field.id}
+            className="settings-field"
+            id={field.id}
+            label={field.label}
+            help={field.id === "passwordNew" ? "密码至少 6 位，同时包含数字和字母" : undefined}
+          >
+            <PasswordInput
+              ref={field.ref}
+              id={field.id}
+              name={field.id}
+              required
+              minLength={field.current ? undefined : passwordPolicy.minLength}
+              maxLength={passwordPolicy.maxLength}
+              pattern={field.current ? undefined : passwordPolicy.pattern}
+              title={field.current ? undefined : passwordPolicy.title}
+              autoComplete={field.current ? "current-password" : "new-password"}
+              placeholder={field.placeholder}
+            />
+          </FormField>
+        ))}
         <Feedback id="profileError" message={action.error} />
         <div className="settings-form-footer">
           <span>修改后，所有已登录页面需要重新登录。</span>

@@ -1,5 +1,15 @@
 import { useLayoutEffect, useRef, useState, type CSSProperties } from "react"
-import { Button, Card, Feedback, Icon, Input, Notice, date, useAction } from "./primitives"
+import {
+  Button,
+  Empty,
+  Feedback,
+  Icon,
+  Input,
+  Notice,
+  RowMenu,
+  date,
+  useAction,
+} from "./primitives"
 import { ArrowDown, ArrowUp, Clock3, GripVertical, Plus } from "lucide-react"
 import type { Child, Context, Controller } from "./types"
 
@@ -24,7 +34,7 @@ export function Presets({ controller, context }: { controller: Controller; conte
           添加常用任务
         </Button>
       </div>
-      <div id="settingsTaskPresetsList" className="task-preset-cards">
+      <div id="settingsTaskPresetsList" className="settings-config-list">
         {taskPresets.length ? (
           taskPresets.map((preset) => {
             const category = categories.find((item) => item.id === preset.categoryId)
@@ -34,7 +44,7 @@ export function Presets({ controller, context }: { controller: Controller; conte
                 : `${category.name}（已停用）`
               : "未配置类型"
             return (
-              <Card className="task-preset-card" key={preset.id}>
+              <div className="task-preset-card settings-config-row" key={preset.id}>
                 <div className="task-preset-card-main">
                   <strong>{preset.title}</strong>
                   <div className="task-preset-card-meta">
@@ -70,22 +80,30 @@ export function Presets({ controller, context }: { controller: Controller; conte
                     >
                       编辑
                     </Button>
-                    <Button
-                      variant="destructive"
-                      type="button"
-                      data-preset-delete={preset.id}
+                    <RowMenu
+                      label={`管理常用任务「${preset.title}」`}
+                      selector={{ "data-preset-menu": preset.id }}
                       disabled={archived || !!action.busy}
-                      onClick={() => action.run(preset.id, () => deps.deletePreset(preset.id))}
-                    >
-                      删除
-                    </Button>
+                      actions={[
+                        {
+                          label: "删除常用任务",
+                          destructive: true,
+                          selector: { "data-preset-delete": preset.id },
+                          onSelect: () => action.run(preset.id, () => deps.deletePreset(preset.id)),
+                        },
+                      ]}
+                    />
                   </div>
                 </div>
-              </Card>
+              </div>
             )
           })
         ) : (
-          <div className="empty">暂无常用任务，点击右上角“添加”开始配置。</div>
+          <Empty
+            type="task"
+            title="暂无常用任务"
+            copy="添加经常安排的任务，下次创建时可以直接选用。"
+          />
         )}
       </div>
       <Feedback id="settingsTaskPresetsError" message={action.error} />
@@ -142,10 +160,10 @@ export function Categories({ controller, context }: { controller: Controller; co
           添加类型
         </Button>
       </div>
-      <div id="settingsCategoryList">
+      <div id="settingsCategoryList" className="settings-config-list">
         {context.data!.categories.map((category, index, categories) => (
           <div
-            className={`category-row${over === category.id ? " drag-over" : ""}`}
+            className={`category-row settings-config-row${over === category.id ? " drag-over" : ""}`}
             data-category-row={category.id}
             key={`${category.id}:${category.name}:${category.color}`}
             onDragOver={(event) => {
@@ -256,17 +274,28 @@ export function Categories({ controller, context }: { controller: Controller; co
                 <ArrowDown aria-hidden="true" />
               </Button>
             </span>
-            <Button
-              variant="destructive"
-              type="button"
-              data-cat-delete={category.id}
+            <RowMenu
+              label={`管理任务类型「${category.name}」`}
+              selector={{ "data-category-menu": category.id }}
               disabled={archived || !!action.busy}
-              onClick={() => deps.deleteCategory(category.id)}
-            >
-              删除
-            </Button>
+              actions={[
+                {
+                  label: "删除任务类型",
+                  destructive: true,
+                  selector: { "data-cat-delete": category.id },
+                  onSelect: () => deps.deleteCategory(category.id),
+                },
+              ]}
+            />
           </div>
         ))}
+        {!context.data!.categories.length && (
+          <Empty
+            type="category"
+            title="暂无任务类型"
+            copy="添加一个类型，用名称和颜色区分每天的任务。"
+          />
+        )}
       </div>
       <p className="settings-help" role="status" aria-live="polite" aria-atomic="true">
         {orderMessage}
@@ -290,7 +319,7 @@ export function Backup({
     { deps } = controller
   return (
     <>
-      <Card className="settings-backup-card">
+      <div className="settings-backup-card">
         <span className="settings-feature-icon">
           <Icon name="backup" />
         </span>
@@ -299,7 +328,7 @@ export function Backup({
           <p>包含当前孩子的任务、完成记录、积分流水、礼品和配置。</p>
           <small>{updatedAt ? `最近保存：${date(updatedAt)}` : "尚无保存记录"}</small>
         </div>
-      </Card>
+      </div>
       <div className="settings-backup-actions">
         <div>
           <strong>导出备份</strong>

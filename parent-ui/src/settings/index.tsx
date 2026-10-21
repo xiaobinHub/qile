@@ -2,16 +2,7 @@ import { useEffect, useState } from "react"
 import { AccountPassword, AccountProfile } from "./account"
 import { ChildProfile, Family, Invitations } from "./children"
 import { Backup, Categories, Presets } from "./tasks"
-import {
-  Button,
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-  Icon,
-  initial,
-} from "./primitives"
+import { Button, Card, CardContent, CardHeader, CardTitle, Icon, initial } from "./primitives"
 import type { Context, Controller } from "./types"
 
 const groups = [
@@ -40,16 +31,6 @@ const groups = [
     ],
   },
 ]
-const descriptions: Record<string, string> = {
-  "child/profile": "为孩子设置一个熟悉的称呼，让每一步成长都属于他。",
-  "child/family": "邀请家人一起陪伴，共同管理当前孩子的成长记录。",
-  "child/invitations": "查看发给你的邀请，选择要一起陪伴的孩子。",
-  "tasks/presets": "把经常安排的任务保存下来，下次创建更轻松。",
-  "tasks/categories": "用名称和颜色区分任务，让每天的安排更清晰。",
-  "tasks/backup": "导出一份当前孩子的数据，妥善保存成长记录。",
-  "account/profile": "设置家人容易识别的昵称。",
-  "account/password": "定期更新密码，保护账号和孩子的成长记录。",
-}
 
 function Pane({
   selected,
@@ -111,7 +92,7 @@ function Settings({
         </div>
       )}
       <div className="settings-columns">
-        <Card className="settings-sidebar">
+        <Card className="settings-sidebar gap-0 py-0">
           <nav aria-label="设置导航">
             {visible.map((group) => (
               <div className="settings-nav-group" key={group.title}>
@@ -145,18 +126,19 @@ function Settings({
             </div>
           </div>
         </Card>
-        <Card className="settings-detail" role="region" aria-labelledby="settingsDetailTitle">
+        <Card
+          className="settings-detail gap-0 py-0"
+          role="region"
+          aria-labelledby="settingsDetailTitle"
+        >
           <CardHeader className="settings-detail-heading">
             <CardTitle>
               <h2 id="settingsDetailTitle" tabIndex={-1}>
                 {item[1]}
               </h2>
             </CardTitle>
-            <CardDescription className="settings-detail-description">
-              {descriptions[selected]}
-            </CardDescription>
           </CardHeader>
-          <CardContent id="settingsContent" className="settings-detail-body">
+          <CardContent id="settingsContent" className="settings-detail-body gap-0">
             <Pane
               key={`${selected}:${child?.id}:${version}`}
               selected={selected}

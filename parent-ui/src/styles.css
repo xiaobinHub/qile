@@ -27,12 +27,12 @@ fieldset {
 }
 h1 {
   font-size: 24px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: -0.5px;
 }
 h2 {
   font-size: 18px;
-  font-weight: 650;
+  font-weight: 600;
 }
 svg {
   flex-shrink: 0;
@@ -41,16 +41,17 @@ a {
   color: var(--brand-ink);
 }
 .app {
-  max-width: 1560px;
+  max-width: 1440px;
   margin: auto;
-  padding: 0 28px 32px;
+  padding: env(safe-area-inset-top, 0px) max(24px, env(safe-area-inset-right, 0px))
+    max(32px, env(safe-area-inset-bottom, 0px)) max(24px, env(safe-area-inset-left, 0px));
 }
 .topbar {
   display: flex;
   align-items: center;
   gap: 14px;
-  min-height: 100px;
-  padding: 20px 0;
+  min-height: 80px;
+  padding: 12px 0;
 }
 .brand {
   display: flex;
@@ -147,8 +148,8 @@ a {
   font-weight: 600;
 }
 .field-help {
-  font-size: 12px;
-  line-height: 1.8;
+  font-size: 13px;
+  line-height: 20px;
   color: var(--text-secondary);
 }
 .form-stack fieldset {
@@ -188,11 +189,11 @@ a {
 }
 .positive {
   color: var(--success);
-  font-weight: 650;
+  font-weight: 600;
 }
 .negative {
   color: var(--destructive-ink);
-  font-weight: 650;
+  font-weight: 600;
 }
 .empty-state {
   display: flex;
@@ -241,11 +242,7 @@ a {
   display: grid;
   place-items: center;
   padding: 32px 20px;
-  background: radial-gradient(
-    ellipse at 50% 30%,
-    color-mix(in srgb, var(--primary) 12%, var(--background)) 0,
-    var(--background) 65%
-  );
+  background: var(--muted);
 }
 .login-card {
   width: min(100%, 416px);
@@ -823,7 +820,7 @@ a {
 }
 .task-preset-reward {
   font-size: 18px;
-  font-weight: 650;
+  font-weight: 600;
   color: var(--brand-ink);
 }
 .task-preset-reward small {
@@ -931,8 +928,8 @@ a {
 }
 .gift-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 20px;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 260px));
+  gap: 16px;
   margin-top: 24px;
 }
 .gift-card {
@@ -942,7 +939,8 @@ a {
   border-radius: var(--radius-xl);
 }
 .gift-image {
-  height: 190px;
+  aspect-ratio: 8 / 5;
+  overflow: hidden;
   background: var(--muted);
   display: grid;
   place-items: center;
@@ -953,21 +951,48 @@ a {
   object-fit: cover;
 }
 .gift-image > svg {
-  width: 55px;
-  height: 55px;
+  width: 36px;
+  height: 36px;
   color: var(--text-secondary);
 }
 .gift-card-body {
   padding: 20px;
-  display: grid;
-  gap: 14px;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  gap: 12px;
 }
 .gift-card-body h2 {
+  min-height: 48px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: 16px;
+  line-height: 24px;
   overflow-wrap: anywhere;
+}
+.gift-card-actions {
+  margin-top: auto;
+  display: grid;
+  gap: 8px;
+}
+.gift-shortage {
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 20px;
+}
+.gift-card-actions button:disabled {
+  opacity: 1;
+  color: var(--text-secondary);
+  background: var(--muted);
+}
+.gift-image[data-has-image="false"] {
+  background: color-mix(in srgb, var(--muted) 55%, var(--card));
 }
 .gift-cost {
   font-size: 22px;
-  font-weight: 650;
+  font-weight: 600;
   color: var(--brand-ink);
 }
 .gift-cost small {
@@ -980,8 +1005,8 @@ a {
   margin: 24px 0;
 }
 .stats > [data-slot="card"] {
-  padding: 20px;
-  gap: 8px;
+  padding: 16px 20px;
+  gap: 4px;
 }
 .stats span {
   color: var(--text-secondary);
@@ -992,10 +1017,13 @@ a {
 }
 .ledger-filters {
   display: grid;
-  grid-template-columns: 2fr 1fr 1fr auto;
-  gap: 14px;
+  grid-template-columns: minmax(260px, 1.8fr) minmax(140px, 1fr) minmax(140px, 1fr) auto;
+  gap: 12px;
   align-items: end;
-  margin-bottom: 20px;
+  padding: 16px;
+  background: var(--muted);
+  border-radius: var(--radius-xl);
+  margin-bottom: 16px;
 }
 .ledger-filters .form-field {
   margin: 0;
@@ -1011,7 +1039,31 @@ a {
 }
 .ledger-desktop th,
 .ledger-desktop td {
-  padding: 16px;
+  padding: 12px 16px;
+}
+.ledger-desktop [data-slot="table-container"] {
+  max-height: 560px;
+  overflow: auto;
+}
+.ledger-desktop thead {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--muted);
+}
+.ledger-desktop .ledger-number {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.ledger-desktop td:nth-child(3) {
+  white-space: normal;
+  min-width: 160px;
+}
+.print-loading {
+  display: grid;
+  gap: 16px;
+  color: var(--text-secondary);
 }
 .manager-list {
   display: grid;
@@ -1072,10 +1124,11 @@ a {
     gap: 8px;
   }
   .ledger-filters {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: minmax(230px, 1.6fr) minmax(120px, 1fr) minmax(120px, 1fr);
   }
-  .ledger-filters > .form-field:first-child {
-    grid-column: 1/-1;
+  .ledger-filters > button {
+    grid-column: 3;
+    justify-self: end;
   }
 }
 @media (max-width: 680px) {
@@ -1184,11 +1237,7 @@ a {
   .week-wrap {
     max-height: calc(100svh - 300px);
   }
-  .feature-dialog {
-    padding: 24px 20px;
-    max-height: calc(100svh - 28px);
-    width: calc(100vw - 28px);
-  }
+
   .form-grid {
     grid-template-columns: 1fr;
     gap: 0;

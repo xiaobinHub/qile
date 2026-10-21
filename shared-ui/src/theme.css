@@ -316,3 +316,8 @@
     padding-bottom: max(16px, env(safe-area-inset-bottom, 0px));
   }
 }
+
+/* Confirmations remain reachable with a short keyboard viewport or long errors. */
+[data-slot="alert-dialog-content"]:not(.ui-modal-frame) {
+  overflow-y: auto;
+}

@@ -12,6 +12,13 @@ import { Input } from "@shared/components/ui/input"
 import { Label } from "@shared/components/ui/label"
 import { Badge } from "@shared/components/ui/badge"
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@shared/components/ui/dropdown-menu"
+import { FormField } from "@shared/components/form-field"
+import {
   ChevronRight,
   ClipboardList,
   History,
@@ -19,6 +26,7 @@ import {
   LayoutGrid,
   LogOut,
   Mail,
+  Ellipsis,
   UserRound,
   UsersRound,
   type LucideIcon,
@@ -35,6 +43,83 @@ export {
   Input,
   Label,
   Badge,
+  FormField,
+}
+
+type RowMenuAction = {
+  label: string
+  onSelect: () => void
+  destructive?: boolean
+  selector: Record<string, string>
+}
+export function RowMenu({
+  label,
+  disabled = false,
+  selector,
+  actions,
+}: {
+  label: string
+  disabled?: boolean
+  selector?: Record<string, string>
+  actions: RowMenuAction[]
+}) {
+  const trigger = useRef<HTMLButtonElement>(null)
+  const pending = useRef<(() => void) | null>(null)
+  const mounted = useRef(true)
+  useLayoutEffect(() => {
+    mounted.current = true
+    return () => {
+      mounted.current = false
+    }
+  }, [])
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          ref={trigger}
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="settings-row-menu"
+          aria-label={label}
+          disabled={disabled}
+          {...selector}
+        >
+          <Ellipsis aria-hidden="true" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        align="end"
+        onCloseAutoFocus={(event) => {
+          const action = pending.current
+          if (!action) return
+          event.preventDefault()
+          pending.current = null
+          // Let Radix release the menu's focus scope before opening a confirmation.
+          queueMicrotask(() => {
+            if (!mounted.current) return
+            trigger.current?.focus({ preventScroll: true })
+            action()
+          })
+        }}
+      >
+        {actions.map((action) => (
+          <DropdownMenuItem
+            key={action.label}
+            className="settings-menu-item"
+            variant={action.destructive ? "destructive" : "default"}
+            disabled={disabled}
+            {...action.selector}
+            onSelect={() => {
+              pending.current = action.onSelect
+            }}
+          >
+            {action.label}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
 }
 
 const icons: Record<string, LucideIcon> = {

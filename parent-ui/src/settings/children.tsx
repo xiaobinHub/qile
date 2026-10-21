@@ -5,11 +5,13 @@ import {
   Card,
   Empty,
   Feedback,
+  FormField,
   Icon,
   Input,
   Label,
   Notice,
   ReadStatus,
+  RowMenu,
   date,
   initial,
   statusNames,
@@ -18,13 +20,6 @@ import {
 } from "./primitives"
 import type { Child, Controller, Invitation, Member } from "./types"
 import { AsyncConfirm } from "@shared/components/async-confirm"
-import { ChevronDown } from "lucide-react"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@shared/components/ui/dropdown-menu"
 
 export function ChildProfile({ controller, child }: { controller: Controller; child: Child }) {
   const { deps } = controller,
@@ -92,8 +87,12 @@ export function ChildProfile({ controller, child }: { controller: Controller; ch
       )}
       <form id="renameChildForm" className="settings-form" onSubmit={submit}>
         <fieldset disabled={!editable || !!action.busy}>
-          <div className="settings-field">
-            <Label htmlFor="renameChild">孩子昵称</Label>
+          <FormField
+            className="settings-field"
+            id="renameChild"
+            label="孩子昵称"
+            help="用于孩子卡片、日历和导出记录，最多 40 个字。"
+          >
             <Input
               ref={nickname}
               id="renameChild"
@@ -103,8 +102,7 @@ export function ChildProfile({ controller, child }: { controller: Controller; ch
               placeholder="请输入孩子昵称"
               autoComplete="off"
             />
-            <p className="settings-help">用于孩子卡片、日历和导出记录，最多 40 个字。</p>
-          </div>
+          </FormField>
           <Feedback id="childManageError" message={action.error} />
           <div className="settings-form-footer">
             <Button variant="default" type="submit">
@@ -295,7 +293,7 @@ export function Family({ controller, child }: { controller: Controller; child: C
           <h3>成员</h3>
           <span>{members.length} 人</span>
         </div>
-        <Card className="settings-member-list">
+        <Card className="settings-member-list gap-0 py-0">
           {members.map((member) => (
             <article className="settings-person-row" key={member.userId}>
               <span className="settings-mini-avatar">{initial(member.nickname)}</span>
@@ -315,37 +313,23 @@ export function Family({ controller, child }: { controller: Controller; child: C
                 {member.role === "owner" ? "管理员" : "成员"}
               </Badge>
               {editable && member.role !== "owner" && (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      type="button"
-                      className="settings-member-actions"
-                      aria-label={`管理 ${member.nickname}`}
-                      disabled={!!action.busy}
-                    >
-                      管理
-                      <ChevronDown aria-hidden="true" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem
-                      data-transfer={member.userId}
-                      disabled={!!action.busy}
-                      onSelect={() => setMemberAction({ type: "transfer", member })}
-                    >
-                      转让管理员身份
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      variant="destructive"
-                      data-remove={member.userId}
-                      disabled={!!action.busy}
-                      onSelect={() => setMemberAction({ type: "remove", member })}
-                    >
-                      移除家长
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                <RowMenu
+                  label={`管理 ${member.nickname}`}
+                  disabled={!!action.busy}
+                  actions={[
+                    {
+                      label: "转让管理员身份",
+                      selector: { "data-transfer": member.userId },
+                      onSelect: () => setMemberAction({ type: "transfer", member }),
+                    },
+                    {
+                      label: "移除家长",
+                      destructive: true,
+                      selector: { "data-remove": member.userId },
+                      onSelect: () => setMemberAction({ type: "remove", member }),
+                    },
+                  ]}
+                />
               )}
             </article>
           ))}
@@ -358,7 +342,7 @@ export function Family({ controller, child }: { controller: Controller; child: C
             <span>{sent.filter((inv) => inv.status === "pending").length} 份待接受</span>
           </div>
           {sent.length ? (
-            <Card className="settings-member-list">
+            <Card className="settings-member-list gap-0 py-0">
               {sent.map((inv) => (
                 <article className="settings-person-row" key={inv.id}>
                   <span className="settings-mini-avatar muted-avatar">{initial(inv.nickname)}</span>

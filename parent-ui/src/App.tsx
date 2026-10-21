@@ -1,7 +1,8 @@
 import { Suspense, lazy, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react"
 import { RefreshCw, ChevronDown, Sprout } from "lucide-react"
 import { ToastProvider, useToast } from "@shared/components/ui/toast"
-import { Button, Confirm, ErrorText, SaveResolution } from "./features/ui"
+import { Button, Confirm, ErrorText, SaveResolution, Modal } from "./features/ui"
+import { Skeleton } from "@shared/components/ui/skeleton"
 import { Login, Onboarding, ChildSwitcher } from "./features/account"
 import { PasswordSetup } from "./password-setup"
 import { SettingsPage } from "./settings"
@@ -268,7 +269,22 @@ function Application() {
                       openPrint={() => setEditor({ type: "print" })}
                     />
                   ) : (
-                    <Suspense fallback={<p role="status">正在读取积分商城…</p>}>
+                    <Suspense
+                      fallback={
+                        <section
+                          role="status"
+                          aria-label="正在读取积分商城"
+                          className="store-loading"
+                        >
+                          <Skeleton className="h-10 w-48" />
+                          <div className="gift-grid">
+                            {[0, 1, 2].map((n) => (
+                              <Skeleton key={n} className="h-64" />
+                            ))}
+                          </div>
+                        </section>
+                      }
+                    >
                       <StorePage
                         key={`${child.id}:${snapshot.epoch}`}
                         data={data}
@@ -298,7 +314,17 @@ function Application() {
           ) : editor.type === "category" ? (
             <CategoryEditor onClose={() => setEditor(null)} />
           ) : (
-            <Suspense fallback={<p role="status">正在准备打印…</p>}>
+            <Suspense
+              fallback={
+                <Modal id="printLoadingDialog" title="打印成长计划" onClose={() => setEditor(null)}>
+                  <div role="status" className="print-loading">
+                    <Skeleton className="h-10 w-full" />
+                    <Skeleton className="h-20 w-full" />
+                    <p>正在准备打印配置…</p>
+                  </div>
+                </Modal>
+              }
+            >
               <PrintDialog data={data} onClose={() => setEditor(null)} />
             </Suspense>
           )}
