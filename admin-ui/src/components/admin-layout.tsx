@@ -45,7 +45,7 @@ export function AdminLayout({
   function sidebar(mobile = false) {
     return (
       <div className="flex h-full flex-col">
-        <div className="px-6 pt-7 pb-8">
+        <div className="px-5 pt-6 pb-7">
           <Brand compact />
         </div>
         <div className="px-5 pb-3 text-xs font-medium tracking-[0.14em] text-muted-foreground">
@@ -97,7 +97,7 @@ export function AdminLayout({
               <p className="truncate text-[13px] font-medium" title={user.nickname}>
                 {user.nickname}
               </p>
-              <p className="mt-0.5 text-xs text-muted-foreground">平台管理员</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">管理员</p>
             </div>
             <ShieldCheck className="ml-auto size-4 shrink-0 text-brand-ink/70" />
           </div>
@@ -105,7 +105,7 @@ export function AdminLayout({
             id={mobile ? "mobileLogout" : "logout"}
             type="button"
             variant="ghost"
-            className="h-10 w-full justify-start gap-2.5 px-2.5 text-[13px] text-muted-foreground"
+            className="h-11 w-full justify-start gap-2.5 px-2.5 text-[13px] text-muted-foreground"
             onClick={() => void signOut()}
           >
             <LogOut className="size-4" />
@@ -118,11 +118,11 @@ export function AdminLayout({
   const title = locked ? "密码设置" : page === "users" ? "账号管理" : "我的账号"
   return (
     <div className="min-h-svh bg-background">
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-[216px] border-r bg-card lg:block">
+      <aside className="fixed inset-y-0 left-0 z-30 hidden w-[200px] border-r bg-card md:block">
         {sidebar()}
       </aside>
-      <div className="min-w-0 lg:ml-[216px]">
-        <header className="flex h-16 items-center justify-between gap-4 border-b bg-card/90 px-5 sm:px-8">
+      <div className="min-w-0 md:ml-[200px]">
+        <header className="flex h-14 items-center justify-between gap-4 border-b bg-card/90 px-5 sm:px-8">
           <div className="flex min-w-0 items-center gap-3">
             <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
               <SheetTrigger asChild>
@@ -131,7 +131,7 @@ export function AdminLayout({
                   variant="ghost"
                   size="icon-sm"
                   aria-label="打开导航"
-                  className="-ml-2 lg:hidden"
+                  className="-ml-2 size-11 md:hidden"
                 >
                   <Menu />
                 </Button>
@@ -154,7 +154,7 @@ export function AdminLayout({
             <span>管理员工作台</span>
           </div>
         </header>
-        <main id="mainContent" className="mx-auto w-full max-w-[1360px] px-5 py-7 sm:px-8 sm:py-8">
+        <main id="mainContent" className="mx-auto w-full max-w-[1360px] px-5 py-6 sm:px-7 sm:py-6">
           {children}
         </main>
         <footer className="px-5 pt-2 pb-6 text-center text-xs tracking-wide text-muted-foreground sm:px-8">

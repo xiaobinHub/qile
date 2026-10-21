@@ -1,6 +1,7 @@
 import { useRef, useState, type FormEvent } from "react"
-import { ArrowRight, LoaderCircle, ShieldCheck } from "lucide-react"
+import { ArrowRight, LoaderCircle } from "lucide-react"
 import { Brand } from "@/components/brand"
+import { PageHeading } from "@shared/components/page-heading"
 import { FormFeedback } from "@shared/components/form-feedback"
 import { PasswordInput } from "@shared/components/password-input"
 import { Button } from "@shared/components/ui/button"
@@ -41,20 +42,12 @@ export function LoginPage() {
   }
   return (
     <main className="login-page flex min-h-svh flex-col items-center justify-center px-5 py-10">
-      <div className="mb-8">
+      <div className="mb-6">
         <Brand />
       </div>
       <Card className="w-full max-w-[420px] gap-0 overflow-hidden rounded-xl border-border/90 py-0 shadow-[0_12px_48px_-24px_rgba(24,56,39,0.22)]">
-        <CardContent className="p-7 sm:p-9">
-          <div className="mb-7">
-            <div className="mb-4 flex size-10 items-center justify-center rounded-xl border border-border bg-muted/50 text-brand-ink">
-              <ShieldCheck className="size-5" strokeWidth={1.7} />
-            </div>
-            <h1 className="text-[25px] font-semibold tracking-tight">管理员登录</h1>
-            <p className="mt-2 text-[13px] leading-6 text-muted-foreground">
-              登录后，开通与维护家长账号。
-            </p>
-          </div>
+        <CardContent className="p-6 sm:p-7">
+          <PageHeading title="管理员登录" description="登录后，开通与维护家长账号。" />
           <form id="loginForm" onSubmit={submit} className="space-y-5">
             <div className="space-y-2">
               <Label htmlFor="loginName">登录名</Label>
@@ -62,12 +55,13 @@ export function LoginPage() {
                 id="loginName"
                 name="loginName"
                 autoComplete="username"
+                autoFocus
                 autoCapitalize="none"
                 required
                 maxLength={32}
                 placeholder="请输入管理员登录名"
                 disabled={busy}
-                className="h-10"
+                className="h-11"
               />
             </div>
             <div className="space-y-2">
@@ -80,7 +74,7 @@ export function LoginPage() {
                 maxLength={128}
                 placeholder="请输入密码"
                 disabled={busy}
-                className="h-10"
+                className="h-11"
               />
             </div>
             <FormFeedback
@@ -88,7 +82,7 @@ export function LoginPage() {
               message={error || notice}
               success={!error && notice.startsWith("密码已修改")}
             />
-            <Button type="submit" className="h-10 w-full" disabled={busy}>
+            <Button type="submit" className="h-11 w-full" disabled={busy}>
               {busy ? (
                 <>
                   <LoaderCircle className="animate-spin" />
@@ -107,7 +101,6 @@ export function LoginPage() {
           乐乐成长 · 账号管理
         </div>
       </Card>
-      <p className="mt-7 text-xs text-muted-foreground">让每一步成长，都被看见。</p>
     </main>
   )
 }

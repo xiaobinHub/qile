@@ -1,5 +1,5 @@
 import { useRef, useState, type FormEvent } from "react"
-import { KeyRound, LoaderCircle, Plus, ShieldAlert, UserPlus, X } from "lucide-react"
+import { LoaderCircle, Plus, ShieldAlert, X } from "lucide-react"
 import { FormFeedback } from "@shared/components/form-feedback"
 import { PasswordInput, passwordHelp, passwordPolicy } from "@shared/components/password-input"
 import { Button } from "@shared/components/ui/button"
@@ -45,7 +45,7 @@ function CloseButton({ disabled }: { disabled: boolean }) {
         type="button"
         variant="ghost"
         size="icon-sm"
-        className="absolute top-4 right-4 text-muted-foreground"
+        className="absolute top-3 right-3 size-11 text-muted-foreground"
         disabled={disabled}
         aria-label="关闭弹窗"
       >
@@ -110,13 +110,14 @@ export function CreateUserDialog({ onComplete }: { onComplete: MutationComplete 
   return (
     <Dialog open={open} onOpenChange={changeOpen}>
       <DialogTrigger asChild>
-        <Button id="openCreateUser" type="button" className="h-10 gap-2 shadow-xs">
+        <Button id="openCreateUser" type="button" className="h-11 gap-2 shadow-xs">
           <Plus className="size-4" />
           开通账号
         </Button>
       </DialogTrigger>
       <DialogContent
-        className="admin-dialog gap-5 bg-card sm:max-w-[460px]"
+        className="ui-modal-frame admin-dialog"
+        data-modal-size="small"
         showCloseButton={false}
         onOpenAutoFocus={(event) => {
           event.preventDefault()
@@ -130,16 +131,13 @@ export function CreateUserDialog({ onComplete }: { onComplete: MutationComplete 
         }}
       >
         <CloseButton disabled={busy} />
-        <DialogHeader className="text-left">
-          <div className="dialog-icon">
-            <UserPlus className="size-5" />
-          </div>
+        <DialogHeader className="ui-modal-header text-left">
           <DialogTitle>开通家长账号</DialogTitle>
           <DialogDescription className="leading-6">
             填写账号信息，家长首次登录后需修改初始密码。
           </DialogDescription>
         </DialogHeader>
-        <form id="createUser" onSubmit={submit} className="space-y-5">
+        <form id="createUser" onSubmit={submit} className="ui-modal-body space-y-5">
           <div className="space-y-2">
             <Label htmlFor="createLogin">登录名</Label>
             <Input
@@ -187,24 +185,24 @@ export function CreateUserDialog({ onComplete }: { onComplete: MutationComplete 
             </p>
           </div>
           <FormFeedback id="createError" message={error} />
-          <DialogFooter className="border-t pt-5">
-            <DialogClose asChild>
-              <Button id="cancelCreate" type="button" variant="outline" disabled={busy}>
-                取消
-              </Button>
-            </DialogClose>
-            <Button type="submit" disabled={busy}>
-              {busy ? (
-                <>
-                  <LoaderCircle className="animate-spin" />
-                  正在开通…
-                </>
-              ) : (
-                "开通账号"
-              )}
-            </Button>
-          </DialogFooter>
         </form>
+        <DialogFooter className="ui-modal-footer">
+          <DialogClose asChild>
+            <Button id="cancelCreate" type="button" variant="outline" disabled={busy}>
+              取消
+            </Button>
+          </DialogClose>
+          <Button type="submit" form="createUser" disabled={busy}>
+            {busy ? (
+              <>
+                <LoaderCircle className="animate-spin" />
+                正在开通…
+              </>
+            ) : (
+              "开通账号"
+            )}
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   )
@@ -255,7 +253,8 @@ export function ResetPasswordDialog({
       }}
     >
       <DialogContent
-        className="admin-dialog gap-5 bg-card sm:max-w-[460px]"
+        className="ui-modal-frame admin-dialog"
+        data-modal-size="small"
         showCloseButton={false}
         onOpenAutoFocus={(event) => {
           event.preventDefault()
@@ -273,20 +272,17 @@ export function ResetPasswordDialog({
         }}
       >
         <CloseButton disabled={busy} />
-        <DialogHeader className="text-left">
-          <div className="dialog-icon">
-            <KeyRound className="size-5" />
-          </div>
+        <DialogHeader className="ui-modal-header text-left">
           <DialogTitle>重置账号密码</DialogTitle>
           <DialogDescription className="break-words leading-6">
             为 <span className="font-medium text-foreground">{target.user.nickname}</span>（
             {target.user.loginName}）设置新的初始密码。
           </DialogDescription>
         </DialogHeader>
-        <DialogNotice>
-          重置后，该账号的所有登录会话立即失效，下次登录需修改密码。孩子数据与授权关系保留。
-        </DialogNotice>
-        <form id="resetPassword" onSubmit={submit} className="space-y-5">
+        <form id="resetPassword" onSubmit={submit} className="ui-modal-body space-y-5">
+          <DialogNotice>
+            重置后，该账号的所有登录会话立即失效，下次登录需修改密码。孩子数据与授权关系保留。
+          </DialogNotice>
           <div className="space-y-2">
             <Label htmlFor="resetValue">新的初始密码</Label>
             <PasswordInput
@@ -305,24 +301,24 @@ export function ResetPasswordDialog({
             </p>
           </div>
           <FormFeedback id="resetError" message={error} />
-          <DialogFooter className="border-t pt-5">
-            <DialogClose asChild>
-              <Button id="cancelReset" type="button" variant="outline" disabled={busy}>
-                取消
-              </Button>
-            </DialogClose>
-            <Button type="submit" disabled={busy}>
-              {busy ? (
-                <>
-                  <LoaderCircle className="animate-spin" />
-                  正在重置…
-                </>
-              ) : (
-                "确认重置"
-              )}
-            </Button>
-          </DialogFooter>
         </form>
+        <DialogFooter className="ui-modal-footer">
+          <DialogClose asChild>
+            <Button id="cancelReset" type="button" variant="outline" disabled={busy}>
+              取消
+            </Button>
+          </DialogClose>
+          <Button type="submit" form="resetPassword" disabled={busy}>
+            {busy ? (
+              <>
+                <LoaderCircle className="animate-spin" />
+                正在重置…
+              </>
+            ) : (
+              "确认重置"
+            )}
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   )
@@ -369,7 +365,8 @@ export function StatusDialog({
       }}
     >
       <AlertDialogContent
-        className="admin-dialog gap-5 bg-card sm:max-w-[460px]"
+        className="ui-modal-frame admin-dialog"
+        data-modal-size="small"
         onCloseAutoFocus={(event) => {
           event.preventDefault()
           restoreFocus(target)
@@ -378,21 +375,20 @@ export function StatusDialog({
           if (submitting.current) event.preventDefault()
         }}
       >
-        <AlertDialogHeader className="place-items-start text-left">
-          <div className={`dialog-icon mb-2 ${disabled ? "" : "bg-amber-50 text-amber-700"}`}>
-            <ShieldAlert className="size-5" />
-          </div>
+        <AlertDialogHeader className="ui-modal-header place-items-start text-left">
           <AlertDialogTitle>{disabled ? "启用这个账号？" : "停用这个账号？"}</AlertDialogTitle>
+        </AlertDialogHeader>
+        <div className="ui-modal-body space-y-4">
           <AlertDialogDescription className="break-words leading-6">
             <span className="font-medium text-foreground">{target.user.nickname}</span>（
             {target.user.loginName}）
             {disabled
               ? "启用后可重新登录，继续使用原有孩子数据与授权关系。"
-              : "停用后，所有登录会话立即失效。孩子数据和管理关系会保留；如其为负责人，成员管理将暂时不可用。"}
+              : "停用后，所有登录会话立即失效。孩子数据和管理关系会保留；如其为孩子的管理员，成员管理将暂时不可用。"}
           </AlertDialogDescription>
-        </AlertDialogHeader>
-        <FormFeedback message={error} />
-        <AlertDialogFooter className="mt-1">
+          <FormFeedback message={error} />
+        </div>
+        <AlertDialogFooter className="ui-modal-footer">
           <AlertDialogCancel disabled={busy}>取消</AlertDialogCancel>
           <AlertDialogAction
             id="confirmStatus"

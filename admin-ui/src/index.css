@@ -4,23 +4,24 @@
 @source "../../shared-ui/src";
 
 @layer components {
-  .page-title {
-    @apply text-[25px] leading-8 font-semibold tracking-tight sm:text-[27px];
-  }
-  .page-description {
-    @apply mt-2 text-xs leading-6 text-muted-foreground sm:text-[13px];
-  }
   .overview-cell + .overview-cell {
     @apply border-l;
+  }
+  .overview-cell:nth-child(n + 3) {
+    @apply border-t sm:border-t-0;
+  }
+  .overview-cell:nth-child(3) {
+    @apply border-l-0 sm:border-l;
+  }
+  .admin-user-table [data-slot="table-container"] {
+    max-height: min(620px, 62dvh);
+    overflow: auto;
   }
   .field-help {
     @apply text-xs leading-5 text-muted-foreground;
   }
   .admin-dialog {
-    @apply max-h-[calc(100svh-2rem)] gap-5 overflow-y-auto border-border bg-card p-6 shadow-[0_20px_80px_-24px_rgba(0,0,0,0.3)];
-  }
-  .dialog-icon {
-    @apply mb-2 flex size-10 items-center justify-center rounded-xl bg-primary/8 text-brand-ink;
+    @apply border-border bg-card shadow-[0_20px_80px_-24px_rgba(0,0,0,0.3)];
   }
   .profile-icon {
     @apply flex size-10 shrink-0 items-center justify-center rounded-lg border bg-muted/25 text-muted-foreground;

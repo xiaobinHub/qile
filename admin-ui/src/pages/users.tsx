@@ -14,7 +14,8 @@ import {
   UserX,
   X,
 } from "lucide-react"
-import { Badge } from "@shared/components/ui/badge"
+import { PageHeading } from "@shared/components/page-heading"
+import { StatusBadge } from "@shared/components/status-badge"
 import { Button } from "@shared/components/ui/button"
 import { Card } from "@shared/components/ui/card"
 import {
@@ -53,23 +54,6 @@ import {
   type DialogTarget,
 } from "@/pages/user-dialogs"
 
-function StatusBadge({ user }: { user: User }) {
-  const status = accountStatus(user)
-  const appearance = {
-    active: "bg-success/10 text-success",
-    pending: "bg-warning-foreground text-warning",
-    disabled: "bg-muted text-muted-foreground",
-  }
-  return (
-    <Badge
-      variant="outline"
-      className={`gap-1.5 rounded-md border-transparent px-2 py-1 text-xs leading-3 font-normal ${appearance[status]}`}
-    >
-      <span className="size-1.5 rounded-full bg-current opacity-80" />
-      {statusLabels[status]}
-    </Badge>
-  )
-}
 function UserActions({
   user,
   onReset,
@@ -115,7 +99,7 @@ function UserActions({
           data-actions={user.id}
           aria-label={`管理 ${user.nickname} 的账号`}
           disabled={Boolean(pendingAction.current)}
-          className="text-muted-foreground"
+          className="size-11 text-muted-foreground"
         >
           <Ellipsis className="size-4" />
         </Button>
@@ -222,15 +206,13 @@ export function UsersPage() {
   const hasFilter = Boolean(query) || filter !== "all"
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="page-title">账号管理</h1>
-          <p className="page-description">开通与维护家长账号，管理账号的访问状态。</p>
-        </div>
-        <CreateUserDialog onComplete={complete} />
-      </div>
-      <div className="overview-strip grid grid-cols-3 overflow-hidden rounded-xl border bg-card">
+    <div className="space-y-5">
+      <PageHeading
+        title="账号管理"
+        description="开通与维护家长账号，管理账号的访问状态。"
+        actions={<CreateUserDialog onComplete={complete} />}
+      />
+      <div className="overview-strip grid grid-cols-2 sm:grid-cols-4 overflow-hidden rounded-xl border bg-card">
         {[
           {
             label: "全部账号",
@@ -239,17 +221,23 @@ export function UsersPage() {
             className: "text-slate-500",
           },
           { label: "已启用", value: activeCount, icon: CircleCheck, className: "text-brand-ink" },
-          { label: "待改密", value: pendingCount, icon: Clock3, className: "text-amber-600" },
+          { label: "待改密", value: pendingCount, icon: Clock3, className: "text-warning" },
+          {
+            label: "已停用",
+            value: disabledCount,
+            icon: UserX,
+            className: "text-muted-foreground",
+          },
         ].map(({ label, value, icon: Icon, className }) => (
-          <div key={label} className="overview-cell min-w-0 px-4 py-5 sm:px-6">
-            <div className="mb-3 flex items-center justify-between gap-2">
+          <div key={label} className="overview-cell min-w-0 px-4 py-4 sm:px-5">
+            <div className="mb-2 flex items-center justify-between gap-2">
               <p className="text-xs text-muted-foreground">{label}</p>
               <Icon className={`size-4 ${className}`} strokeWidth={1.7} />
             </div>
             {value === undefined ? (
               <Skeleton className="h-8 w-12" />
             ) : (
-              <p className="text-[28px] leading-none font-semibold tracking-tight tabular-nums">
+              <p className="text-2xl leading-7 font-semibold tracking-tight tabular-nums">
                 {value}
                 <span className="ml-1.5 text-xs font-normal text-muted-foreground">个</span>
               </p>
@@ -259,30 +247,20 @@ export function UsersPage() {
       </div>
       <FormFeedback message={flash} success />
       <Card className="gap-0 overflow-hidden rounded-xl py-0 shadow-none">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b px-5 py-4">
-          <div className="flex items-center gap-2.5">
-            <h2 className="text-sm font-semibold">账号列表</h2>
-            {users && (
-              <Badge
-                variant="secondary"
-                className="h-5 rounded-md px-1.5 text-xs font-normal tabular-nums"
-              >
-                {users.length}
-              </Badge>
-            )}
-          </div>
-          <span className="text-xs text-muted-foreground">统一维护账号访问权限</span>
-        </div>
-        <div className="flex flex-wrap items-center gap-2.5 border-b bg-muted/15 px-5 py-4">
+        <div
+          role="search"
+          aria-label="账号筛选"
+          className="flex flex-wrap items-center gap-3 border-b px-4 py-3 sm:px-5"
+        >
           <div className="relative min-w-0 flex-[1_1_210px] sm:max-w-[300px]">
-            <Search className="pointer-events-none absolute top-2.5 left-3 size-4 text-muted-foreground" />
+            <Search className="pointer-events-none absolute top-3.5 left-3 size-4 text-muted-foreground" />
             <Input
               id="search"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder="搜索昵称或登录名"
               aria-label="搜索账号"
-              className="h-10 bg-card pr-11 pl-9 text-xs"
+              className="h-11 bg-card pr-11 pl-9 text-sm"
             />
             {search && (
               <Button
@@ -290,7 +268,7 @@ export function UsersPage() {
                 variant="ghost"
                 size="icon-xs"
                 aria-label="清除搜索"
-                className="absolute top-0 right-0 text-muted-foreground"
+                className="absolute top-0 right-0 size-11 text-muted-foreground"
                 onClick={() => setSearch("")}
               >
                 <X className="size-3.5" />
@@ -304,7 +282,7 @@ export function UsersPage() {
             <SelectTrigger
               id="statusFilter"
               aria-label="筛选账号状态"
-              className="h-10 w-[125px] bg-card text-xs"
+              className="h-11 w-[130px] bg-card text-sm"
             >
               <SelectValue />
             </SelectTrigger>
@@ -324,7 +302,7 @@ export function UsersPage() {
               setFlash("")
               void loadUsers()
             }}
-            className="ml-auto h-9 gap-2 bg-card px-3 text-xs"
+            className="ml-auto h-11 gap-2 bg-card px-3 text-sm"
           >
             <RefreshCw className={`size-3.5 ${loading ? "animate-spin" : ""}`} />
             刷新
@@ -345,9 +323,9 @@ export function UsersPage() {
             </Button>
           </div>
         )}
-        <div className="min-w-0" aria-busy={loading}>
-          <Table className="min-w-[640px]">
-            <TableHeader>
+        <div className="admin-user-table min-w-0" aria-busy={loading}>
+          <Table className="min-w-[600px]">
+            <TableHeader className="sticky top-0 z-10 bg-card">
               <TableRow className="bg-muted/30 hover:bg-muted/30">
                 <TableHead className="h-11 w-[30%] pl-5 text-xs font-normal text-muted-foreground">
                   昵称
@@ -389,8 +367,8 @@ export function UsersPage() {
                     </TableRow>
                   ))
                 : visible.map((user) => (
-                    <TableRow key={user.id} data-user-id={user.id} className="h-[76px]">
-                      <TableCell className="max-w-[240px] py-4 pl-5">
+                    <TableRow key={user.id} data-user-id={user.id} className="h-16">
+                      <TableCell className="max-w-[240px] py-2 pl-5">
                         <div className="flex min-w-0 items-center gap-3">
                           <div
                             className={`flex size-9 shrink-0 items-center justify-center rounded-full text-[13px] font-medium ${user.role === "admin" ? "bg-primary/10 text-brand-ink" : "bg-muted text-muted-foreground"}`}
@@ -419,11 +397,23 @@ export function UsersPage() {
                           ) : (
                             <UserRound className="size-3.5" />
                           )}
-                          {user.role === "admin" ? "平台管理员" : "家长"}
+                          {user.role === "admin" ? "管理员" : "成员"}
                         </span>
                       </TableCell>
                       <TableCell>
-                        <StatusBadge user={user} />
+                        <StatusBadge
+                          tone={
+                            accountStatus(user) === "active"
+                              ? "success"
+                              : accountStatus(user) === "pending"
+                                ? "warning"
+                                : "neutral"
+                          }
+                          className="gap-1.5"
+                        >
+                          <span className="size-1.5 rounded-full bg-current opacity-80" />
+                          {statusLabels[accountStatus(user)]}
+                        </StatusBadge>
                       </TableCell>
                       <TableCell className="pr-5 text-right">
                         {user.role === "parent" ? (
@@ -434,7 +424,7 @@ export function UsersPage() {
                           />
                         ) : (
                           <span
-                            className="inline-flex size-8 items-center justify-center text-muted-foreground/40"
+                            className="inline-flex size-11 items-center justify-center text-muted-foreground/40"
                             title="管理员账号由本人维护"
                           >
                             <LockKeyhole className="size-3.5" aria-label="管理员账号由本人维护" />
@@ -484,7 +474,6 @@ export function UsersPage() {
           <p>
             {users ? `显示 ${visible.length} 个账号，共 ${users.length} 个` : "正在读取账号信息"}
           </p>
-          <p>{disabledCount ? `${disabledCount} 个账号已停用` : "账号状态以当前列表为准"}</p>
         </div>
       </Card>
       <p className="flex items-start gap-2 px-1 text-xs leading-5 text-muted-foreground">

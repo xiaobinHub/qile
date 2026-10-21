@@ -10,6 +10,7 @@ import {
 import { Button } from "@shared/components/ui/button"
 import { Input } from "@shared/components/ui/input"
 import { Label } from "@shared/components/ui/label"
+import { PageHeading } from "@shared/components/page-heading"
 import { FormFeedback } from "@shared/components/form-feedback"
 import { PasswordInput, passwordHelp, passwordPolicy } from "@shared/components/password-input"
 import { errorMessage, isIgnoredError, useSession } from "@/lib/session"
@@ -49,7 +50,7 @@ function BasicProfile() {
   }
   return (
     <Card className="gap-0 overflow-hidden rounded-xl py-0 shadow-none">
-      <CardHeader className="border-b px-5 py-5 sm:px-6">
+      <CardHeader className="border-b px-5 py-4 sm:px-6">
         <div className="flex items-start gap-3">
           <span className="profile-icon">
             <UserRound className="size-[18px]" />
@@ -94,7 +95,7 @@ function BasicProfile() {
           </div>
           <FormFeedback id="profileError" message={message} success={success} />
           <div className="-mx-5 flex justify-end border-t bg-muted/15 px-5 py-4 sm:-mx-6 sm:px-6">
-            <Button type="submit" disabled={busy} className="h-10 gap-2 text-xs">
+            <Button type="submit" disabled={busy} className="h-11 gap-2">
               {busy ? (
                 <>
                   <LoaderCircle className="animate-spin" />
@@ -148,7 +149,7 @@ function ChangePassword({ required }: { required: boolean }) {
   }
   return (
     <Card className="gap-0 overflow-hidden rounded-xl py-0 shadow-none">
-      <CardHeader className="border-b px-5 py-5 sm:px-6">
+      <CardHeader className="border-b px-5 py-4 sm:px-6">
         <div className="flex items-start gap-3">
           <span className="profile-icon">
             <KeyRound className="size-[18px]" />
@@ -165,7 +166,7 @@ function ChangePassword({ required }: { required: boolean }) {
       </CardHeader>
       <CardContent className="px-5 pt-5 pb-0 sm:px-6">
         <form id="changePassword" onSubmit={submit} className="space-y-5">
-          <div className="max-w-[450px] space-y-2">
+          <div className="space-y-2">
             <Label htmlFor="currentPassword">当前密码</Label>
             <PasswordInput
               id="currentPassword"
@@ -213,7 +214,7 @@ function ChangePassword({ required }: { required: boolean }) {
               <LockKeyhole className="size-3" />
               保存后需重新登录
             </span>
-            <Button type="submit" disabled={busy} className="h-10 text-xs">
+            <Button type="submit" disabled={busy} className="h-11">
               {busy ? (
                 <>
                   <LoaderCircle className="animate-spin" />
@@ -234,13 +235,13 @@ export function ProfilePage() {
   const { session } = useSession()
   const required = Boolean(session?.user.mustChangePassword)
   return (
-    <div className="max-w-[900px] space-y-6">
-      <div>
-        <h1 className="page-title">{required ? "先设置一个新密码" : "我的账号"}</h1>
-        <p className="page-description">
-          {required ? "完成初始密码修改后，即可进入管理工作台。" : "管理个人资料，维护账号安全。"}
-        </p>
-      </div>
+    <div className="space-y-5">
+      <PageHeading
+        title={required ? "先设置一个新密码" : "我的账号"}
+        description={
+          required ? "完成初始密码修改后，即可进入管理工作台。" : "管理个人资料，维护账号安全。"
+        }
+      />
       {required && (
         <div
           role="status"
