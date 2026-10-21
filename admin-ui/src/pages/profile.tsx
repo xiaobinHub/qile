@@ -48,7 +48,7 @@ function BasicProfile() {
     }
   }
   return (
-    <Card className="gap-0 overflow-hidden rounded-2xl py-0 shadow-none">
+    <Card className="gap-0 overflow-hidden rounded-xl py-0 shadow-none">
       <CardHeader className="border-b px-5 py-5 sm:px-6">
         <div className="flex items-start gap-3">
           <span className="profile-icon">
@@ -147,7 +147,7 @@ function ChangePassword({ required }: { required: boolean }) {
     }
   }
   return (
-    <Card className="gap-0 overflow-hidden rounded-2xl py-0 shadow-none">
+    <Card className="gap-0 overflow-hidden rounded-xl py-0 shadow-none">
       <CardHeader className="border-b px-5 py-5 sm:px-6">
         <div className="flex items-start gap-3">
           <span className="profile-icon">

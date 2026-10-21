@@ -28,7 +28,7 @@
   position: sticky;
   top: 20px;
   border: 1px solid var(--border);
-  border-radius: calc(var(--radius) + 0.55rem);
+  border-radius: var(--radius-xl);
   background: var(--card);
   padding: 17px 12px 0;
   overflow: hidden;
@@ -143,7 +143,7 @@
 .settings-detail {
   min-width: 0;
   border: 1px solid var(--border);
-  border-radius: calc(var(--radius) + 0.55rem);
+  border-radius: var(--radius-xl);
   background: var(--card);
   min-height: 580px;
   overflow: visible;
@@ -271,7 +271,7 @@
   flex-shrink: 0;
   align-items: center;
   justify-content: center;
-  border-radius: calc(var(--radius) + 0.7rem);
+  border-radius: var(--radius-xl);
   color: var(--brand-ink);
   background: linear-gradient(140deg, var(--accent), var(--muted));
   font-size: 24px;
@@ -458,7 +458,7 @@
   justify-content: center;
   width: 43px;
   height: 43px;
-  border-radius: calc(var(--radius) + 0.45rem);
+  border-radius: var(--radius-xl);
   background: var(--muted);
   color: var(--text-secondary);
   margin-bottom: 6px;
@@ -494,7 +494,7 @@
 }
 .settings-invitation-card {
   border: 1px solid var(--border);
-  border-radius: calc(var(--radius) + 0.35rem);
+  border-radius: var(--radius-xl);
   padding: 19px 20px;
   background: var(--card);
 }
@@ -506,7 +506,7 @@
   width: 45px;
   height: 45px;
   font-size: 19px;
-  border-radius: calc(var(--radius) + 0.45rem);
+  border-radius: var(--radius-xl);
 }
 .settings-invitation-footer {
   display: flex;
@@ -557,7 +557,7 @@
   border: 1px solid var(--border);
   background: var(--muted);
   padding: 23px;
-  border-radius: calc(var(--radius) + 0.35rem);
+  border-radius: var(--radius-xl);
   margin-bottom: 26px;
 }
 .settings-feature-icon {
@@ -569,7 +569,7 @@
   flex-shrink: 0;
   background: var(--muted);
   color: var(--brand-ink);
-  border-radius: calc(var(--radius) + 0.45rem);
+  border-radius: var(--radius-xl);
 }
 .settings-feature-icon svg {
   width: 24px;
@@ -716,7 +716,7 @@
   .settings-sidebar {
     position: static;
     padding: 13px 12px 10px;
-    border-radius: calc(var(--radius) + 0.35rem);
+    border-radius: var(--radius-xl);
   }
   .settings-sidebar nav {
     display: grid;
@@ -759,7 +759,7 @@
     display: none;
   }
   .settings-detail {
-    border-radius: calc(var(--radius) + 0.35rem);
+    border-radius: var(--radius-xl);
     min-height: 440px;
   }
   .settings-detail-heading {
@@ -959,7 +959,7 @@
   height: 64px;
   margin-bottom: 18px;
   border: 1px solid var(--border);
-  border-radius: calc(var(--radius) + 0.8rem);
+  border-radius: var(--radius-xl);
   background: var(--muted);
   color: var(--text-secondary);
 }
@@ -1033,7 +1033,7 @@
   min-width: 0;
   padding: 28px;
   border: 1px solid var(--border);
-  border-radius: calc(var(--radius) + 0.55rem);
+  border-radius: var(--radius-xl);
   background: var(--card);
 }
 .onboarding-card > header {
@@ -1044,7 +1044,7 @@
   place-items: center;
   width: 43px;
   height: 43px;
-  border-radius: calc(var(--radius) + 0.4rem);
+  border-radius: var(--radius-xl);
   background: var(--muted);
   color: var(--brand-ink);
   margin-bottom: 17px;
@@ -1150,7 +1150,7 @@
   overflow: hidden;
   background: var(--card);
   border: 1px solid var(--border);
-  border-radius: calc(var(--radius) + 0.8rem);
+  border-radius: var(--radius-xl);
   box-shadow: 0 10px 38px color-mix(in srgb, var(--foreground) 3%, transparent);
 }
 .password-setup-heading {
@@ -1162,7 +1162,7 @@
   place-items: center;
   width: 48px;
   height: 48px;
-  border-radius: calc(var(--radius) + 0.55rem);
+  border-radius: var(--radius-xl);
   background: var(--muted);
   color: var(--brand-ink);
   margin: 0 auto 18px;
@@ -1256,7 +1256,7 @@
     padding: 15px 24px;
   }
   .password-setup-card.settings-required-password {
-    border-radius: calc(var(--radius) + 0.65rem);
+    border-radius: var(--radius-xl);
   }
 }
 

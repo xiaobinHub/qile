@@ -1,10 +1,10 @@
 {
-  "id": "b2C8W74qG",
-  "source": "https://ui.shadcn.com/init?preset=b2C8W74qG",
+  "id": "b2BplS640",
+  "source": "https://ui.shadcn.com/init?preset=b2BplS640",
   "retrievedOn": "2026-10-21",
   "preset": {
     "extends": "none",
-    "name": "base-maia",
+    "name": "base-vega",
     "dependencies": [
       "shadcn@latest",
       "class-variance-authority",
@@ -103,7 +103,7 @@
     },
     "type": "registry:base",
     "config": {
-      "style": "base-maia",
+      "style": "base-vega",
       "tailwind": {
         "baseColor": "mist"
       },
@@ -113,6 +113,6 @@
       "menuAccent": "subtle"
     }
   },
-  "implementationStyle": "radix-maia",
-  "compatibility": "Maia official Radix variants retain the existing component/event/focus API."
+  "implementationStyle": "radix-vega",
+  "compatibility": "Vega official Radix variants retain the existing component/event/focus API."
 }

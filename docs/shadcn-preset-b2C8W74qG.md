@@ -1,5 +1,7 @@
 # shadcn 预设 b2C8W74qG 本地实施记录
 
+后续更新：已按用户新预设切换至 [Vega b2BplS640](shadcn-preset-b2BplS640.md)。本页保留 Maia 版本的实施记录。
+
 日期：2026-10-21。分支：`codex/child-accounts`。改造前回滚点：`21eaa38`。
 
 ## 规范与实现

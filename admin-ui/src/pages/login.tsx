@@ -44,7 +44,7 @@ export function LoginPage() {
       <div className="mb-8">
         <Brand />
       </div>
-      <Card className="w-full max-w-[420px] gap-0 overflow-hidden rounded-2xl border-border/90 py-0 shadow-[0_12px_48px_-24px_rgba(24,56,39,0.22)]">
+      <Card className="w-full max-w-[420px] gap-0 overflow-hidden rounded-xl border-border/90 py-0 shadow-[0_12px_48px_-24px_rgba(24,56,39,0.22)]">
         <CardContent className="p-7 sm:p-9">
           <div className="mb-7">
             <div className="mb-4 flex size-10 items-center justify-center rounded-xl border border-border bg-muted/50 text-brand-ink">

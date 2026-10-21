@@ -31,7 +31,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
               )
             }
             className={cn(
-              "relative grid grid-cols-[1fr_auto] gap-2 rounded-2xl bg-card ring-1 ring-foreground/10 p-4 text-sm text-card-foreground shadow-2xl data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0",
+              "relative grid grid-cols-[1fr_auto] gap-2 rounded-lg bg-card ring-1 ring-foreground/10 p-4 text-sm text-card-foreground shadow-2xl data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0",
               message.variant === "destructive" && "border-destructive text-destructive-ink",
             )}
           >

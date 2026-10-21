@@ -94,9 +94,9 @@
   --success-foreground: oklch(0.97 0.02 155);
   --warning: oklch(0.42 0.095 57.708);
   --warning-foreground: oklch(0.97 0.04 95);
-  --radius-control: 2rem;
-  --radius-card: 1rem;
-  --radius-dialog: 2rem;
+  --radius-control: var(--radius-md);
+  --radius-card: var(--radius-xl);
+  --radius-dialog: var(--radius-xl);
 }
 .dark {
   --background: oklch(0.148 0.004 228.8);
