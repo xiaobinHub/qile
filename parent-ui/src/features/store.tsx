@@ -1,8 +1,15 @@
 import { useState, useRef, useEffect } from "react"
-import { Gift as GiftIcon, Plus, Settings2, ChevronDown, History } from "lucide-react"
+import {
+  Gift as GiftIcon,
+  Plus,
+  Settings2,
+  ChevronDown,
+  History,
+  Trash2,
+  ImagePlus,
+} from "lucide-react"
 import { Badge } from "@shared/components/ui/badge"
 import { EmptyState } from "@shared/components/empty-state"
-import { PageHeading } from "@shared/components/page-heading"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@shared/components/ui/tabs"
 import {
   Table,
@@ -60,8 +67,7 @@ export function StorePage({
     available = data.gifts.filter((g) => g.status === "available"),
     redeemed = data.gifts.filter((g) => g.status === "redeemed")
   return (
-    <section className="store-page">
-      <PageHeading title="积分商城" className="store-heading" />
+    <section className="store-page" aria-label="积分商城">
       {child.archived && <p className="notice">孩子已归档，商城仅可查看。</p>}
       <Tabs value={tab} onValueChange={setTab} className="store-tabs">
         <TabsList variant="line" aria-label="商城内容" className="store-tabs-list">
@@ -200,35 +206,65 @@ export function StorePage({
         </TabsContent>
       </Tabs>
       {manager && !editing && (
-        <Modal id="giftManagerDialog" title="管理礼品" onClose={() => setManager(false)}>
-          <Button id="newGiftBtn" onClick={() => setEditing(true)}>
-            <Plus />
-            创建礼品
-          </Button>
-          <div id="giftManagerList" className="manager-list">
-            {data.gifts.map((g) => (
-              <div className="manager-row" key={g.id}>
-                <strong>{g.name}</strong>
-                <span>{g.points} 分</span>
-                <Button
-                  variant="outline"
-                  disabled={g.status !== "available"}
-                  data-edit-gift={g.id}
-                  onClick={() => setEditing(g)}
-                >
-                  编辑
-                </Button>
-                <Button
-                  variant="destructive"
-                  disabled={g.status !== "available"}
-                  data-delete-gift={g.id}
-                  onClick={() => setConfirm({ gift: g, kind: "delete" })}
-                >
-                  删除
-                </Button>
-              </div>
-            ))}
+        <Modal
+          id="giftManagerDialog"
+          title="管理礼品"
+          size="complex"
+          onClose={() => setManager(false)}
+        >
+          <div className="gift-manager-toolbar">
+            <span>共 {data.gifts.length} 件礼品</span>
+            <Button id="newGiftBtn" onClick={() => setEditing(true)}>
+              <Plus data-icon="inline-start" />
+              创建礼品
+            </Button>
           </div>
+          <ul id="giftManagerList" className="gift-manager-list">
+            {data.gifts.map((g) => (
+              <li className="gift-manager-row" key={g.id}>
+                <div className="gift-manager-image">
+                  {g.imageData ? <img src={g.imageData} alt="" /> : <GiftIcon aria-hidden />}
+                </div>
+                <div className="gift-manager-copy">
+                  <h3>{g.name}</h3>
+                  <div className="gift-manager-meta">
+                    <span>{g.points} 积分</span>
+                    <Badge variant="secondary">
+                      {g.status === "available" ? "可兑换" : "已兑换"}
+                    </Badge>
+                  </div>
+                </div>
+                <div className="gift-manager-actions">
+                  <Button
+                    variant="outline"
+                    disabled={g.status !== "available"}
+                    data-edit-gift={g.id}
+                    onClick={() => setEditing(g)}
+                  >
+                    编辑
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    disabled={g.status !== "available"}
+                    data-delete-gift={g.id}
+                    aria-label={`删除礼品「${g.name}」`}
+                    title="删除礼品"
+                    onClick={() => setConfirm({ gift: g, kind: "delete" })}
+                  >
+                    <Trash2 aria-hidden />
+                  </Button>
+                </div>
+              </li>
+            ))}
+          </ul>
+          {!data.gifts.length && (
+            <EmptyState
+              title="还没有礼品"
+              description="创建一份礼品，作为孩子努力后的奖励。"
+              icon={<GiftIcon aria-hidden />}
+            />
+          )}
         </Modal>
       )}
       {editing && (
@@ -556,42 +592,65 @@ function GiftEditor({ gift, onClose }: { gift?: Gift; onClose: () => void }) {
           })
         }}
       >
-        <fieldset disabled={action.busy || processing}>
-          <div className="gift-image-preview" id="giftImagePreview">
-            {image ? <img src={image} alt="礼品图片预览" /> : <GiftIcon aria-hidden />}
-          </div>
-          <input
-            id="giftImageInput"
-            ref={fileRef}
-            className="sr-only"
-            type="file"
-            accept="image/png,image/jpeg,image/webp"
-            aria-label="选择礼品图片"
-            onChange={(e) => {
-              const f = e.target.files?.[0]
-              e.target.value = ""
-              if (f) void choose(f)
-            }}
-          />
-          <div className="form-actions">
+        <fieldset disabled={action.busy || processing} className="gift-editor-fields">
+          <div className="gift-image-field">
+            <p className="gift-image-label">
+              礼品图片<span>选填</span>
+            </p>
             <Button
-              id="chooseGiftImage"
+              id="giftImagePreview"
+              className="gift-image-picker"
               variant="outline"
               type="button"
+              aria-label={image ? "更换礼品图片" : "上传礼品图片"}
+              aria-describedby="giftImageHelp"
               onClick={() => fileRef.current?.click()}
             >
-              选择图片
+              {image ? (
+                <img src={image} alt="礼品图片预览" />
+              ) : (
+                <span className="gift-image-empty">
+                  <ImagePlus aria-hidden />
+                  <span>点击上传图片</span>
+                </span>
+              )}
+              {image && (
+                <span className="gift-image-caption">
+                  <ImagePlus aria-hidden />
+                  点击更换图片
+                </span>
+              )}
             </Button>
-            {image && (
-              <Button
-                id="removeGiftImage"
-                type="button"
-                variant="ghost"
-                onClick={() => setImage("")}
-              >
-                移除图片
-              </Button>
-            )}
+            <input
+              id="giftImageInput"
+              ref={fileRef}
+              className="sr-only"
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              aria-label="选择礼品图片"
+              tabIndex={-1}
+              onChange={(e) => {
+                const file = e.target.files?.[0]
+                e.target.value = ""
+                if (file) void choose(file)
+              }}
+            />
+            <div className="gift-image-help-row">
+              <p id="giftImageHelp" className="field-help">
+                支持 JPG、PNG、WebP，最大 10MB
+              </p>
+              {image && (
+                <Button
+                  id="removeGiftImage"
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setImage("")}
+                >
+                  移除图片
+                </Button>
+              )}
+            </div>
           </div>
           <Field label="礼品名称" id="giftName">
             <Input
