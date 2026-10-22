@@ -56,7 +56,7 @@ function CloseButton({ disabled }: { disabled: boolean }) {
 }
 function DialogNotice({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex items-start gap-2.5 rounded-lg bg-muted/70 px-3.5 py-3 text-xs leading-5 text-muted-foreground">
+    <div className="flex items-start gap-2.5 rounded-lg bg-muted/70 px-3.5 py-3 text-caption leading-5 text-muted-foreground">
       <ShieldAlert className="mt-0.5 size-4 shrink-0" />
       <p>{children}</p>
     </div>

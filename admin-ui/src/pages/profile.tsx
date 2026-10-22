@@ -56,8 +56,8 @@ function BasicProfile() {
             <UserRound className="size-[18px]" />
           </span>
           <div>
-            <CardTitle className="text-[15px] leading-6">基本资料</CardTitle>
-            <CardDescription className="mt-1 text-xs leading-5">
+            <CardTitle className="text-section">基本资料</CardTitle>
+            <CardDescription className="mt-1 text-caption leading-5">
               维护用于登录和识别的账号信息。
             </CardDescription>
           </div>
@@ -155,10 +155,10 @@ function ChangePassword({ required }: { required: boolean }) {
             <KeyRound className="size-[18px]" />
           </span>
           <div>
-            <CardTitle className="text-[15px] leading-6">
+            <CardTitle className="text-section">
               {required ? "设置自己的密码" : "密码设置"}
             </CardTitle>
-            <CardDescription className="mt-1 text-xs leading-5">
+            <CardDescription className="mt-1 text-caption leading-5">
               修改后，所有已登录会话都会退出，请使用新密码重新登录。
             </CardDescription>
           </div>
@@ -210,7 +210,7 @@ function ChangePassword({ required }: { required: boolean }) {
           </p>
           <FormFeedback id="passwordError" message={error} />
           <div className="-mx-5 flex flex-wrap items-center justify-between gap-3 border-t bg-muted/15 px-5 py-4 sm:-mx-6 sm:px-6">
-            <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <span className="flex items-center gap-1.5 text-caption text-muted-foreground">
               <LockKeyhole className="size-3" />
               保存后需重新登录
             </span>
@@ -245,7 +245,7 @@ export function ProfilePage() {
       {required && (
         <div
           role="status"
-          className="flex items-start gap-3 rounded-xl border border-amber-200/70 bg-amber-50/70 px-5 py-4 text-[13px] leading-6 text-amber-800"
+          className="flex items-start gap-3 rounded-xl border border-amber-200/70 bg-amber-50/70 px-5 py-4 text-sm text-amber-800"
         >
           <ShieldCheck className="mt-0.5 size-5 shrink-0" />
           <p>当前使用的是初始密码，请设置仅自己知道的新密码。</p>

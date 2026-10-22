@@ -19,7 +19,7 @@ export function FormFeedback({
       id={id}
       role={success ? "status" : "alert"}
       className={cn(
-        "flex items-start gap-2.5 rounded-lg border px-3.5 py-3 text-[13px] leading-5",
+        "flex items-start gap-2.5 rounded-lg border px-3.5 py-3 text-sm",
         success
           ? "border-emerald-200/80 bg-emerald-50 text-emerald-800"
           : "border-red-200/80 bg-red-50 text-red-700",

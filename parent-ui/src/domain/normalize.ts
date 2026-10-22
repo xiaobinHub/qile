@@ -1,7 +1,7 @@
 import type { BusinessData } from "./types"
-/** Keep the existing backup compatibility repairs; never writes the source file. */
-export function migrateBackupData(input: BusinessData): BusinessData {
-  if (!input || typeof input !== "object") throw Error("备份内容不正确。")
+/** Normalize API business data while preserving existing compatibility repairs. */
+export function normalizeBusinessData(input: BusinessData): BusinessData {
+  if (!input || typeof input !== "object") throw Error("业务数据不正确。")
   const data = JSON.parse(JSON.stringify(input)) as BusinessData
   if (data.schemaVersion === 1) {
     data.schemaVersion = 2
@@ -49,15 +49,4 @@ export function migrateBackupData(input: BusinessData): BusinessData {
     if (!Array.isArray(data[key])) throw Error(`数据项 ${key} 格式不正确。`)
   if (!data.settings || typeof data.settings !== "object") throw Error("设置数据格式不正确。")
   return data
-}
-export function readBackup(text: string) {
-  const pkg = JSON.parse(text)
-  if (
-    !pkg ||
-    !["lele-task-manager-backup", "lele-task-manager-store"].includes(pkg.format) ||
-    pkg.version !== 1 ||
-    !pkg.data
-  )
-    throw Error("不是有效的成长计划备份。")
-  return migrateBackupData(pkg.data)
 }

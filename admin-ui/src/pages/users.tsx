@@ -105,7 +105,7 @@ function UserActions({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-40" onCloseAutoFocus={handOff}>
-        <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
+        <DropdownMenuLabel className="text-caption font-normal text-muted-foreground">
           账号操作
         </DropdownMenuLabel>
         <DropdownMenuItem
@@ -231,15 +231,15 @@ export function UsersPage() {
         ].map(({ label, value, icon: Icon, className }) => (
           <div key={label} className="overview-cell min-w-0 px-4 py-4 sm:px-5">
             <div className="mb-2 flex items-center justify-between gap-2">
-              <p className="text-xs text-muted-foreground">{label}</p>
+              <p className="text-caption text-muted-foreground">{label}</p>
               <Icon className={`size-4 ${className}`} strokeWidth={1.7} />
             </div>
             {value === undefined ? (
               <Skeleton className="h-8 w-12" />
             ) : (
-              <p className="text-2xl leading-7 font-semibold tracking-tight tabular-nums">
+              <p className="text-number font-semibold tracking-tight tabular-nums">
                 {value}
-                <span className="ml-1.5 text-xs font-normal text-muted-foreground">个</span>
+                <span className="ml-1.5 text-caption font-normal text-muted-foreground">个</span>
               </p>
             )}
           </div>
@@ -315,7 +315,7 @@ export function UsersPage() {
               type="button"
               variant="link"
               size="sm"
-              className="mt-1 h-7 px-0 text-xs"
+              className="mt-1 h-7 px-0 text-sm"
               onClick={() => void loadUsers()}
             >
               重新加载
@@ -327,16 +327,16 @@ export function UsersPage() {
           <Table className="w-full table-fixed">
             <TableHeader className="sticky top-0 z-10 bg-card">
               <TableRow className="bg-muted/30 hover:bg-muted/30">
-                <TableHead className="h-11 w-[34%] pl-3 text-xs font-normal text-muted-foreground sm:pl-5 xl:w-[30%]">
+                <TableHead className="h-11 w-[34%] pl-3 text-caption font-normal text-muted-foreground sm:pl-5 xl:w-[30%]">
                   昵称
                 </TableHead>
-                <TableHead className="w-[27%] text-xs font-normal text-muted-foreground xl:w-[24%]">
+                <TableHead className="w-[27%] text-caption font-normal text-muted-foreground xl:w-[24%]">
                   登录名
                 </TableHead>
-                <TableHead className="hidden w-[18%] text-xs font-normal text-muted-foreground xl:table-cell">
+                <TableHead className="hidden w-[18%] text-caption font-normal text-muted-foreground xl:table-cell">
                   账号类型
                 </TableHead>
-                <TableHead className="text-xs font-normal text-muted-foreground">
+                <TableHead className="text-caption font-normal text-muted-foreground">
                   账号状态
                 </TableHead>
                 <TableHead className="w-14 pr-3 pl-0">
@@ -371,31 +371,31 @@ export function UsersPage() {
                       <TableCell className="py-2 pl-3 sm:pl-5">
                         <div className="flex min-w-0 items-center gap-3">
                           <div
-                            className={`hidden size-9 shrink-0 sm:flex items-center justify-center rounded-full text-[13px] font-medium ${user.role === "admin" ? "bg-primary/10 text-brand-ink" : "bg-muted text-muted-foreground"}`}
+                            className={`hidden size-9 shrink-0 sm:flex items-center justify-center rounded-full text-sm font-medium ${user.role === "admin" ? "bg-primary/10 text-brand-ink" : "bg-muted text-muted-foreground"}`}
                           >
                             {Array.from(user.nickname || user.loginName)[0]}
                           </div>
                           <div className="min-w-0">
                             <span
-                              className="block truncate text-[13px] font-medium"
+                              className="block truncate text-sm font-medium"
                               title={user.nickname}
                             >
                               {user.nickname}
                             </span>
-                            <span className="mt-0.5 block text-xs text-muted-foreground xl:hidden">
+                            <span className="mt-0.5 block text-caption text-muted-foreground xl:hidden">
                               {user.role === "admin" ? "管理员" : "成员"}
                             </span>
                           </div>
                         </div>
                       </TableCell>
-                      <TableCell className="text-xs text-muted-foreground">
+                      <TableCell className="text-sm text-muted-foreground">
                         <span className="block truncate" title={user.loginName}>
                           {user.loginName}
                         </span>
                       </TableCell>
                       <TableCell className="hidden xl:table-cell">
                         <span
-                          className={`inline-flex items-center gap-1.5 text-xs ${user.role === "admin" ? "text-foreground/75" : "text-muted-foreground"}`}
+                          className={`inline-flex items-center gap-1.5 text-sm ${user.role === "admin" ? "text-foreground/75" : "text-muted-foreground"}`}
                         >
                           {user.role === "admin" ? (
                             <ShieldCheck className="size-3.5 text-brand-ink/70" />
@@ -449,7 +449,7 @@ export function UsersPage() {
                 {hasFilter ? <Search className="size-5" /> : <UsersRound className="size-5" />}
               </div>
               <p className="text-sm font-medium">{hasFilter ? "没有匹配的账号" : "暂无账号"}</p>
-              <p className="mt-2 text-xs text-muted-foreground">
+              <p className="mt-2 text-caption text-muted-foreground">
                 {hasFilter
                   ? "试试其他关键词，或调整账号状态。"
                   : "点击“开通账号”，添加第一个家长账号。"}
@@ -458,7 +458,7 @@ export function UsersPage() {
                 <Button
                   type="button"
                   variant="link"
-                  className="mt-2 h-8 text-xs"
+                  className="mt-2 h-8 text-sm"
                   onClick={() => {
                     setSearch("")
                     setFilter("all")
@@ -470,18 +470,18 @@ export function UsersPage() {
             </div>
           )}
           {!users && !loading && error && (
-            <div className="py-14 text-center text-xs text-muted-foreground">
+            <div className="py-14 text-center text-caption text-muted-foreground">
               账号列表暂时无法载入
             </div>
           )}
         </div>
-        <div className="flex flex-wrap items-center justify-between gap-2 border-t bg-muted/15 px-5 py-3 text-xs text-muted-foreground">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t bg-muted/15 px-5 py-3 text-caption text-muted-foreground">
           <p>
             {users ? `显示 ${visible.length} 个账号，共 ${users.length} 个` : "正在读取账号信息"}
           </p>
         </div>
       </Card>
-      <p className="flex items-start gap-2 px-1 text-xs leading-5 text-muted-foreground">
+      <p className="flex items-start gap-2 px-1 text-caption leading-5 text-muted-foreground">
         <ShieldCheck className="mt-0.5 size-3.5 shrink-0" />
         新开通或重置密码的账号，首次登录时需设置自己的密码。
       </p>

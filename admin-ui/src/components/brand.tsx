@@ -13,8 +13,10 @@ export function Brand({ compact = false }: { compact?: boolean }) {
         <Sprout className={compact ? "size-5" : "size-6"} strokeWidth={1.8} />
       </span>
       <div>
-        <div className="text-[17px] leading-6 font-semibold tracking-tight">乐乐成长</div>
-        <div className="mt-0.5 text-xs tracking-[0.12em] text-muted-foreground">管理工作台</div>
+        <div className="text-page font-semibold tracking-tight">乐乐成长</div>
+        <div className="mt-0.5 text-caption tracking-[0.12em] text-muted-foreground">
+          管理工作台
+        </div>
       </div>
     </div>
   )

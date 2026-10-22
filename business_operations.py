@@ -103,7 +103,7 @@ def expand(task, start, end):
     step, generated, result = rule["interval"], 0, []
     def add(day):
         nonlocal generated
-        if day > limit or generated >= count:
+        if day < first or day > limit or generated >= count:
             return
         generated += 1
         if first <= day and start <= day.isoformat():
@@ -295,12 +295,24 @@ def _apply(data, kind, p, stamp, today):
     elif kind == "gift.save":
         fields(p, ("gift",), ("gift",))
         g = p["gift"]
-        fields(g, ("id", "name", "points", "imageData"), ("name", "points"))
+        fields(g, ("id", "name", "points", "imageData", "imageAssetId"), ("name", "points"))
         existing = find(data["gifts"], g["id"]) if g.get("id") else None
         if existing and existing["status"] != "available":
             fail("已兑换礼品不能编辑，请先撤销兑换。", HTTPStatus.CONFLICT)
         attrs = {"name": text(g["name"], 40), "points": g["points"], "imageData": gift_image(g.get("imageData")), "updatedAt": stamp}
+        if g.get("imageAssetId") is not None:
+            from media_types import ASSET_ID
+            if not isinstance(g["imageAssetId"], str) or not ASSET_ID.fullmatch(g["imageAssetId"]):
+                fail("图片引用格式不正确。")
+            if g.get("imageData"):
+                fail("请只提交一种图片引用。")
+            attrs.pop("imageData", None)
+            attrs["imageAssetId"] = g["imageAssetId"]
+        elif not attrs.get("imageData"):
+            attrs.pop("imageData", None)
         if existing:
+            for key in ("imageData", "imageAssetId", "imageUrl"):
+                existing.pop(key, None)
             existing.update(attrs)
         else:
             data["gifts"].append({"id": uid(), **attrs, "createdAt": stamp, "status": "available", "redeemedAt": None, "redemptionLedgerId": None})

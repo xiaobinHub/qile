@@ -1,17 +1,7 @@
 import { useLayoutEffect, useRef, useState, type CSSProperties } from "react"
-import {
-  Button,
-  Empty,
-  Feedback,
-  Icon,
-  Input,
-  Notice,
-  RowMenu,
-  date,
-  useAction,
-} from "./primitives"
+import { Button, Empty, Feedback, Icon, Input, Notice, RowMenu, useAction } from "./primitives"
 import { ArrowDown, ArrowUp, Clock3, GripVertical, Plus } from "lucide-react"
-import type { Child, Context, Controller } from "./types"
+import type { Context, Controller } from "./types"
 
 export function Presets({ controller, context }: { controller: Controller; context: Context }) {
   const action = useAction(controller),
@@ -302,66 +292,6 @@ export function Categories({ controller, context }: { controller: Controller; co
       </p>
       <p className="settings-help">被任务或历史记录使用的类型，删除后会停用并保留历史。</p>
       <Feedback id="settingsCategoryError" message={action.error} />
-    </>
-  )
-}
-
-export function Backup({
-  controller,
-  child,
-  updatedAt,
-}: {
-  controller: Controller
-  child: Child
-  updatedAt: string | null
-}) {
-  const restore = child.role === "owner" && !child.archived,
-    { deps } = controller
-  return (
-    <>
-      <div className="settings-backup-card">
-        <span className="settings-feature-icon">
-          <Icon name="backup" />
-        </span>
-        <div>
-          <h3>{child.name}的成长备份</h3>
-          <p>包含当前孩子的任务、完成记录、积分流水、礼品和配置。</p>
-          <small>{updatedAt ? `最近保存：${date(updatedAt)}` : "尚无保存记录"}</small>
-        </div>
-      </div>
-      <div className="settings-backup-actions">
-        <div>
-          <strong>导出备份</strong>
-          <p>下载完整 JSON 文件，保存一份成长记录。</p>
-        </div>
-        <Button variant="default" id="settingsExportBtn" type="button" onClick={deps.exportBackup}>
-          导出备份
-        </Button>
-      </div>
-      <div className="settings-backup-actions">
-        <div>
-          <strong>从备份恢复</strong>
-          <p>
-            {restore
-              ? "恢复会替换当前孩子的业务数据，孩子昵称和家长权限保持不变。"
-              : child.archived
-                ? "孩子已归档，当前仅可查看和导出，不支持恢复。"
-                : "只有孩子管理员可以导入并恢复数据。"}
-          </p>
-        </div>
-        <Button
-          variant="outline"
-          id="settingsImportBtn"
-          type="button"
-          disabled={!restore}
-          onClick={deps.importBackup}
-        >
-          导入并恢复
-        </Button>
-      </div>
-      <p className="settings-help">
-        每次保存前自动保留旧版本，最多保留最近 30 份。建议定期另行导出备份。
-      </p>
     </>
   )
 }

@@ -18,7 +18,7 @@
     overflow: auto;
   }
   .field-help {
-    @apply text-xs leading-5 text-muted-foreground;
+    @apply text-caption text-muted-foreground;
   }
   .admin-dialog {
     @apply border-border bg-card shadow-[0_20px_80px_-24px_rgba(0,0,0,0.3)];

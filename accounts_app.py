@@ -10,12 +10,13 @@ import re
 from pathlib import Path
 
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse, FileResponse
+from fastapi.responses import JSONResponse, FileResponse, Response
 from starlette.concurrency import run_in_threadpool
 from starlette.exceptions import HTTPException
 
 from child_service import ApiError, ChildService, initialize, bootstrap, import_child, SESSION_SECONDS
 from storage import StoreError
+from media_types import ImageResponse, MAX_IMAGE_BYTES
 
 MAX_BODY_BYTES = 8 * 1024 * 1024
 
@@ -51,7 +52,7 @@ def create_app(config_path, surface='parent'):
     @app.middleware('http')
     async def headers(request,call_next):
         response=await call_next(request)
-        response.headers['Cache-Control']='no-store'
+        response.headers['Cache-Control']='private, no-store' if '/assets/' in request.url.path else 'no-store'
         response.headers['X-Content-Type-Options']='nosniff'
         response.headers['Referrer-Policy']='same-origin'
         response.headers['X-Frame-Options']='DENY'
@@ -71,11 +72,15 @@ def create_app(config_path, surface='parent'):
 
     @app.api_route('/api/{path:path}',methods=['GET','POST','PATCH','DELETE','PUT','OPTIONS'])
     async def api(path:str,request:Request):
+        upload=re.fullmatch(r'children/([^/]+)/assets',path) if request.method=='POST' and surface=='parent' else None
         body_bytes=bytearray()
         async for chunk in request.stream():
             body_bytes.extend(chunk)
-            if len(body_bytes)>MAX_BODY_BYTES:
+            if len(body_bytes)>(MAX_IMAGE_BYTES if upload else MAX_BODY_BYTES):
                 raise ApiError(413,'提交内容过大。')
+        if upload:
+            result=await run_in_threadpool(service.media.upload,upload[1],bytes(body_bytes),request.headers.get('content-type','').split(';')[0].strip(),request.headers.get('x-upload-id'),request.headers.get('x-membership-version'),request.cookies.get(cookie_name),request.headers.get('x-csrf-token'),request.headers.get('origin'))
+            return JSONResponse(result)
         try:
             body=json.loads(body_bytes, parse_constant=reject_json_constant) if body_bytes else {}
         except (ValueError,UnicodeError):
@@ -83,6 +88,8 @@ def create_app(config_path, surface='parent'):
         if body_bytes and request.headers.get('content-type','').split(';')[0].strip()!='application/json':
             raise ApiError(415,'请使用 JSON 请求格式。')
         result=await run_in_threadpool(service.request,request.method,path,body,request.cookies.get(cookie_name),request.headers.get('x-csrf-token'),request.headers.get('origin'),surface,request.client.host if request.client else 'unknown')
+        if isinstance(result,ImageResponse):
+            return Response(result.content,media_type=result.mime)
         token=result.pop('_cookie',None); clear=result.pop('_clear_cookie',False)
         response=JSONResponse(result)
         if token:

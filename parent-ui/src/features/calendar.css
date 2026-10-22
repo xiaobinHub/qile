@@ -1,23 +1,101 @@
 /* Calendar-owned layout: business geometry stays in calendar.tsx. */
+.app:has(> #main > .calendar-panel) {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  min-height: 0;
+}
+.app:has(> #main > .calendar-panel) > .topbar {
+  flex: none;
+}
+#main:has(> .calendar-panel) {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  padding-bottom: max(16px, env(safe-area-inset-bottom, 0px));
+}
+#main > .calendar-panel {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+.calendar-panel > .calendar-toolbar {
+  flex: none;
+}
+.calendar-panel > .month-scroll,
+.calendar-panel > .week-wrap {
+  flex: 1;
+  min-height: 0;
+  max-height: none;
+  overflow: auto;
+}
+.calendar-panel .month-grid {
+  align-items: stretch;
+  grid-auto-rows: minmax(148px, auto);
+}
+.calendar-panel .month-cell {
+  min-height: 148px;
+}
+@media (min-width: 1024px) {
+  .calendar-panel #calendarTitle {
+    flex: 0 0 176px;
+    width: 176px;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .calendar-panel[data-calendar-mode="week"] #calendarTitle {
+    flex-basis: 260px;
+    width: 260px;
+  }
+}
+@media (max-width: 1023px) {
+  .calendar-panel > .calendar-toolbar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px 12px;
+  }
+  .calendar-panel #calendarTitle {
+    grid-area: 1 / 1;
+    font-variant-numeric: tabular-nums;
+  }
+  .calendar-panel .calendar-navigation {
+    grid-area: 1 / 2;
+  }
+  .calendar-panel .calendar-toolbar > [data-slot="toggle-group"] {
+    grid-area: 2 / 1;
+    justify-self: start;
+    margin-left: 0;
+  }
+  .calendar-panel .calendar-toolbar-actions {
+    grid-area: 2 / 2;
+    margin-left: 0;
+  }
+}
 #taskDialog[data-modal-size="complex"] {
-  width: min(720px, calc(100vw - 32px));
+  width: min(820px, calc(100vw - 32px));
+  max-width: 820px;
 }
 #taskForm .task-editor-fields {
   display: block;
   min-width: 0;
 }
 #taskForm .form-field {
+  display: flex;
+  flex-direction: column;
   gap: 6px;
   margin-bottom: 16px;
   min-width: 0;
 }
-#taskForm .task-details-grid {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+#taskForm .task-identity-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0 16px;
 }
-#taskForm .task-time-grid {
+#taskForm .task-schedule-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr)) minmax(100px, 0.7fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0 16px;
 }
 #taskForm .task-notes {
@@ -33,15 +111,39 @@
   max-height: 200px;
   resize: vertical;
 }
-#taskForm .switch-field {
-  border-top: 1px solid var(--border);
-  padding: 12px 0;
-  min-height: 48px;
+#taskForm .recurrence-section {
+  margin: 4px 0 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+}
+#taskForm .recurrence-section .switch-field {
+  border: 0;
+  padding: 14px 16px;
+  min-height: 72px;
+  gap: 16px;
+  background: var(--muted);
+}
+#taskForm .recurrence-section[data-expanded="true"] .switch-field {
+  border-bottom: 1px solid var(--border);
+}
+#taskForm .switch-field label {
+  font-size: var(--text-section);
+  line-height: var(--text-section--line-height);
+  font-weight: 600;
+}
+#taskForm .switch-field p {
+  margin-top: 2px;
+  font-size: var(--text-caption);
+  line-height: var(--text-caption--line-height);
+  color: var(--text-secondary);
 }
 #taskForm .recurrence-fields {
   padding: 16px;
-  margin-bottom: 16px;
-  border: 1px solid var(--border);
+  margin-bottom: 0;
+  border: 0;
+  border-radius: 0;
+  background: var(--card);
 }
 #taskForm .recurrence-fields .form-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -49,6 +151,20 @@
 }
 #taskForm .recurrence-fields > .form-field:last-child {
   margin-bottom: 0;
+}
+#taskForm .recurrence-end-grid > .form-field {
+  margin-bottom: 0;
+}
+#taskForm .recurrence-summary > span {
+  font-size: var(--text-body);
+  line-height: var(--text-body--line-height);
+  font-weight: 600;
+}
+#taskForm .recurrence-summary > p {
+  display: flex;
+  align-items: center;
+  min-height: 40px;
+  color: var(--text-secondary);
 }
 #taskForm .weekday-picks {
   gap: 4px 12px;
@@ -110,52 +226,18 @@
   justify-content: center;
 }
 .calendar-panel .week-event.short-event strong {
-  font-size: 11px;
-  line-height: 1;
+  font-size: var(--text-meta);
+  line-height: var(--text-meta--line-height);
   white-space: nowrap;
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-/* One day interaction on touch devices; task rows are previews below it. */
-.calendar-panel .touch-month .month-cell {
-  min-height: 156px;
-  padding-top: 44px;
-}
-.calendar-panel .touch-month .day-open {
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-  width: 100%;
-  height: 100%;
-  min-height: 44px;
-  align-items: flex-start;
-  justify-content: flex-start;
-  padding: 8px;
-  border-radius: 0;
-}
-.calendar-panel .touch-month .day-open:focus-visible {
-  outline-offset: -3px;
-}
-.calendar-panel .touch-month .month-tasks {
-  position: relative;
-  z-index: 2;
-  pointer-events: none;
-  margin-top: 0;
-}
-.calendar-panel .touch-month .month-task {
-  display: flex;
-  align-items: center;
-  border-radius: 5px;
-  white-space: nowrap;
-  box-sizing: border-box;
-}
-.calendar-panel .touch-month .more-tasks {
-  display: block;
-  text-align: left;
-  color: var(--text-secondary);
-}
 @media (pointer: coarse) {
+  #taskForm .form-field > [data-slot="button"],
+  #taskForm .form-field > [data-slot="popover-trigger"] {
+    min-height: 44px;
+  }
   #taskForm .weekday-picks label {
     min-height: 44px;
   }
@@ -167,21 +249,14 @@
   #taskDialog[data-modal-size="complex"] {
     width: calc(100vw - 24px);
   }
-  #taskForm .task-time-grid {
+  #taskForm .task-identity-grid,
+  #taskForm .task-schedule-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0 12px;
   }
-  #taskForm .task-time-grid > .form-field:last-child {
+  #taskForm .task-identity-grid > .form-field:first-child,
+  #taskForm .task-schedule-grid > .form-field:first-child {
     grid-column: 1 / -1;
-  }
-  #taskForm .recurrence-fields {
-    padding: 12px;
-  }
-  .calendar-panel .touch-month .month-cell {
-    min-height: 138px;
-  }
-  .calendar-panel .touch-month .day-open {
-    padding: 7px 3px;
-    font-size: 12px;
   }
 }
 
@@ -192,30 +267,173 @@
   border-top: 1px solid var(--border);
 }
 .calendar-panel .month-start .day-open {
-  color: var(--foreground);
-  font-weight: 400;
+  color: var(--destructive-ink);
+  font-weight: 600;
 }
 .calendar-panel .month-start .day-open > span:first-child {
   background: transparent;
   padding: 0;
   font-size: inherit;
+  color: var(--destructive-ink);
 }
 .calendar-panel .today.month-start .day-open > span:first-child {
   background: var(--primary);
-}
-.calendar-panel .touch-month .day-open {
-  padding: 8px 12px;
 }
 .calendar-panel .week-head {
   background: var(--card);
   color: var(--foreground);
   border-bottom-color: var(--input);
 }
-.calendar-panel .touch-month .month-task {
-  border-radius: var(--radius-control);
+/* Separate, non-nested targets: empty day area, completion circle and task text. */
+.calendar-panel .month-cell {
+  padding: 52px 12px 8px;
 }
-@media (max-width: 680px) {
-  .calendar-panel .touch-month .day-open {
-    padding: 7px 3px;
+.calendar-panel .day-open {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  min-height: 44px;
+  align-items: flex-start;
+  justify-content: flex-start;
+  padding: 8px 12px;
+  border-radius: 0;
+  font-size: var(--text-section);
+  line-height: var(--text-section--line-height);
+  font-weight: 600;
+}
+.calendar-panel .day-open:hover {
+  background: color-mix(in srgb, var(--primary) 5%, transparent);
+}
+.calendar-panel .day-open:focus-visible {
+  outline-offset: -3px;
+}
+.calendar-panel .day-open:disabled {
+  opacity: 1;
+}
+.calendar-panel .month-tasks {
+  position: relative;
+  margin-top: 0;
+  pointer-events: none;
+}
+.calendar-panel .month-task {
+  position: relative;
+  display: flex;
+  gap: 0;
+  height: auto;
+  min-height: 34px;
+  padding: 0;
+  pointer-events: auto;
+}
+.calendar-panel .calendar-task-toggle {
+  flex: 0 0 30px;
+  width: 30px;
+  height: 34px;
+  min-height: 34px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+}
+.calendar-panel .calendar-task-toggle svg {
+  width: 16px;
+  height: 16px;
+  color: var(--task-color);
+  fill: none;
+}
+.calendar-panel .done .calendar-task-toggle svg {
+  color: var(--success);
+}
+.calendar-panel .calendar-task-edit {
+  flex: 1;
+  min-width: 0;
+  height: 34px;
+  min-height: 34px;
+  justify-content: flex-start;
+  gap: 0;
+  padding: 4px 8px 4px 0;
+  border: 0;
+  border-radius: 0;
+  text-align: left;
+  font-size: inherit;
+  font-weight: 400;
+  line-height: inherit;
+  overflow: hidden;
+}
+.calendar-panel .calendar-task-edit > span {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.calendar-panel .calendar-task-toggle:focus-visible,
+.calendar-panel .calendar-task-edit:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--ring);
+}
+.calendar-panel .week-event {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  gap: 0;
+  padding: 0;
+}
+.calendar-panel .week-event .calendar-task-toggle {
+  flex-basis: 24px;
+  width: 24px;
+  height: 100%;
+  min-height: 0;
+  align-items: flex-start;
+  padding-top: 5px;
+}
+.calendar-panel .week-event .calendar-task-edit {
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-start;
+  height: 100%;
+  min-height: 0;
+  padding: 4px 3px 2px 0;
+}
+.calendar-panel .week-event.short-event .calendar-task-edit {
+  justify-content: center;
+  padding-block: 0;
+}
+.calendar-panel .week-event.short-event .calendar-task-toggle {
+  align-items: center;
+  padding-top: 0;
+}
+@media (pointer: coarse) {
+  .calendar-panel .month-task .calendar-task-toggle {
+    flex-basis: 44px;
+    width: 44px;
+    height: 44px;
+    min-height: 44px;
+  }
+  .calendar-panel .month-task .calendar-task-edit {
+    height: 44px;
+    min-height: 44px;
+  }
+}
+@media (max-width: 1199px) {
+  .calendar-panel .month-cell {
+    padding-inline: 7px;
+  }
+  .calendar-panel .day-open {
+    padding-inline: 7px;
+  }
+}
+@media (max-width: 600px) {
+  .calendar-panel .month-cell {
+    padding: 38px 3px 5px;
+  }
+  .calendar-panel .day-open {
+    padding: 5px 3px;
+  }
+  .calendar-panel .month-task .calendar-task-toggle {
+    flex-basis: 24px;
+    width: 24px;
+    min-width: 24px;
+  }
+  .calendar-panel .calendar-task-edit {
+    padding-inline: 0 2px;
   }
 }

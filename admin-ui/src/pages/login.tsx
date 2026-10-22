@@ -93,7 +93,7 @@ export function LoginPage() {
             </Button>
           </form>
         </CardContent>
-        <div className="border-t bg-muted/30 px-7 py-3.5 text-center text-xs text-muted-foreground">
+        <div className="border-t bg-muted/30 px-7 py-3.5 text-center text-caption text-muted-foreground">
           乐乐成长 · 账号管理
         </div>
       </Card>

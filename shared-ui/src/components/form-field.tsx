@@ -52,12 +52,12 @@ export function FormField({
         "aria-invalid": error ? true : children.props["aria-invalid"],
       })}
       {help && (
-        <p id={`${fieldId}-help`} className="text-xs leading-5 text-muted-foreground">
+        <p id={`${fieldId}-help`} className="text-caption text-muted-foreground">
           {help}
         </p>
       )}
       {error && (
-        <p id={`${fieldId}-error`} role="alert" className="text-xs leading-5 text-destructive-ink">
+        <p id={`${fieldId}-error`} role="alert" className="text-sm text-destructive-ink">
           {error}
         </p>
       )}

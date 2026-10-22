@@ -32,7 +32,7 @@ import {
   ErrorText,
   useAsync,
 } from "./ui"
-import { runtime } from "../lib/runtime"
+import { runtime, operationId } from "../lib/runtime"
 import { balance, today } from "../domain/calendar"
 import { compressGiftImage } from "../domain/images"
 import type { BusinessData, Child, Gift, Ledger } from "../domain/types"
@@ -99,9 +99,9 @@ export function StorePage({
               <div className="gift-grid">
                 {available.map((g) => (
                   <Card className="gift-card" key={g.id} data-gift={g.id}>
-                    <div className="gift-image" data-has-image={Boolean(g.imageData)}>
-                      {g.imageData ? (
-                        <img src={g.imageData} alt={g.name} />
+                    <div className="gift-image" data-has-image={Boolean(g.imageUrl || g.imageData)}>
+                      {g.imageUrl || g.imageData ? (
+                        <img src={g.imageUrl || g.imageData || undefined} alt={g.name} />
                       ) : (
                         <GiftIcon aria-hidden />
                       )}
@@ -161,7 +161,11 @@ export function StorePage({
                   {redeemed.map((g) => (
                     <li className="gift-history-row" key={g.id} data-redeemed-gift={g.id}>
                       <div className="gift-history-image">
-                        {g.imageData ? <img src={g.imageData} alt="" /> : <GiftIcon aria-hidden />}
+                        {g.imageUrl || g.imageData ? (
+                          <img src={g.imageUrl || g.imageData || undefined} alt="" />
+                        ) : (
+                          <GiftIcon aria-hidden />
+                        )}
                       </div>
                       <div className="gift-history-copy">
                         <h3>{g.name}</h3>
@@ -222,7 +226,11 @@ export function StorePage({
             {data.gifts.map((g) => (
               <li className="gift-manager-row" key={g.id}>
                 <div className="gift-manager-image">
-                  {g.imageData ? <img src={g.imageData} alt="" /> : <GiftIcon aria-hidden />}
+                  {g.imageUrl || g.imageData ? (
+                    <img src={g.imageUrl || g.imageData || undefined} alt="" />
+                  ) : (
+                    <GiftIcon aria-hidden />
+                  )}
                 </div>
                 <div className="gift-manager-copy">
                   <h3>{g.name}</h3>
@@ -530,27 +538,59 @@ function ManualEditor({ onClose }: { onClose: () => void }) {
 function GiftEditor({ gift, onClose }: { gift?: Gift; onClose: () => void }) {
   const [name, setName] = useState(gift?.name || ""),
     [points, setPoints] = useState(String(gift?.points || "")),
-    [image, setImage] = useState(gift?.imageData || ""),
+    [image, setImage] = useState(gift?.imageUrl || gift?.imageData || ""),
+    [assetId, setAssetId] = useState(gift?.imageAssetId || ""),
+    [uploadFailed, setUploadFailed] = useState(false),
+    pendingImage = useRef<{ value: string; id: string } | null>(null),
+    imageEpoch = useRef(runtime.getSnapshot().epoch),
     [processing, setProcessing] = useState(false),
     action = useAsync(),
     fileRef = useRef<HTMLInputElement>(null),
     live = useRef(true)
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    live.current = true
+    return () => {
       live.current = false
-    },
-    [],
-  )
+    }
+  }, [])
+  const active = () => live.current && imageEpoch.current === runtime.getSnapshot().epoch
+  async function upload(retry = false) {
+    const pending = pendingImage.current
+    if (!pending || !active()) return
+    setProcessing(true)
+    action.setError("")
+    try {
+      const result = await runtime.uploadImage(pending.value, pending.id, imageEpoch.current, retry)
+      if (active() && pendingImage.current === pending) {
+        setAssetId(result.assetId)
+        setUploadFailed(false)
+        pendingImage.current = null
+      }
+    } catch (e) {
+      if (active()) {
+        setUploadFailed(true)
+        action.setError((e as Error).message)
+      }
+    } finally {
+      if (active()) setProcessing(false)
+    }
+  }
   async function choose(file: File) {
     setProcessing(true)
     action.setError("")
     try {
       const result = await compressGiftImage(file)
-      if (live.current) setImage(result)
+      if (active()) {
+        setImage(result)
+        setAssetId("")
+        pendingImage.current = { value: result, id: operationId() }
+        setUploadFailed(true)
+        await upload()
+      }
     } catch (e) {
-      if (live.current) action.setError((e as Error).message)
+      if (active()) action.setError((e as Error).message)
     } finally {
-      if (live.current) setProcessing(false)
+      if (active()) setProcessing(false)
     }
   }
   return (
@@ -567,7 +607,7 @@ function GiftEditor({ gift, onClose }: { gift?: Gift; onClose: () => void }) {
             id="saveGiftBtn"
             type="submit"
             form="giftEditorForm"
-            disabled={action.busy || processing}
+            disabled={action.busy || processing || uploadFailed}
           >
             {action.busy ? "保存中…" : "保存礼品"}
           </Button>
@@ -578,13 +618,14 @@ function GiftEditor({ gift, onClose }: { gift?: Gift; onClose: () => void }) {
         id="giftEditorForm"
         onSubmit={(e) => {
           e.preventDefault()
+          if (processing || uploadFailed) return
           void action.run(async () => {
             await runtime.command("gift.save", {
               gift: {
                 ...(gift ? { id: gift.id } : {}),
                 name: name.trim(),
                 points: Number(points),
-                imageData: image || null,
+                imageAssetId: assetId || null,
               },
             })
             onClose()
@@ -644,7 +685,13 @@ function GiftEditor({ gift, onClose }: { gift?: Gift; onClose: () => void }) {
                   type="button"
                   variant="ghost"
                   size="sm"
-                  onClick={() => setImage("")}
+                  onClick={() => {
+                    setImage("")
+                    setAssetId("")
+                    pendingImage.current = null
+                    setUploadFailed(false)
+                    action.setError("")
+                  }}
                 >
                   移除图片
                 </Button>
@@ -673,7 +720,12 @@ function GiftEditor({ gift, onClose }: { gift?: Gift; onClose: () => void }) {
             />
           </Field>
           <ErrorText id="giftEditorError" message={action.error} />
-          {processing && <p role="status">正在处理图片…</p>}
+          {processing && <p role="status">正在处理并上传图片…</p>}
+          {uploadFailed && !processing && (
+            <Button type="button" variant="outline" onClick={() => void upload(true)}>
+              重试图片上传
+            </Button>
+          )}
         </fieldset>
       </form>
     </Modal>

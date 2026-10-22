@@ -9,6 +9,7 @@
     "build:parent": "npm run check:parent && vite build --config parent-ui/vite.config.mts",
     "test:domain": "node scripts/domain_tests.cjs && node scripts/runtime_tests.cjs",
     "check:format": "prettier --check parent-ui/src shared-ui/src",
+    "check:typography": "node scripts/check_typography.cjs",
     "build": "npm run build:admin && npm run build:parent"
   },
   "devDependencies": {

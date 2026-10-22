@@ -96,3 +96,15 @@ class BusinessCommandsTest(unittest.TestCase):
         self.assertEqual(self.data['gifts'][0]['imageData'],image)
 
 if __name__=='__main__': unittest.main()
+
+class MonthlyCountRegressionTests(unittest.TestCase):
+    def test_count_only_includes_dates_on_or_after_start(self):
+        task = dict(id='monthly', title='月度', note='', startDate='2026-10-20', startTime='08:00', endTime='09:00', categoryId='cat', points=1,
+                    recurrence=dict(freq='monthly', interval=1, monthDay=1, endType='count', count=3))
+        self.assertEqual([o['date'] for o in expand(task,'2026-10-20','2027-03-01')],['2026-11-01','2026-12-01','2027-01-01'])
+        self.assertEqual([o['date'] for o in expand(task,'2026-12-01','2027-03-01')],['2026-12-01','2027-01-01'])
+        task['recurrence']['interval']=2
+        self.assertEqual([o['date'] for o in expand(task,'2026-10-20','2027-08-01')],['2026-12-01','2027-02-01','2027-04-01'])
+        task['startDate']='2026-01-31'
+        task['recurrence'].update(interval=1,monthDay=31)
+        self.assertEqual([o['date'] for o in expand(task,'2026-01-01','2026-05-01')],['2026-01-31','2026-02-28','2026-03-31'])

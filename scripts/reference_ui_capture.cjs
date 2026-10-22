@@ -4,10 +4,24 @@ const fs = require("node:fs")
 const path = require("node:path")
 const assert = require("node:assert/strict")
 
-async function captureReferenceUI({ browser, state, origin, firstId, out, axe }) {
+async function captureReferenceUI({
+  browser,
+  state,
+  origin,
+  firstId,
+  out,
+  axe,
+  viewport = { width: 1487, height: 1058 },
+  touch = false,
+  prefix = "reference-final-",
+  giftCount = 3,
+  inspect,
+}) {
   const context = await browser.newContext({
     storageState: state,
-    viewport: { width: 1487, height: 1058 },
+    viewport,
+    hasTouch: touch,
+    isMobile: touch,
   })
   const images = ["zoo", "blocks", "microscope"].map(
     (name) =>
@@ -82,15 +96,23 @@ async function captureReferenceUI({ browser, state, origin, firstId, out, axe })
             reason: "视觉测试余额",
           },
         ],
-        gifts: ["动物园亲子日", "创意积木套装", "儿童显微镜"].map((name, i) => ({
-          id: `visual-gift-${i}`,
-          name,
-          points: [100, 300, 800][i],
-          imageData: images[i],
-          status: "available",
-          createdAt,
-          updatedAt: createdAt,
-        })),
+        gifts: [
+          "动物园亲子日",
+          "创意积木套装",
+          "儿童显微镜",
+          "东方112型内燃机车拼装套装与轨道拓展组合超长礼品名称",
+          "亲子阅读奖励",
+        ]
+          .slice(0, giftCount)
+          .map((name, i) => ({
+            id: `visual-gift-${i}`,
+            name,
+            points: [100, 300, 800, 123456, 20][i],
+            imageData: i === 4 ? "" : images[i % images.length],
+            status: "available",
+            createdAt,
+            updatedAt: createdAt,
+          })),
         taskPresets: [],
         operationLog: [],
       }
@@ -115,7 +137,7 @@ async function captureReferenceUI({ browser, state, origin, firstId, out, axe })
         await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1),
         false,
       )
-      await page.screenshot({ path: path.join(out, "reference-final-" + name + ".png") })
+      await page.screenshot({ path: path.join(out, prefix + name + ".png") })
     }
     await page.goto(`${origin}/children/${firstId}`)
     await page.locator("#calendarTitle").waitFor()
@@ -137,10 +159,11 @@ async function captureReferenceUI({ browser, state, origin, firstId, out, axe })
     await axe(page, "reference-settings")
     await page.locator('[data-view="store"]').click()
     await page.locator('[data-store-tab="gifts"]').waitFor()
-    assert.equal(await page.locator(".gift-card").count(), 3)
+    assert.equal(await page.locator(".gift-card").count(), giftCount)
     assert.equal(await page.locator('[data-redeem="visual-gift-2"]').isDisabled(), true)
     await shot("store")
     await axe(page, "reference-store")
+    if (inspect) await inspect(page)
     assert.equal(writes, 0)
     assert.deepEqual(errors, [])
   } finally {

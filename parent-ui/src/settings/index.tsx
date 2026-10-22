@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react"
 import { AccountPassword, AccountProfile } from "./account"
 import { ChildProfile, Family, Invitations } from "./children"
-import { Backup, Categories, Presets } from "./tasks"
+import { Categories, Presets } from "./tasks"
 import { Button, Card, CardContent, CardHeader, CardTitle, Icon } from "./primitives"
 import type { Context, Controller } from "./types"
 
@@ -19,7 +19,6 @@ const groups = [
     items: [
       ["tasks/presets", "常用任务配置", "task", "openTaskPresetsSettings"],
       ["tasks/categories", "任务类型配置", "category", "openCategorySettings"],
-      ["tasks/backup", "数据备份", "backup", "openBackupSettings"],
     ],
   },
   {
@@ -52,8 +51,6 @@ function Pane({
       return <Presets controller={controller} context={context} />
     case "tasks/categories":
       return <Categories controller={controller} context={context} />
-    case "tasks/backup":
-      return <Backup controller={controller} child={context.child!} updatedAt={context.updatedAt} />
     case "account/password":
       return <AccountPassword controller={controller} />
     default:

@@ -87,6 +87,9 @@ class ChildBackendTests(unittest.TestCase):
         self.assertEqual(r.status_code,200,r.text)
         return r.json()
 
+    def raw(self,child):
+        return self.service.transaction(lambda cur:self.service.store.read(cur,child['id']))
+
     def operation(self,child,data=None,operation_id=None):
         data=data or self.data(child)
         return dict(expectedRevision=data['revision'],membershipVersion=data['context']['membershipVersion'],operationId=operation_id or str(uuid.uuid4()),kind='ledger.manual',payload={'amount':1,'reason':'test','date':'2026-10-15'})
@@ -286,11 +289,11 @@ class ChildBackendTests(unittest.TestCase):
         r=self.call(self.b,'POST','/api/children/'+child['id']+'/operations',body)
         self.assertEqual(r.json()['kind'],'membership_changed')
 
-    def test_archive_transfer_and_owner_only_restore(self):
+    def test_archive_transfer_and_removed_restore(self):
         child=self.child(); self.join(child)
         current=self.data(child)
         restore=dict(expectedRevision=current['revision'],membershipVersion=self.data(child,self.b)['context']['membershipVersion'],operationId=str(uuid.uuid4()),data=current['data'])
-        self.assertEqual(self.call(self.b,'POST','/api/children/'+child['id']+'/data/restore',restore).status_code,403)
+        self.assertEqual(self.call(self.b,'POST','/api/children/'+child['id']+'/data/restore',restore).status_code,404)
         self.archive_fixture(child,True)
         self.assertEqual(self.b.get('/api/children/'+child['id']+'/data').status_code,200)
         self.assertEqual(self.call(self.a,'POST','/api/children/'+child['id']+'/operations',self.operation(child)).json()['kind'],'archived')
@@ -323,9 +326,9 @@ class ChildBackendTests(unittest.TestCase):
             self.assertEqual(self.call(self.a,'DELETE',root).json(),{'ok':True})
         for client in (self.a,self.b):
             self.assertNotIn(child['id'],[c['id'] for c in client.get('/api/children').json()['children']])
-            for suffix in ('data','data/export','context','members','invitations'):
+            for suffix in ('data','context','members','invitations'):
                 self.assertEqual(client.get(root+'/'+suffix).status_code,403,suffix)
-        for suffix,method,body in [('operations','POST',operation),('operations','POST',replay),('data/restore','POST',dict(expectedRevision=before['revision'],membershipVersion=before['context']['membershipVersion'],operationId=str(uuid.uuid4()),data=before['data'])),('transfer','POST',{'userId':self.bu['id']}),('invitations','POST',{'loginName':'outsider'}),('members/'+self.bu['id'],'DELETE',{}),('','PATCH',{'name':'Hidden'})]:
+        for suffix,method,body in [('operations','POST',operation),('operations','POST',replay),('transfer','POST',{'userId':self.bu['id']}),('invitations','POST',{'loginName':'outsider'}),('members/'+self.bu['id'],'DELETE',{}),('','PATCH',{'name':'Hidden'})]:
             self.assertEqual(self.call(self.a,method,root+('/'+suffix if suffix else ''),body).status_code,403,suffix)
         self.assertNotIn(invite,[i['id'] for i in self.outsider.get('/api/invitations').json()['invitations']])
         for answer in ('accept','reject'):
@@ -376,18 +379,19 @@ class ChildBackendTests(unittest.TestCase):
             self.assertEqual(self.b.get(root+'/data').status_code,403)
             self.assertEqual(self.call(self.a,'POST',root+'/operations',command).status_code,403)
 
-    def test_restore_retains_target_name_and_backup_is_child_scoped(self):
-        child=self.child(); other=self.child(); current=self.data(child)
-        data=copy.deepcopy(current['data']); data['settings']['childName']='Backup Name'
-        body=dict(expectedRevision=current['revision'],membershipVersion=current['context']['membershipVersion'],operationId=str(uuid.uuid4()),data=data)
-        result=self.call(self.a,'POST','/api/children/'+child['id']+'/data/restore',body)
-        self.assertEqual(result.status_code,200,result.text)
-        self.assertEqual(result.json()['data']['settings']['childName'],child['name'])
-        self.assertEqual(self.data(other)['revision'],0)
-        exported=self.a.get('/api/children/'+child['id']+'/data/export').json()
-        self.assertNotIn('context',exported)
-        snapshots=self.service.transaction(lambda c:(c.execute('SELECT child_id,snapshot_json FROM lele.data_snapshots WHERE child_id=%s',(child['id'],)),c.fetchall())[1])
-        self.assertEqual(snapshots[0][1]['revision'],current['revision'])
+    def test_backup_endpoints_removed_and_internal_snapshots_retained(self):
+        child=self.child(); self.join(child)
+        current=self.data(child)
+        root='/api/children/'+child['id']
+        for client in (self.a,self.b,self.outsider):
+            self.assertEqual(client.get(root+'/data/export').status_code,404)
+            self.assertEqual(self.call(client,'POST',root+'/data/restore',{'data':current['data']}).status_code,404)
+        self.assertEqual(self.data(child),current)
+        command=self.operation(child)
+        self.assertEqual(self.call(self.a,'POST',root+'/operations',command).status_code,200)
+        def snapshots(cur):
+            cur.execute('SELECT snapshot_json FROM lele.data_snapshots WHERE child_id=%s',(child['id'],));return cur.fetchall()
+        self.assertEqual(self.service.transaction(snapshots)[0][0],{key:value for key,value in current.items() if key!='context'})
 
     def test_invitation_target_expiry_reject_revoke(self):
         child=self.child(); invite=self.invite(child)
@@ -460,13 +464,13 @@ class ChildBackendTests(unittest.TestCase):
         self.assertTrue(self.login(client,user['loginName'],PASSWORD).json()['user']['mustChangePassword'])
 
     def test_import_exact_roundtrip_and_schema_idempotence(self):
-        child=self.child(); raw=self.a.get('/api/children/'+child['id']+'/data/export').json()
+        child=self.child(); raw=self.raw(child)
         raw['revision']=123;raw['extraStore']={'keep':None};raw['data']['customData']={'unknown':'retained'}
         imported=import_child(CONFIG,self.au['id'],raw)
-        read=self.a.get('/api/children/'+imported['id']+'/data/export').json()
+        read=self.raw(imported)
         self.assertEqual(canonical_bytes(read),canonical_bytes(raw))
         with self.assertRaises(ApiError):import_child(CONFIG,self.au['id'],raw)
-        self.assertEqual(initialize(CONFIG),{'initialized':False,'upgraded':False,'version':3})
+        self.assertEqual(initialize(CONFIG),{'initialized':False,'upgraded':False,'version':4})
 
     def test_backup_retention_and_actor_audit(self):
         child=self.child()
@@ -504,7 +508,7 @@ class ChildBackendTests(unittest.TestCase):
         current=self.data(child)
         data=copy.deepcopy(current['data']);data['memberships']=[{'userId':self.bu['id'],'role':'owner'}]
         restore=dict(expectedRevision=current['revision'],membershipVersion=current['context']['membershipVersion'],operationId=str(uuid.uuid4()),data=data)
-        self.assertEqual(self.call(self.a,'POST','/api/children/'+child['id']+'/data/restore',restore).status_code,400)
+        self.assertEqual(self.call(self.a,'POST','/api/children/'+child['id']+'/data/restore',restore).status_code,404)
         self.assertEqual(self.data(child)['revision'],0)
 
     def test_profile_nickname_only_keeps_login_and_invitation_target_id(self):
@@ -579,11 +583,11 @@ class ChildBackendTests(unittest.TestCase):
 
     def test_import_whitespace_child_name_preserved_and_operations_succeed(self):
         child=self.child()
-        raw=self.a.get('/api/children/'+child['id']+'/data/export').json()
+        raw=self.raw(child)
         raw['data']['settings']['childName']='  测试孩子  '
         imported=import_child(CONFIG,self.au['id'],raw)
         self.assertEqual(imported['name'],'测试孩子')
-        self.assertEqual(self.a.get('/api/children/'+imported['id']+'/data/export').json(),raw)
+        self.assertEqual(self.raw(imported),raw)
         result=self.call(self.a,'POST','/api/children/'+imported['id']+'/operations',self.operation(imported))
         self.assertEqual(result.status_code,200,result.text)
         self.assertEqual(result.json()['data']['settings']['childName'],'  测试孩子  ')

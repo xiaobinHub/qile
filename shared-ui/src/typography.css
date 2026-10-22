@@ -1,0 +1,32 @@
+/* Shared type roles. Values use rem so browser font preferences remain effective. */
+@theme static {
+  --text-meta: 0.75rem;
+  --text-meta--line-height: 1.125rem;
+  --text-caption: 0.8125rem;
+  --text-caption--line-height: 1.25rem;
+  --text-body: 0.875rem;
+  --text-body--line-height: 1.375rem;
+  --text-card: 0.9375rem;
+  --text-card--line-height: 1.375rem;
+  --text-section: 1rem;
+  --text-section--line-height: 1.5rem;
+  --text-detail: 1.25rem;
+  --text-detail--line-height: 1.75rem;
+  --text-page: 1.375rem;
+  --text-page--line-height: 1.875rem;
+  --text-number: 1.5rem;
+  --text-number--line-height: 2rem;
+  /* Existing shadcn utilities resolve to the same scale as application CSS. */
+  --text-xs: var(--text-meta);
+  --text-xs--line-height: var(--text-meta--line-height);
+  --text-sm: var(--text-body);
+  --text-sm--line-height: var(--text-body--line-height);
+  --text-base: var(--text-section);
+  --text-base--line-height: var(--text-section--line-height);
+  --text-lg: var(--text-section);
+  --text-lg--line-height: var(--text-section--line-height);
+  --text-xl: var(--text-detail);
+  --text-xl--line-height: var(--text-detail--line-height);
+  --text-2xl: var(--text-number);
+  --text-2xl--line-height: var(--text-number--line-height);
+}

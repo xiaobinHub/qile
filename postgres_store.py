@@ -235,6 +235,10 @@ def _validate_data(data: Any) -> dict:
         image = row.get("imageData")
         if image is not None and image != "" and (not isinstance(image, str) or len(image) > 260000 or not re.match(r"^data:image/(webp|jpeg|png);base64,", image, re.I)):
             _bad()
+        if row.get("imageAssetId") is not None:
+            from media_types import ASSET_ID
+            if not isinstance(row["imageAssetId"], str) or not ASSET_ID.fullmatch(row["imageAssetId"]):
+                _bad()
         link = row.get("redemptionLedgerId")
         if link is not None and link not in ledger:
             _bad()

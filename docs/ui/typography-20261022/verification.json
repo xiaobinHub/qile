@@ -1,0 +1,24 @@
+{
+  "fullRegression": {
+    "passed": true,
+    "scenarios": 24,
+    "pageErrors": [],
+    "accessibilityScreens": 22,
+    "accessibilityViolations": 0
+  },
+  "finalTypographyRegression": {
+    "passed": true,
+    "computedTypeAssertions": 164,
+    "viewportCount": 7,
+    "screenshots": 59
+  },
+  "checks": [
+    "npm run build",
+    "npm run test:domain",
+    "npm run check:format",
+    "npm run check:typography",
+    "git diff --check"
+  ],
+  "physicalIPadVerified": false,
+  "productionPublished": false
+}

@@ -11,13 +11,6 @@ import {
   ArrowUp,
   ArrowDown,
 } from "lucide-react"
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetDescription,
-} from "@shared/components/ui/sheet"
 import { Checkbox } from "@shared/components/ui/checkbox"
 import { Switch } from "@shared/components/ui/switch"
 import { ToggleGroup, ToggleGroupItem } from "@shared/components/ui/toggle-group"
@@ -78,8 +71,7 @@ export function CalendarPage({
     [cursor, setCursor] = useState(prefs.cursor),
     [navigation, setNavigation] = useState(0),
     [visibleMonth, setVisibleMonth] = useState(prefs.cursor.slice(0, 7)),
-    [day, setDay] = useState<string | null>(null),
-    [actionError, setActionError] = useState("")
+    [pendingOccurrence, setPendingOccurrence] = useState<string | null>(null)
   const action = useAsync(),
     weekRef = useRef<HTMLDivElement>(null),
     visibleDate = useRef(prefs.cursor),
@@ -89,11 +81,6 @@ export function CalendarPage({
     prefs.cursor = cursor
     visibleDate.current = cursor
   }, [mode, cursor])
-  const dayReturn = useRef<HTMLElement | null>(null)
-  const openDay = (date: string) => {
-    dayReturn.current = document.activeElement as HTMLElement
-    setDay(date)
-  }
   const first = mode === "month" ? startWeek(monthStart(cursor)) : startWeek(cursor),
     end =
       mode === "month"
@@ -119,12 +106,6 @@ export function CalendarPage({
       weekNavigation.current = navigation
     }
   }, [mode, cursor, navigation])
-  useEffect(() => {
-    if (day) runtime.setEditing(true)
-    return () => {
-      if (day) runtime.setEditing(false)
-    }
-  }, [day])
   const category = (id: string) =>
     data.categories.find((c) => c.id === id) || { color: "#68716c", name: "已停用类型" }
   const move = (n: number) => {
@@ -132,53 +113,26 @@ export function CalendarPage({
     setCursor(mode === "month" ? shiftMonth(visibleMonth, n) + "-01" : addDays(cursor, n * 7))
     setNavigation((v) => v + 1)
   }
-  const taskCard = (o: Occurrence) => (
-    <article
-      key={o.occurrenceKey}
-      className={`day-task-card ${isDone(data, o) ? "done" : ""}`}
-      data-day-occ={o.occurrenceKey}
-      style={{ borderLeftColor: category(o.categoryId).color }}
-    >
-      <div className="day-task-main">
-        <Checkbox
-          aria-label={`${isDone(data, o) ? "撤销完成" : "完成"} ${o.title}`}
-          checked={isDone(data, o)}
-          disabled={child.archived || action.busy}
-          onCheckedChange={() => {
-            void action.run(async () => {
-              await runtime.command("completion.set", {
-                occurrenceKey: o.occurrenceKey,
-                completed: !isDone(data, o),
-              })
-            })
-          }}
-        />
-        <div>
-          <strong>{o.title}</strong>
-          <p>
-            {o.startTime}–{o.endTime} · {category(o.categoryId).name}
-          </p>
-          {o.note && <p className="task-note">{o.note}</p>}
-        </div>
-        <span className="task-points">+{o.points}</span>
-      </div>
-      <div className="day-task-actions">
-        <Button
-          variant="ghost"
-          size="sm"
-          disabled={child.archived || isDone(data, o)}
-          onClick={() => {
-            setDay(null)
-            openTask({ occurrence: o })
-          }}
-        >
-          编辑任务
-        </Button>
-      </div>
-    </article>
-  )
+  const busy = action.busy || runtime.getSnapshot().busy
+  const toggleCompletion = (o: Occurrence) => {
+    if (child.archived || busy) return
+    void action.run(async () => {
+      setPendingOccurrence(o.occurrenceKey)
+      try {
+        await runtime.command("completion.set", {
+          occurrenceKey: o.occurrenceKey,
+          completed: !isDone(data, o),
+        })
+      } finally {
+        setPendingOccurrence(null)
+      }
+    })
+  }
+  const editTask = (o: Occurrence) => {
+    if (!busy) openTask({ occurrence: o })
+  }
   return (
-    <section className="calendar-panel">
+    <section className="calendar-panel" data-calendar-mode={mode}>
       <div className="calendar-toolbar">
         <h1 id="calendarTitle">
           {mode === "month"
@@ -252,14 +206,19 @@ export function CalendarPage({
           )}
         </div>
       </div>
-      {child.archived && <p className="notice">孩子已归档，当前仅可查看和导出。</p>}
-      <ErrorText message={actionError} />
+      {child.archived && <p className="notice">孩子已归档，当前仅可查看。</p>}
+      <ErrorText message={action.error} />
       {mode === "month" ? (
         <MonthCalendar
           data={data}
           target={cursor}
           navigation={navigation}
-          openDay={openDay}
+          openTask={openTask}
+          onToggle={toggleCompletion}
+          onEdit={editTask}
+          readOnly={child.archived}
+          busy={busy}
+          pendingOccurrence={pendingOccurrence}
           savedPosition={prefs.monthPosition}
           onPosition={(position) => {
             prefs.monthPosition = position
@@ -291,8 +250,11 @@ export function CalendarPage({
                 variant="ghost"
                 className={`week-head week-day-entry ${d === today() ? "today" : ""}`}
                 data-week-day={d}
-                aria-label={`${fmtFull(d)}，查看当天任务`}
-                onClick={() => openDay(d)}
+                aria-label={`${fmtFull(d)}，新建任务`}
+                disabled={child.archived}
+                onClick={() => {
+                  if (!busy) openTask({ date: d })
+                }}
               >
                 <strong>{fmtDate(d)}</strong>
                 <small>周{"日一二三四五六"[parseDate(d).getDay()]}</small>
@@ -313,6 +275,7 @@ export function CalendarPage({
                   aria-label={`${fmtFull(d)}时间轴，新建任务`}
                   disabled={child.archived}
                   onClick={(e) => {
+                    if (busy) return
                     const y = e.clientY - e.currentTarget.getBoundingClientRect().top,
                       min = Math.max(0, Math.min(1410, Math.round(y / 30) * 30))
                     openTask({
@@ -325,32 +288,34 @@ export function CalendarPage({
                 {layoutWeekEvents(items.filter((o) => o.date === d)).map((layout) => {
                   const o = layout.event
                   return (
-                    <Button
+                    <div
                       key={o.occurrenceKey}
-                      variant="ghost"
                       className={`week-event ${layout.end - layout.start < 24 ? "short-event" : ""} ${isDone(data, o) ? "done" : ""}`}
                       data-occ={o.occurrenceKey}
-                      style={{
-                        top: layout.start,
-                        height: layout.end - layout.start,
-                        left: Math.min(layout.depth, 3) * 9 + 3,
-                        zIndex: layout.depth + 2,
-                        background: category(o.categoryId).color + "22",
-                        borderLeftColor: category(o.categoryId).color,
-                      }}
-                      aria-label={`${o.title}，${o.startTime}至${o.endTime}`}
-                      onClick={() => {
-                        if (isDone(data, o) || child.archived) openDay(d)
-                        else openTask({ occurrence: o })
-                      }}
+                      aria-busy={pendingOccurrence === o.occurrenceKey || undefined}
+                      style={
+                        {
+                          top: layout.start,
+                          height: layout.end - layout.start,
+                          left: Math.min(layout.depth, 3) * 9 + 3,
+                          zIndex: layout.depth + 2,
+                          background: category(o.categoryId).color + "22",
+                          borderLeftColor: category(o.categoryId).color,
+                          "--task-color": category(o.categoryId).color,
+                        } as React.CSSProperties
+                      }
                     >
-                      <strong>{o.title}</strong>
-                      {layout.end - layout.start >= 46 && (
-                        <small>
-                          {o.startTime}–{o.endTime}
-                        </small>
-                      )}
-                    </Button>
+                      <CalendarTaskActions
+                        occurrence={o}
+                        completed={isDone(data, o)}
+                        readOnly={child.archived}
+                        busy={pendingOccurrence === o.occurrenceKey}
+                        onToggle={toggleCompletion}
+                        onEdit={editTask}
+                        week
+                        showTime={layout.end - layout.start >= 46}
+                      />
+                    </div>
                   )
                 })}
               </div>
@@ -358,50 +323,72 @@ export function CalendarPage({
           </div>
         </div>
       )}
-      <Sheet
-        open={!!day}
-        onOpenChange={(open) => {
-          if (!open) setDay(null)
-        }}
-      >
-        <SheetContent
-          id="dayDrawer"
-          className="day-drawer"
-          onCloseAutoFocus={(event) => {
-            event.preventDefault()
-            if (dayReturn.current?.isConnected) dayReturn.current.focus()
-          }}
-        >
-          <SheetHeader>
-            <SheetTitle>{day ? fmtFull(day) : "当天任务"}</SheetTitle>
-            <SheetDescription>查看当天任务及完成情况。</SheetDescription>
-          </SheetHeader>
-          <div className="day-drawer-content">
-            {!child.archived && (
-              <Button
-                id="drawerNew"
-                className="w-full"
-                onClick={() => {
-                  const date = day!
-                  setDay(null)
-                  openTask({ date })
-                }}
-              >
-                <Plus />
-                添加当天任务
-              </Button>
-            )}
-            <ErrorText message={action.error} />
-            {day && occurrences(data, day, day).map(taskCard)}
-            {day && !occurrences(data, day, day).length && (
-              <div className="empty-state">这一天还没有任务</div>
-            )}
-          </div>
-        </SheetContent>
-      </Sheet>
     </section>
   )
 }
+function CalendarTaskActions({
+  occurrence: o,
+  completed,
+  readOnly,
+  busy,
+  onToggle,
+  onEdit,
+  week = false,
+  showTime = false,
+}: {
+  occurrence: Occurrence
+  completed: boolean
+  readOnly: boolean
+  busy: boolean
+  onToggle: (o: Occurrence) => void
+  onEdit: (o: Occurrence) => void
+  week?: boolean
+  showTime?: boolean
+}) {
+  return (
+    <>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        className="calendar-task-toggle"
+        data-task-complete={o.occurrenceKey}
+        aria-label={`${completed ? "取消完成任务" : "完成任务"}：${o.title}，${fmtFull(o.date)} ${o.startTime}`}
+        aria-pressed={completed}
+        disabled={readOnly || busy}
+        onClick={() => onToggle(o)}
+      >
+        {completed ? <CircleCheck aria-hidden /> : <Circle aria-hidden />}
+      </Button>
+      <Button
+        type="button"
+        variant="ghost"
+        className="calendar-task-edit"
+        data-task-edit={o.occurrenceKey}
+        aria-label={`${readOnly || completed ? "查看任务" : "编辑任务"}：${o.title}，${o.startTime}至${o.endTime}`}
+        title={`${o.startTime}–${o.endTime} ${o.title}`}
+        disabled={busy}
+        onClick={() => onEdit(o)}
+      >
+        {week ? (
+          <>
+            <strong>{o.title}</strong>
+            {showTime && (
+              <small>
+                {o.startTime}–{o.endTime}
+              </small>
+            )}
+          </>
+        ) : (
+          <span>
+            {o.startTime} {o.title}
+          </span>
+        )}
+      </Button>
+    </>
+  )
+}
+
 function initialTask(data: BusinessData, options: Options): Task {
   const o = options.occurrence,
     s = o && data.series.find((s) => s.id === o.seriesId)
@@ -429,13 +416,15 @@ export function TaskEditor({
     [notesOpen, setNotesOpen] = useState(() => !!options.occurrence?.note)
   const action = useAsync(),
     o = options.occurrence
+  const readOnly = child.archived || !!(o && isDone(data, o))
   const update = (next: Partial<Task>) => {
     setTask((t) => ({ ...t, ...next }))
     setOverlap(false)
   }
   const rule = task.recurrence
   async function save() {
-    if (child.archived) throw Error("当前孩子仅可查看。")
+    if (readOnly)
+      throw Error(child.archived ? "当前孩子仅可查看。" : "已完成任务已冻结，请先撤销完成。")
     if (!o && !data.categories.some((c) => c.id === task.categoryId && c.active))
       throw Error("请选择可用的任务类型，配置中的类型可能已停用。")
     if (minutes(task.endTime) <= minutes(task.startTime)) throw Error("结束时间必须晚于开始时间。")
@@ -465,6 +454,7 @@ export function TaskEditor({
       title={o ? "编辑任务" : "新建任务"}
       id="taskDialog"
       size="complex"
+      keyboardScroll
       onClose={onClose}
       footer={
         <>
@@ -474,7 +464,7 @@ export function TaskEditor({
               type="button"
               variant="destructive"
               className="task-delete-action"
-              disabled={action.busy || child.archived || deleting}
+              disabled={action.busy || readOnly || deleting}
               onClick={() => setDeleting(true)}
             >
               删除任务
@@ -488,11 +478,7 @@ export function TaskEditor({
           >
             取消
           </Button>
-          <Button
-            type="submit"
-            form="taskForm"
-            disabled={action.busy || child.archived || deleting}
-          >
+          <Button type="submit" form="taskForm" disabled={action.busy || readOnly || deleting}>
             {action.busy ? "正在保存…" : "保存任务"}
           </Button>
         </>
@@ -500,50 +486,49 @@ export function TaskEditor({
     >
       <form
         id="taskForm"
+        autoComplete="off"
         onSubmit={(e) => {
           e.preventDefault()
           if (!deleting) void action.run(save)
         }}
       >
-        <fieldset
-          disabled={action.busy || child.archived || deleting}
-          className="task-editor-fields"
-        >
-          <Field label="任务名称" id="taskTitle">
-            {o ? (
-              <Input
-                id="taskTitle"
-                value={task.title}
-                onChange={(e) => update({ title: e.target.value })}
-                required
-                maxLength={200}
-                autoFocus
-              />
-            ) : (
-              <TaskTitle
-                id="taskTitle"
-                value={task.title}
-                data={data}
-                onChange={(title) => update({ title })}
-                onPreset={(p) =>
-                  update({
-                    title: p.title,
-                    categoryId: p.categoryId || task.categoryId,
-                    startTime: p.startTime,
-                    endTime: p.endTime,
-                    points: p.points,
-                  })
-                }
-              />
-            )}
-          </Field>
-          <div className="form-grid task-details-grid">
-            <Field label="日期" id="taskDate">
-              <DatePicker
-                id="taskDate"
-                value={task.startDate}
-                onChange={(startDate) => update({ startDate })}
-              />
+        {readOnly && (
+          <p className="notice" role="status">
+            {child.archived
+              ? "孩子已归档，当前仅可查看任务。"
+              : "已完成任务已冻结，请先点击日历中的圆圈取消完成，再进行修改。"}
+          </p>
+        )}
+        <fieldset disabled={action.busy || readOnly || deleting} className="task-editor-fields">
+          <div className="task-identity-grid">
+            <Field label="任务名称" id="taskTitle">
+              {o ? (
+                <Input
+                  id="taskTitle"
+                  autoComplete="off"
+                  value={task.title}
+                  onChange={(e) => update({ title: e.target.value })}
+                  required
+                  maxLength={200}
+                  autoFocus
+                />
+              ) : (
+                <TaskTitle
+                  id="taskTitle"
+                  value={task.title}
+                  data={data}
+                  onChange={(title) => update({ title })}
+                  onPreset={(p) =>
+                    update({
+                      title: p.title,
+                      categoryId: p.categoryId || task.categoryId,
+                      startTime: p.startTime,
+                      endTime: p.endTime,
+                      points: p.points,
+                    })
+                  }
+                />
+              )}
             </Field>
             <Field label="任务类型" id="taskCategory">
               <Choice
@@ -556,8 +541,26 @@ export function TaskEditor({
                   .map((c) => ({ value: c.id, label: c.name + (c.active ? "" : "（已停用）") }))}
               />
             </Field>
+            <Field label="奖励积分" id="taskPoints">
+              <Input
+                id="taskPoints"
+                type="number"
+                min={0}
+                step={1}
+                value={task.points}
+                onChange={(e) => update({ points: Number(e.target.value) })}
+                required
+              />
+            </Field>
           </div>
-          <div className="task-time-grid">
+          <div className="task-schedule-grid">
+            <Field label="日期" id="taskDate">
+              <DatePicker
+                id="taskDate"
+                value={task.startDate}
+                onChange={(startDate) => update({ startDate })}
+              />
+            </Field>
             <Field label="开始时间" id="taskStart">
               <TimePicker
                 id="taskStart"
@@ -570,17 +573,6 @@ export function TaskEditor({
                 id="taskEnd"
                 value={task.endTime}
                 onChange={(endTime) => update({ endTime })}
-              />
-            </Field>
-            <Field label="奖励积分" id="taskPoints">
-              <Input
-                id="taskPoints"
-                type="number"
-                min={0}
-                step={1}
-                value={task.points}
-                onChange={(e) => update({ points: Number(e.target.value) })}
-                required
               />
             </Field>
           </div>
@@ -606,132 +598,151 @@ export function TaskEditor({
               </Field>
             </div>
           </div>
-          <div className="switch-field">
-            <label htmlFor="taskRepeat">重复任务</label>
-            <Switch
-              id="taskRepeat"
-              checked={!!rule}
-              onCheckedChange={(checked) =>
-                update({
-                  recurrence: checked
-                    ? {
-                        freq: "daily",
-                        interval: 1,
-                        endType: "never",
-                        weekdays: [(parseDate(task.startDate).getDay() + 6) % 7],
-                        monthDay: Number(task.startDate.slice(8)),
-                      }
-                    : null,
-                })
-              }
-            />
-          </div>
-          {rule && (
-            <div className="recurrence-fields">
-              <div className="form-grid">
-                <Field label="重复频率" id="repeatFreq">
-                  <Choice
-                    id="repeatFreq"
-                    label="重复频率"
-                    value={rule.freq}
-                    onChange={(freq) => setRule({ freq: freq as typeof rule.freq })}
-                    options={[
-                      { value: "daily", label: "每天" },
-                      { value: "weekly", label: "每周" },
-                      { value: "monthly", label: "每月" },
-                    ]}
-                  />
-                </Field>
-                <Field label="间隔" id="repeatInterval">
-                  <Input
-                    id="repeatInterval"
-                    type="number"
-                    min={1}
-                    max={99}
-                    value={rule.interval}
-                    onChange={(e) => setRule({ interval: Number(e.target.value) })}
-                    required
-                  />
-                </Field>
+          <section
+            className="recurrence-section"
+            aria-labelledby="recurrenceTitle"
+            data-expanded={!!rule}
+          >
+            <div className="switch-field">
+              <div>
+                <label id="recurrenceTitle" htmlFor="taskRepeat">
+                  重复任务
+                </label>
+                <p>按固定规则自动安排后续任务</p>
               </div>
-              {rule.freq === "weekly" && (
-                <fieldset className="weekday-picks">
-                  <legend>重复星期</legend>
-                  {["一", "二", "三", "四", "五", "六", "日"].map((day, index) => (
-                    <label key={day}>
-                      <Checkbox
-                        name="repeatWeekday"
-                        value={index}
-                        checked={rule.weekdays?.includes(index)}
-                        onCheckedChange={(checked) =>
-                          setRule({
-                            weekdays: checked
-                              ? [...(rule.weekdays || []), index]
-                              : (rule.weekdays || []).filter((i) => i !== index),
-                          })
+              <Switch
+                id="taskRepeat"
+                checked={!!rule}
+                onCheckedChange={(checked) =>
+                  update({
+                    recurrence: checked
+                      ? {
+                          freq: "daily",
+                          interval: 1,
+                          endType: "never",
+                          weekdays: [(parseDate(task.startDate).getDay() + 6) % 7],
+                          monthDay: Number(task.startDate.slice(8)),
                         }
-                      />
-                      周{day}
-                    </label>
-                  ))}
-                </fieldset>
-              )}
-              {rule.freq === "monthly" && (
-                <Field label="每月日期" id="repeatMonthDay">
-                  <Input
-                    id="repeatMonthDay"
-                    type="number"
-                    min={1}
-                    max={31}
-                    required
-                    value={rule.monthDay || Number(task.startDate.slice(8))}
-                    onChange={(e) => setRule({ monthDay: Number(e.target.value) })}
-                  />
-                </Field>
-              )}
-              <Field label="结束方式" id="repeatEndType">
-                <Choice
-                  id="repeatEndType"
-                  label="结束方式"
-                  value={rule.endType}
-                  onChange={(endType) =>
-                    setRule({
-                      endType: endType as typeof rule.endType,
-                      until: rule.until || addDays(task.startDate, 30),
-                      count: rule.count || 10,
-                    })
-                  }
-                  options={[
-                    { value: "never", label: "永不结束" },
-                    { value: "until", label: "截止日期" },
-                    { value: "count", label: "重复次数" },
-                  ]}
-                />
-              </Field>
-              {rule.endType === "until" && (
-                <Field label="截止日期" id="repeatUntil">
-                  <DatePicker
-                    id="repeatUntil"
-                    value={rule.until || addDays(task.startDate, 30)}
-                    onChange={(until) => setRule({ until })}
-                  />
-                </Field>
-              )}
-              {rule.endType === "count" && (
-                <Field label="重复次数" id="repeatCount">
-                  <Input
-                    id="repeatCount"
-                    type="number"
-                    min={1}
-                    max={10000}
-                    value={rule.count || 10}
-                    required
-                    onChange={(e) => setRule({ count: Number(e.target.value) })}
-                  />
-                </Field>
-              )}
+                      : null,
+                  })
+                }
+              />
             </div>
-          )}
+            {rule && (
+              <div className="recurrence-fields">
+                <div className="form-grid">
+                  <Field label="重复频率" id="repeatFreq">
+                    <Choice
+                      id="repeatFreq"
+                      label="重复频率"
+                      value={rule.freq}
+                      onChange={(freq) => setRule({ freq: freq as typeof rule.freq })}
+                      options={[
+                        { value: "daily", label: "每天" },
+                        { value: "weekly", label: "每周" },
+                        { value: "monthly", label: "每月" },
+                      ]}
+                    />
+                  </Field>
+                  <Field label="间隔" id="repeatInterval">
+                    <Input
+                      id="repeatInterval"
+                      type="number"
+                      min={1}
+                      max={99}
+                      value={rule.interval}
+                      onChange={(e) => setRule({ interval: Number(e.target.value) })}
+                      required
+                    />
+                  </Field>
+                </div>
+                {rule.freq === "weekly" && (
+                  <fieldset className="weekday-picks">
+                    <legend>重复星期</legend>
+                    {["一", "二", "三", "四", "五", "六", "日"].map((day, index) => (
+                      <label key={day}>
+                        <Checkbox
+                          name="repeatWeekday"
+                          value={index}
+                          checked={rule.weekdays?.includes(index)}
+                          onCheckedChange={(checked) =>
+                            setRule({
+                              weekdays: checked
+                                ? [...(rule.weekdays || []), index]
+                                : (rule.weekdays || []).filter((i) => i !== index),
+                            })
+                          }
+                        />
+                        周{day}
+                      </label>
+                    ))}
+                  </fieldset>
+                )}
+                {rule.freq === "monthly" && (
+                  <Field label="每月日期" id="repeatMonthDay">
+                    <Input
+                      id="repeatMonthDay"
+                      type="number"
+                      min={1}
+                      max={31}
+                      required
+                      value={rule.monthDay || Number(task.startDate.slice(8))}
+                      onChange={(e) => setRule({ monthDay: Number(e.target.value) })}
+                    />
+                  </Field>
+                )}
+                <div className="form-grid recurrence-end-grid">
+                  <Field label="结束方式" id="repeatEndType">
+                    <Choice
+                      id="repeatEndType"
+                      label="结束方式"
+                      value={rule.endType}
+                      onChange={(endType) =>
+                        setRule({
+                          endType: endType as typeof rule.endType,
+                          until: rule.until || addDays(task.startDate, 30),
+                          count: rule.count || 10,
+                        })
+                      }
+                      options={[
+                        { value: "never", label: "永不结束" },
+                        { value: "until", label: "截止日期" },
+                        { value: "count", label: "重复次数" },
+                      ]}
+                    />
+                  </Field>
+                  {rule.endType === "until" && (
+                    <Field label="截止日期" id="repeatUntil">
+                      <DatePicker
+                        id="repeatUntil"
+                        value={rule.until || addDays(task.startDate, 30)}
+                        onChange={(until) => setRule({ until })}
+                      />
+                    </Field>
+                  )}
+                  {rule.endType === "count" && (
+                    <Field label="重复次数" id="repeatCount">
+                      <Input
+                        id="repeatCount"
+                        type="number"
+                        min={1}
+                        max={10000}
+                        value={rule.count || 10}
+                        required
+                        onChange={(e) => setRule({ count: Number(e.target.value) })}
+                      />
+                    </Field>
+                  )}
+                  {rule.endType === "never" && (
+                    <div className="form-field recurrence-summary">
+                      <span>结束条件</span>
+                      <p>持续安排</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </section>
           {o?.recurring && (
             <Field label="修改范围" id="taskScope">
               <Choice
@@ -963,7 +974,12 @@ function MonthCalendar({
   data,
   target,
   navigation,
-  openDay,
+  openTask,
+  onToggle,
+  onEdit,
+  readOnly,
+  busy,
+  pendingOccurrence,
   onMonth,
   savedPosition,
   onPosition,
@@ -971,7 +987,12 @@ function MonthCalendar({
   data: BusinessData
   target: string
   navigation: number
-  openDay: (d: string) => void
+  openTask: (options: Options) => void
+  onToggle: (o: Occurrence) => void
+  onEdit: (o: Occurrence) => void
+  readOnly: boolean
+  busy: boolean
+  pendingOccurrence: string | null
   onMonth: (m: string, date: string) => void
   savedPosition?: { date: string; offset: number }
   onPosition: (position: { date: string; offset: number }) => void
@@ -1073,53 +1094,38 @@ function MonthCalendar({
                 variant="ghost"
                 className="day-open"
                 data-day={date}
-                aria-label={`${date === today() ? "今天，" : ""}${fmtFull(date)}，${tasks.length}项任务`}
-                onClick={() => openDay(date)}
+                aria-label={`${date === today() ? "今天，" : ""}${fmtFull(date)}，${tasks.length}项任务，新建任务`}
+                disabled={readOnly}
+                onClick={() => {
+                  if (!busy) openTask({ date })
+                }}
               >
                 <span>{first ? `${Number(date.slice(5, 7))}月1日` : Number(date.slice(8))}</span>
               </Button>
-              <div className="month-tasks" aria-hidden={touch || undefined}>
-                {tasks.slice(0, 3).map((o) => {
-                  const props = {
-                    className: `month-task ${isDone(data, o) ? "done" : ""}`,
-                    "data-month-occ": o.occurrenceKey,
-                    style: {
-                      "--task-color":
-                        data.categories.find((c) => c.id === o.categoryId)?.color || "#68716c",
-                    } as React.CSSProperties,
-                    title: `${o.startTime} ${o.title}`,
-                  }
-                  const content = (
-                    <>
-                      {isDone(data, o) ? <CircleCheck aria-hidden /> : <Circle aria-hidden />}
-                      <span>
-                        {o.startTime} {o.title}
-                      </span>
-                    </>
-                  )
-                  return touch ? (
-                    <div key={o.occurrenceKey} {...props}>
-                      {content}
-                    </div>
-                  ) : (
-                    <Button
-                      key={o.occurrenceKey}
-                      variant="ghost"
-                      {...props}
-                      onClick={() => openDay(date)}
-                    >
-                      {content}
-                    </Button>
-                  )
-                })}
-                {tasks.length > 3 &&
-                  (touch ? (
-                    <span className="more-tasks">还有 {tasks.length - 3} 项</span>
-                  ) : (
-                    <Button variant="ghost" className="more-tasks" onClick={() => openDay(date)}>
-                      还有 {tasks.length - 3} 项
-                    </Button>
-                  ))}
+              <div className="month-tasks">
+                {tasks.map((o) => (
+                  <div
+                    key={o.occurrenceKey}
+                    className={`month-task ${isDone(data, o) ? "done" : ""}`}
+                    data-month-occ={o.occurrenceKey}
+                    aria-busy={pendingOccurrence === o.occurrenceKey || undefined}
+                    style={
+                      {
+                        "--task-color":
+                          data.categories.find((c) => c.id === o.categoryId)?.color || "#68716c",
+                      } as React.CSSProperties
+                    }
+                  >
+                    <CalendarTaskActions
+                      occurrence={o}
+                      completed={isDone(data, o)}
+                      readOnly={readOnly}
+                      busy={pendingOccurrence === o.occurrenceKey}
+                      onToggle={onToggle}
+                      onEdit={onEdit}
+                    />
+                  </div>
+                ))}
               </div>
             </div>
           )

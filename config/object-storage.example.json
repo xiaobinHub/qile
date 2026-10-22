@@ -1,0 +1,10 @@
+{
+  "object_storage": {
+    "provider": "oss",
+    "bucket": "xbproject",
+    "endpoint": "https://oss-cn-shenzhen.aliyuncs.com",
+    "region": "cn-shenzhen",
+    "prefix": "lele-growth/development",
+    "credentials_file": "oss-credentials.json"
+  }
+}

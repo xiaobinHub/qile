@@ -112,7 +112,8 @@ export function expandRevision(task: Series, from: string, to: string): Occurren
         m = (raw % 12) + 1,
         d = `${y}-${pad(m)}-${pad(Math.min(anchor, daysInMonth(y, m)))}`
       if (d > limit || !endAllows(r, d, generated)) break
-      if (d >= task.startDate && d >= from) out.push(makeOcc(task, d))
+      if (d < task.startDate) continue
+      if (d >= from) out.push(makeOcc(task, d))
       generated++
     }
   }

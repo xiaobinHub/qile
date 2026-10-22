@@ -27,7 +27,7 @@ async function exercisePCIPad({ browser, dad, admin, origin, adminOrigin, firstI
       assert.equal(await page.locator('.nav [aria-current="page"]').count(),1,'Exactly one primary navigation item is selected');
       if(touch) {
         assert.equal(await page.locator('.touch-month').count(),1);
-        const targets=await page.locator('.month-cell').first().locator('button').count();assert.equal(targets,1,'Touch day cell has a single entry');
+        assert.equal(await page.locator('#dayDrawer').count(),0,'Day list drawer has been removed');const cell=page.locator('.month-cell').first();const targets=await cell.locator('button').count();assert.equal(targets,1+2*await cell.locator('[data-month-occ]').count(),'Touch day separates create, complete and edit targets');
         const day=await page.locator('.day-open').first().boundingBox();assert.ok(day.width>=44&&day.height>=44);
         for(const target of ['[data-mode="month"]','[data-mode="week"]','#todayBtn']) { const box=await page.locator(target).boundingBox();assert.ok(box.height>=44&&box.width>=44,target+' touch target'); }
       }
@@ -60,13 +60,13 @@ async function exercisePCIPad({ browser, dad, admin, origin, adminOrigin, firstI
       const before=await page.locator('.week-wrap').evaluate(el=>{el.scrollTop=680;el.scrollLeft=100;return {top:el.scrollTop,left:el.scrollLeft}});
       await page.locator('[data-view="settings"]').click();await page.locator('#openPasswordSettings').click();
       const full=await page.locator('#passwordNew').evaluate(el=>({input:el.parentElement.getBoundingClientRect().width,form:el.closest('form').getBoundingClientRect().width}));assert.ok(Math.abs(full.input-full.form)<2,'Password field spans available content');
-      const sidebar=await page.locator('.settings-sidebar').boundingBox();assert.ok(Math.abs(sidebar.width-(width<=1000?184:Math.min(308,Math.max(224,width*.2072))))<=2,'Reference settings split sidebar width');
+      const sidebar=await page.locator('.settings-sidebar').boundingBox();assert.ok(Math.abs(sidebar.width-(width<1200?184:208))<=2,'Compact settings sidebar width');
       assert.equal(await page.locator('.settings-sidebar').evaluate(el=>getComputedStyle(el).backgroundColor),'rgb(255, 255, 255)','Settings sidebar stays white');
       await page.locator('#openChildNicknameSettings').click();
       assert.equal(await page.locator('.settings-nav-item[aria-current="page"]').evaluate(el=>getComputedStyle(el).backgroundColor),'rgb(255, 240, 179)','Selected settings entry has the approved pale yellow surface');
       if(width===1487){
         const detail=await page.locator('.settings-detail').boundingBox();
-        assert.ok(Math.abs(detail.x-368)<2&&Math.abs(detail.y-136)<2,'Settings frame matches the approved 1487px reference');
+        assert.ok(Math.abs(detail.x-252)<2&&Math.abs(detail.y-88)<2,'Compact settings frame uses the 72px header and 24px page inset');
       }
       await shot(page,`reference-${tag}-child-profile`);
       await shot(page,`pc-ipad-${tag}-settings`);

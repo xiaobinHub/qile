@@ -44,6 +44,8 @@ export type Gift = {
   name: string
   points: number
   imageData?: string | null
+  imageAssetId?: string | null
+  imageUrl?: string
   status: "available" | "redeemed"
   createdAt: string
   updatedAt: string
@@ -99,13 +101,13 @@ export type Child = {
   name: string
   role: "owner" | "parent"
   archived: boolean
-  membershipVersion: number
+  membershipVersion: string
 }
 export type DataPackage = {
   format: string
   version: number
   revision: number
   updatedAt: string | null
-  context: { childId: string; membershipVersion: number }
+  context: { childId: string; membershipVersion: string }
   data: BusinessData
 }

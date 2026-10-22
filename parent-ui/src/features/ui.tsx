@@ -86,6 +86,7 @@ export function Modal({
   footer,
   size = "default",
   returnFocusTo,
+  keyboardScroll = false,
 }: {
   title: string
   description?: string
@@ -95,6 +96,7 @@ export function Modal({
   footer?: ReactNode
   size?: "small" | "default" | "complex"
   returnFocusTo?: HTMLElement | null | false
+  keyboardScroll?: boolean
 }) {
   const returnFocus = useRef<HTMLElement | null>(document.activeElement as HTMLElement)
   useEffect(() => {
@@ -112,6 +114,7 @@ export function Modal({
         id={id}
         className="feature-dialog ui-modal-frame"
         data-modal-size={size}
+        data-keyboard-scroll={keyboardScroll || undefined}
         onCloseAutoFocus={(event) => {
           event.preventDefault()
           const target = returnFocusTo === undefined ? returnFocus.current : returnFocusTo

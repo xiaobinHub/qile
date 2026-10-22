@@ -44,8 +44,6 @@ export type Dependencies = {
   deleteCategory: (id: string) => void
   saveCategory: (category: Category) => Promise<void>
   reorderCategory: (from: string, target: string, after: boolean) => Promise<void>
-  exportBackup: () => void
-  importBackup: () => void
   logout: () => void
   changePassword: (values: { currentPassword: string; newPassword: string }) => Promise<void>
 }

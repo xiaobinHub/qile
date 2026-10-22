@@ -1,4 +1,4 @@
-import { migrateBackupData } from "../domain/backup"
+import { normalizeBusinessData } from "../domain/normalize"
 import type { BusinessData, Child, DataPackage, User } from "../domain/types"
 export function operationId() {
   if (typeof globalThis.crypto?.randomUUID === "function") return crypto.randomUUID()
@@ -93,7 +93,12 @@ export class Runtime {
       ...(signout ? { user: null, children: [] } : {}),
     })
   }
-  api = async <T>(path: string, method = "GET", body?: unknown): Promise<T> => {
+  api = async <T>(
+    path: string,
+    method = "GET",
+    body?: unknown,
+    extraHeaders: Record<string, string> = {},
+  ): Promise<T> => {
     const generation = this.generation,
       controller = new AbortController()
     this.requests.add(controller)
@@ -105,10 +110,13 @@ export class Runtime {
           signal: controller.signal,
           cache: "no-store",
           headers: {
-            ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
+            ...(body !== undefined
+              ? { "Content-Type": body instanceof Blob ? body.type : "application/json" }
+              : {}),
+            ...extraHeaders,
             ...(method !== "GET" ? { "X-CSRF-Token": this.csrf } : {}),
           },
-          body: body === undefined ? undefined : JSON.stringify(body),
+          body: body === undefined ? undefined : body instanceof Blob ? body : JSON.stringify(body),
         })
       } catch {
         if (generation !== this.generation) throw new ApiError("页面已切换。", "stale")
@@ -146,6 +154,32 @@ export class Runtime {
     } finally {
       this.requests.delete(controller)
     }
+  }
+  uploadImage = async (value: string, uploadId: string, epoch: number, retry = false) => {
+    const child = this.state.child
+    if (!child || child.archived || epoch !== this.state.epoch)
+      throw new ApiError("孩子上下文已变化。", "stale")
+    type Upload = { assetId: string; imageUrl?: string; status: string }
+    const base = `/api/children/${child.id}/assets`
+    if (retry) {
+      try {
+        const status = await this.api<Upload>(`${base}/uploads/${uploadId}`)
+        if (status.status === "staged" || status.status === "attached") return status
+      } catch (e) {
+        if ((e as ApiError).status !== 404) throw e
+      }
+    }
+    const [header, encoded] = value.split(",")
+    const mime = header.match(/^data:(image\/(?:png|jpeg|webp));base64$/)?.[1]
+    if (!mime || !encoded) throw new ApiError("图片格式不正确。")
+    const bytes = Uint8Array.from(atob(encoded), (c) => c.charCodeAt(0))
+    const result = await this.api<Upload>(base, "POST", new Blob([bytes], { type: mime }), {
+      "X-Upload-Id": uploadId,
+      "X-Membership-Version": child.membershipVersion,
+    })
+    if (!["staged", "attached"].includes(result.status))
+      throw new ApiError("图片仍在上传，请稍后重试原上传。", "uploading")
+    return result
   }
   bootstrap = async () => {
     try {
@@ -251,7 +285,7 @@ export class Runtime {
       throw new ApiError("数据包格式不正确。", "corrupt")
     if (pkg.revision < this.state.revision) return
     this.patch({
-      data: migrateBackupData(pkg.data),
+      data: normalizeBusinessData(pkg.data),
       revision: pkg.revision,
       updatedAt: pkg.updatedAt,
       child: { ...this.state.child, membershipVersion: pkg.context.membershipVersion },
@@ -288,12 +322,6 @@ export class Runtime {
     const child = this.state.child
     if (!child || child.archived) throw new ApiError("该孩子仅可查看。", "forbidden")
     return this.write(`/api/children/${child.id}/operations`, { kind, payload }, "POST")
-  }
-  restore = async (data: BusinessData) => {
-    const child = this.state.child
-    if (!child || child.role !== "owner" || child.archived)
-      throw new ApiError("只有孩子管理员可以恢复。", "forbidden")
-    return this.write(`/api/children/${child.id}/data/restore`, { data }, "POST")
   }
   private async write(path: string, values: Record<string, unknown>, method: string) {
     if (this.state.busy) throw new ApiError("上一项操作正在保存，请稍候。", "busy")

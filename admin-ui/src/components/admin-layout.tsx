@@ -48,7 +48,7 @@ export function AdminLayout({
         <div className="px-5 pt-6 pb-7">
           <Brand compact />
         </div>
-        <div className="px-5 pb-3 text-xs font-medium tracking-[0.14em] text-muted-foreground">
+        <div className="px-5 pb-3 text-caption font-medium tracking-[0.14em] text-muted-foreground">
           工作空间
         </div>
         <nav aria-label="后台导航" className="space-y-1.5 px-3">
@@ -59,7 +59,7 @@ export function AdminLayout({
             disabled={locked}
             aria-current={page === "users" && !locked ? "page" : undefined}
             className={cn(
-              "h-11 w-full justify-start gap-3 rounded-lg px-3 text-[13px] font-normal text-muted-foreground [&_svg]:size-[18px]",
+              "h-11 w-full justify-start gap-3 rounded-lg px-3 text-sm font-normal text-muted-foreground [&_svg]:size-[18px]",
               page === "users" && !locked && "bg-accent font-medium text-brand-ink hover:bg-accent",
             )}
             onClick={() => navigate("users")}
@@ -77,7 +77,7 @@ export function AdminLayout({
             disabled={locked}
             aria-current={page === "profile" || locked ? "page" : undefined}
             className={cn(
-              "h-11 w-full justify-start gap-3 rounded-lg px-3 text-[13px] font-normal text-muted-foreground [&_svg]:size-[18px]",
+              "h-11 w-full justify-start gap-3 rounded-lg px-3 text-sm font-normal text-muted-foreground [&_svg]:size-[18px]",
               (page === "profile" || locked) &&
                 "bg-accent font-medium text-brand-ink hover:bg-accent",
             )}
@@ -94,10 +94,10 @@ export function AdminLayout({
               {Array.from(user.nickname || user.loginName)[0]}
             </div>
             <div className="min-w-0">
-              <p className="truncate text-[13px] font-medium" title={user.nickname}>
+              <p className="truncate text-sm font-medium" title={user.nickname}>
                 {user.nickname}
               </p>
-              <p className="mt-0.5 text-xs text-muted-foreground">管理员</p>
+              <p className="mt-0.5 text-caption text-muted-foreground">管理员</p>
             </div>
             <ShieldCheck className="ml-auto size-4 shrink-0 text-brand-ink/70" />
           </div>
@@ -105,7 +105,7 @@ export function AdminLayout({
             id={mobile ? "mobileLogout" : "logout"}
             type="button"
             variant="ghost"
-            className="h-11 w-full justify-start gap-2.5 px-2.5 text-[13px] text-muted-foreground"
+            className="h-11 w-full justify-start gap-2.5 px-2.5 text-sm text-muted-foreground"
             onClick={() => void signOut()}
           >
             <LogOut className="size-4" />
@@ -143,13 +143,13 @@ export function AdminLayout({
               </SheetContent>
             </Sheet>
             <LayoutGrid className="hidden size-4 text-muted-foreground sm:block" />
-            <div className="flex items-center gap-2 text-xs sm:gap-3">
+            <div className="flex items-center gap-2 text-caption sm:gap-3">
               <span className="text-muted-foreground">管理后台</span>
               <ChevronRight className="size-3 text-muted-foreground/60" />
               <span className="font-medium">{title}</span>
             </div>
           </div>
-          <div className="flex shrink-0 items-center gap-1.5 rounded-full border border-border/80 bg-muted/30 px-2.5 py-1 text-xs text-muted-foreground">
+          <div className="flex shrink-0 items-center gap-1.5 rounded-full border border-border/80 bg-muted/30 px-2.5 py-1 text-caption text-muted-foreground">
             <span className="size-1.5 rounded-full bg-primary" />
             <span>管理员工作台</span>
           </div>
@@ -157,7 +157,7 @@ export function AdminLayout({
         <main id="mainContent" className="mx-auto w-full max-w-[1360px] px-5 py-6 sm:px-7 sm:py-6">
           {children}
         </main>
-        <footer className="px-5 pt-2 pb-6 text-center text-xs tracking-wide text-muted-foreground sm:px-8">
+        <footer className="px-5 pt-2 pb-6 text-center text-caption tracking-wide text-muted-foreground sm:px-8">
           乐乐成长 · 管理后台
         </footer>
       </div>

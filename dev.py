@@ -76,7 +76,7 @@ def prepare_database():
             db = {**config['database'], 'dbname': database}
             value = db if filename.startswith('legacy') else {k: v for k, v in config.items() if not k.startswith('_')}
             if not filename.startswith('legacy'):
-                value = {**value, 'database': db}
+                value = {**value, 'database': db, 'object_storage': {'provider': 'test-filesystem', 'root': str(RUNTIME / (database + '-objects'))}}
             private_json(target, value)
     return config
 

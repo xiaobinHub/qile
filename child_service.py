@@ -111,7 +111,7 @@ def load_config(config_path):
     """Never falls back to RDS or accepts DNS aliases for a development database."""
     try:
         config = json.loads(Path(config_path).read_text())
-        require(isinstance(config, dict) and set(config) <= {'environment','database','parent_origin','admin_origin','parent_trusted_origins','admin_trusted_origins'})
+        require(isinstance(config, dict) and set(config) <= {'environment','database','parent_origin','admin_origin','parent_trusted_origins','admin_trusted_origins','object_storage'})
         require(config.get('environment') in ('development','production'))
         db = config.get('database')
         require(isinstance(db, dict) and set(db) <= {'host','port','dbname','user','password','sslmode','sslrootcert','allow_unencrypted','connect_timeout'})
@@ -157,6 +157,8 @@ def load_config(config_path):
             if not cert.is_absolute(): cert=Path(config_path).parent/cert
             require(cert.is_file())
             params['sslrootcert']=str(cert.resolve())
+        from object_storage import storage_config
+        config['_object_storage']=storage_config(config.get('object_storage'),config_path,config['environment'],db['dbname'])
         config['_connect']=params
         return config
     except (ValueError, TypeError, OSError, ApiError):
@@ -167,6 +169,9 @@ class ChildService:
     def __init__(self, config_path):
         self.config = load_config(config_path)
         self.store = ChildStore()
+        from media_service import MediaService
+        from object_storage import ObjectStorage
+        self.media = MediaService(self, ObjectStorage(self.config['_object_storage']))
 
     def transaction(self, work, *, exclusive=False, schema_check=True):
         try:
@@ -175,7 +180,7 @@ class ChildService:
                     cur.execute('SELECT '+('pg_advisory_xact_lock' if exclusive else 'pg_advisory_xact_lock_shared')+'(1818586213,2)')
                     if schema_check:
                         cur.execute('SELECT version FROM lele.schema_versions')
-                        require(cur.fetchall()==[(3,)],503,'数据库尚未完成账号版本升级。')
+                        require(cur.fetchall()==[(4,)],503,'数据库尚未完成账号版本升级。')
                     return work(cur)
         except (ApiError, StoreError):
             raise
@@ -249,6 +254,9 @@ class ChildService:
         write=method not in ('GET','HEAD')
         if write:
             require(self.origin_trusted(origin,surface),403,'请求来源不受信任。')
+        media_result = self.media.route(method,path,body,token,csrf,origin,surface)
+        if media_result is not NotImplemented:
+            return media_result
         exclusive=path.startswith('auth/') or path.startswith('account/') or path.startswith('admin/')
         def run(cur):
             if path=='auth/login' and method=='POST':
@@ -291,7 +299,7 @@ class ChildService:
         # Login failures must commit their rate-limit counters before returning 401.
         if '_error' in result:
             raise ApiError(*result['_error'])
-        return result
+        return self.media.decorate(result) if surface=='parent' else result
 
     def login(self,cur,body,surface,client):
         require(set(body)=={'loginName','password'})
@@ -346,14 +354,16 @@ class ChildService:
         self.audit(cur,user[0],'admin.'+parts[3],detail={'userId':target})
         return {'ok':True}
 
-    def create_child(self,cur,user_id,name,record=None):
+    def create_child(self,cur,user_id,name,record=None,*,child_id=None,media_images=None):
         from business_operations import default_data
         name=text_value(name)
-        child=identity(); member=identity()
+        child=child_id or identity(); member=identity()
         cur.execute('INSERT INTO lele.children(id,name,owner_id) VALUES(%s,%s,%s)',(child,name,user_id))
         cur.execute('INSERT INTO lele.memberships(child_id,user_id,membership_version) VALUES(%s,%s,%s)',(child,user_id,member))
         record=record or dict(format=STORE_FORMAT,version=STORE_VERSION,revision=0,updatedAt=now_iso(),data=default_data(name))
         validate_record(record)
+        for asset,image in (media_images or {}).items():
+            cur.execute("INSERT INTO lele.media_assets(id,child_id,uploaded_by,upload_id,membership_version,object_key,content_sha256,mime_type,byte_size,width,height,state,attached_at) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'attached',now())",(asset,child,user_id,'import:'+image.sha256,member,self.media.objects.key(child,image),image.sha256,image.mime,len(image.content),image.width,image.height))
         self.store.replace(cur,child,record['data']); self.store.metadata(cur,child,record,insert=True)
         self.audit(cur,user_id,'child.create',child)
         return dict(id=child,name=name,ownerId=user_id,role='owner',archived=False,membershipVersion=member)
@@ -415,13 +425,12 @@ class ChildService:
             metadata=cur.fetchone()
             require(metadata is not None,503,'孩子数据尚未准备好。')
             return {'child':self.child_public(child,user[0]),'revision':metadata[0]}
-        if suffix in ('data','data/export') and method=='GET':
+        if suffix=='data' and method=='GET':
             child=self.access(cur,user,child_id)
             record=self.store.read(cur,child_id)
-            if suffix=='data/export': return record
             return {**record,'context':dict(childId=child_id,membershipVersion=child[4])}
-        if suffix in ('operations','data/restore') and method=='POST':
-            return self.operation(cur,user,child_id,body,restore=suffix=='data/restore')
+        if suffix=='operations' and method=='POST':
+            return self.operation(cur,user,child_id,body)
         raise ApiError(404,'接口不存在。')
 
     def delete_child(self,cur,user,child_id):
@@ -480,6 +489,8 @@ class ChildService:
         return {'ok':True,'childId':child_id}
 
     def save(self,cur,child,current,data):
+        self.media.require_external(data)
+        self.media.require_external(current)
         validate_data(data)
         updated={**current,'data':data,'revision':current['revision']+1,'updatedAt':now_iso()}
         cur.execute('INSERT INTO lele.data_snapshots(child_id,revision,captured_at,snapshot_json,content_sha256) VALUES(%s,%s,now(),%s,%s)',(child,current['revision'],Jsonb(current),canonical_sha256(current)))
@@ -487,13 +498,13 @@ class ChildService:
         cur.execute('DELETE FROM lele.data_snapshots WHERE child_id=%s AND id NOT IN (SELECT id FROM lele.data_snapshots WHERE child_id=%s ORDER BY captured_at DESC,id DESC LIMIT %s)',(child,child,BACKUP_LIMIT))
         return updated
 
-    def operation(self,cur,user,child_id,body,restore=False):
+    def operation(self,cur,user,child_id,body):
         from business_operations import apply_operation
-        fields={'expectedRevision','membershipVersion','operationId','data'} if restore else {'expectedRevision','membershipVersion','operationId','kind','payload'}
+        fields={'expectedRevision','membershipVersion','operationId','kind','payload'}
         require(set(body)==fields)
         require(type(body['expectedRevision']) is int and body['expectedRevision']>=0)
         require(isinstance(body['operationId'],str) and bool(re.fullmatch(r'[A-Za-z0-9._:-]{8,100}',body['operationId'])))
-        child=self.access(cur,user,child_id,owner=restore,write=True)
+        child=self.access(cur,user,child_id,write=True)
         require(body['membershipVersion']==child[4],409,'管理权限已更新，请重新打开孩子。','membership_changed')
         request_hash=canonical_sha256(body)
         cur.execute('SELECT actor_id,membership_version,payload_sha256 FROM lele.idempotency_records WHERE child_id=%s AND operation_id=%s',(child_id,body['operationId']))
@@ -503,21 +514,14 @@ class ChildService:
             require(previous==(user[0],child[4],request_hash),409,'操作编号已被其他请求使用。','operation_conflict')
             return {**current,'context':dict(childId=child_id,membershipVersion=child[4])}
         require(current['revision']==body['expectedRevision'],409,'数据已更新，请刷新后重试。','revision_conflict')
-        if restore:
-            data=copy.deepcopy(body['data'])
-            require(isinstance(data,dict) and isinstance(data.get('settings'),dict))
-            data['settings']['childName']=child[1]
-            # A backup is a business document, never an account/permission payload.
-            require(not set(data)&{'users','children','memberships','invitations','sessions','context'})
-            validate_data(data)
-        else:
-            require(isinstance(body['kind'],str) and isinstance(body['payload'],dict))
-            data=apply_operation(copy.deepcopy(current['data']),body['kind'],body['payload'],actor_id=user[0],revision=current['revision']+1,now=now_iso())
-            stored_name=data['settings'].get('childName')
-            require(isinstance(stored_name,str) and stored_name.strip()==child[1],400,'孩子名称请通过资料设置修改。')
+        require(isinstance(body['kind'],str) and isinstance(body['payload'],dict))
+        data=apply_operation(copy.deepcopy(current['data']),body['kind'],body['payload'],actor_id=user[0],revision=current['revision']+1,now=now_iso())
+        stored_name=data['settings'].get('childName')
+        require(isinstance(stored_name,str) and stored_name.strip()==child[1],400,'孩子名称请通过资料设置修改。')
+        self.media.attach(cur,user,child_id,data)
         updated=self.save(cur,child_id,current,data)
         cur.execute('INSERT INTO lele.idempotency_records(child_id,operation_id,actor_id,membership_version,payload_sha256,result_revision) VALUES(%s,%s,%s,%s,%s,%s)',(child_id,body['operationId'],user[0],child[4],request_hash,updated['revision']))
-        self.audit(cur,user[0],'data.restore' if restore else 'operation.'+body['kind'],child_id,{'operationId':body['operationId'],'revision':updated['revision']})
+        self.audit(cur,user[0],'operation.'+body['kind'],child_id,{'operationId':body['operationId'],'revision':updated['revision']})
         return {**updated,'context':dict(childId=child_id,membershipVersion=child[4])}
 
 
@@ -527,24 +531,32 @@ def initialize(config_path, *, upgrade_only=False):
     source=Path(__file__).with_name('db').joinpath('schema_v2.sql').read_text()
     source_hash=hashlib.sha256(source.encode()).hexdigest()
     migration=Path(__file__).with_name('db').joinpath('migrate_v2_to_v3.sql').read_text()
-    upgraded_hash=hashlib.sha256((source+ '\n'+migration).encode()).hexdigest()
+    media_migration=Path(__file__).with_name('db').joinpath('migrate_v3_to_v4.sql').read_text()
+    v3_hash=hashlib.sha256((source+'\n'+migration).encode()).hexdigest()
+    v4_hash=hashlib.sha256((source+'\n'+migration+'\n'+media_migration).encode()).hexdigest()
     def run(cur):
         cur.execute("SELECT obj_description(oid,'pg_namespace') FROM pg_namespace WHERE nspname='lele'")
         namespace=cur.fetchone()
+        version=2
         if namespace:
             catalog=PostgresStore._catalog(cur)
-            if namespace[0]==f'lele-schema-v3:{upgraded_hash}:{catalog}':
-                return {'initialized':False,'upgraded':False,'version':3}
-            require(namespace[0]==f'lele-schema-v2:{source_hash}:{catalog}',409,'检测到未知数据库结构，升级停止。')
+            markers={2:source_hash,3:v3_hash,4:v4_hash}
+            matches=[v for v,h in markers.items() if namespace[0]==f'lele-schema-v{v}:{h}:{catalog}']
+            require(len(matches)==1,409,'检测到未知数据库结构，升级停止。')
+            version=matches[0]
             cur.execute('SELECT version FROM lele.schema_versions')
-            require(cur.fetchall()==[(2,)],409,'数据库版本与结构标记不一致，升级停止。')
+            require(cur.fetchall()==[(version,)],409,'数据库版本与结构标记不一致，升级停止。')
+            if version==4:
+                return {'initialized':False,'upgraded':False,'version':4}
         else:
             require(not upgrade_only,409,'数据库尚未初始化，请先执行 initialize。')
             cur.execute(source)
-        cur.execute(migration)
-        marker=f'lele-schema-v3:{upgraded_hash}:{PostgresStore._catalog(cur)}'
+        if version==2:
+            cur.execute(migration)
+        cur.execute(media_migration)
+        marker=f'lele-schema-v4:{v4_hash}:{PostgresStore._catalog(cur)}'
         cur.execute(psycopg.sql.SQL('COMMENT ON SCHEMA lele IS {}').format(psycopg.sql.Literal(marker)))
-        return {'initialized':not bool(namespace),'upgraded':bool(namespace),'version':3}
+        return {'initialized':not bool(namespace),'upgraded':bool(namespace),'version':4}
     return service.transaction(run,exclusive=True,schema_check=False)
 
 
@@ -570,16 +582,32 @@ def import_child(config_path,owner_id,record):
     service=ChildService(config_path)
     require(service.config['environment']=='development',403,'导入工具仅允许本地开发环境。')
     validate_record(record)
+    from media_types import transform_images, referenced_assets
     source_hash=canonical_sha256(record)
+    def preflight(cur):
+        cur.execute("SELECT id FROM lele.users WHERE id=%s AND role='parent' AND status='active'",(owner_id,))
+        require(cur.fetchone() is not None,400,'导入管理员必须是有效家长账号。')
+        cur.execute('SELECT 1 FROM lele.migration_runs WHERE source_sha256=%s',(source_hash,))
+        require(cur.fetchone() is None,409,'此备份已经导入。')
+    service.transaction(preflight)
+    target=identity(); images={}
+    def upload(image):
+        asset=str(uuid.uuid5(uuid.NAMESPACE_URL,'lele-import:'+target+':'+image.sha256))
+        images[asset]=image
+        return asset
+    prepared=transform_images(record,upload)
+    require(set(referenced_assets(prepared))<=set(images),400,'导入文件包含其他孩子的私有图片引用，请先导出便携备份。')
+    for image in images.values():
+        service.media.objects.put(service.media.objects.key(target,image),image)
     def run(cur):
         cur.execute("SELECT id FROM lele.users WHERE id=%s AND role='parent' AND status='active'",(owner_id,))
         require(cur.fetchone() is not None,400,'导入负责人必须是有效家长账号。')
         cur.execute('SELECT 1 FROM lele.migration_runs WHERE source_sha256=%s',(source_hash,))
         require(cur.fetchone() is None,409,'此备份已经导入。')
-        child=service.create_child(cur,owner_id,record['data']['settings']['childName'],copy.deepcopy(record))
+        child=service.create_child(cur,owner_id,record['data']['settings']['childName'],copy.deepcopy(prepared),child_id=target,media_images=images)
         rebuilt=service.store.read(cur,child['id'])
-        require(canonical_bytes(record)==canonical_bytes(rebuilt),409,'导入后内容校验不一致，已回滚。')
-        cur.execute('INSERT INTO lele.migration_runs(child_id,source_sha256,source_revision,source_updated_at_raw,target_revision,migrated_at,entity_counts,business_sha256,db_schema_version) VALUES(%s,%s,%s,%s,%s,now(),%s,%s,3)',(child['id'],source_hash,record['revision'],record['updatedAt'],record['revision'],Jsonb(PostgresStore._counts(record['data'])),canonical_sha256(record['data'])))
+        require(canonical_bytes(prepared)==canonical_bytes(rebuilt),409,'导入后内容校验不一致，已回滚。')
+        cur.execute('INSERT INTO lele.migration_runs(child_id,source_sha256,source_revision,source_updated_at_raw,target_revision,migrated_at,entity_counts,business_sha256,db_schema_version) VALUES(%s,%s,%s,%s,%s,now(),%s,%s,4)',(child['id'],source_hash,record['revision'],record['updatedAt'],record['revision'],Jsonb(PostgresStore._counts(record['data'])),canonical_sha256(record['data'])))
         service.audit(cur,owner_id,'migration.import',child['id'],{'sourceSha256':source_hash,'sourceRevision':record['revision']})
         return child
     return service.transaction(run,exclusive=True)

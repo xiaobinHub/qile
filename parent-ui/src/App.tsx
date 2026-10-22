@@ -12,7 +12,6 @@ import type { BusinessData, Occurrence } from "./domain/types"
 import { CalendarPage, TaskEditor, PresetEditor, CategoryEditor } from "./features/calendar"
 const StorePage = lazy(() => import("./features/store").then((m) => ({ default: m.StorePage })))
 const PrintDialog = lazy(() => import("./features/print").then((m) => ({ default: m.PrintDialog })))
-import { readBackup } from "./domain/backup"
 import { today } from "./domain/calendar"
 
 type Editor =
@@ -114,21 +113,6 @@ function Application() {
           ids.splice(index + (after ? 1 : 0), 0, id)
           await runtime.command("category.reorder", { ids })
         },
-        exportBackup: () => {
-          const s = runtime.getSnapshot()
-          download(
-            {
-              format: "lele-task-manager-backup",
-              version: 1,
-              exportedAt: new Date().toISOString(),
-              sourceChild: { id: s.child!.id, name: s.child!.name },
-              data: s.data,
-            },
-            `${s.child!.name}-成长备份-${today()}.json`,
-          )
-          notify("当前孩子备份已导出")
-        },
-        importBackup: () => document.getElementById("importInput")?.click(),
         logout: () => setLogout(true),
         changePassword: runtime.changePassword,
       },
@@ -140,24 +124,6 @@ function Application() {
     }
     return controller
   }, [])
-  async function importFile(file: File) {
-    try {
-      const epoch = runtime.getSnapshot().epoch,
-        child = runtime.getSnapshot().child!
-      const imported = readBackup(await file.text())
-      if (epoch !== runtime.getSnapshot().epoch) return
-      setConfirmation({
-        title: `恢复「${child.name}」的数据？`,
-        description: `任务系列 ${imported.series.length ?? 0} 项，积分流水 ${imported.ledger.length ?? 0} 条。恢复将替换当前孩子的业务数据，昵称和家长权限保持不变。`,
-        work: async () => {
-          await runtime.restore(imported)
-          notify("当前孩子数据已恢复")
-        },
-      })
-    } catch (e) {
-      notify("导入失败：" + (e as Error).message)
-    }
-  }
   return (
     <>
       {snapshot.loading ? (
@@ -364,32 +330,8 @@ function Application() {
         />
       )}
       {confirmation && <Confirm {...confirmation} onClose={() => setConfirmation(null)} />}
-      <input
-        type="file"
-        id="importInput"
-        className="sr-only"
-        aria-label="选择成长备份文件"
-        accept="application/json,.json"
-        onChange={(e) => {
-          const file = e.target.files?.[0]
-          e.target.value = ""
-          if (file) void importFile(file)
-        }}
-      />
     </>
   )
-}
-export function download(value: unknown, name: string) {
-  const url = URL.createObjectURL(
-      new Blob([typeof value === "string" ? value : JSON.stringify(value, null, 2)], {
-        type: "application/json",
-      }),
-    ),
-    a = document.createElement("a")
-  a.href = url
-  a.download = name
-  a.click()
-  setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
 export default function App() {
   return (

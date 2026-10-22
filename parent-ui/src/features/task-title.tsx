@@ -54,6 +54,7 @@ export function TaskTitle({
             {...aria}
             ref={input}
             id={id}
+            autoComplete="off"
             value={value}
             role="combobox"
             aria-autocomplete="list"
@@ -150,7 +151,7 @@ export function TaskTitle({
                 onMouseDown={(e) => e.preventDefault()}
               >
                 <strong>{p.title}</strong>
-                <small className="text-xs text-muted-foreground">
+                <small className="text-caption text-muted-foreground">
                   {data.categories.find((c) => c.id === p.categoryId)?.name || "创建时选择类型"} ·{" "}
                   {p.startTime}–{p.endTime} · 奖励 {p.points} 分
                 </small>

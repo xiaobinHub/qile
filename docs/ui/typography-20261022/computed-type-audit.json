@@ -1,0 +1,1811 @@
+{
+  "passed": true,
+  "records": [
+    {
+      "viewport": {
+        "width": 1280,
+        "height": 800
+      },
+      "surface": "store",
+      "selector": ".gift-card h3",
+      "fontSize": "15px",
+      "lineHeight": "22px",
+      "weight": "600"
+    },
+    {
+      "viewport": {
+        "width": 1280,
+        "height": 800
+      },
+      "surface": "store",
+      "selector": ".gift-cost",
+      "fontSize": "24px",
+      "lineHeight": "32px",
+      "weight": "600"
+    },
+    {
+      "viewport": {
+        "width": 1280,
+        "height": 800
+      },
+      "surface": "store",
+      "selector": ".gift-shortage",
+      "fontSize": "13px",
+      "lineHeight": "20px",
+      "weight": "400"
+    },
+    {
+      "viewport": {
+        "width": 1280,
+        "height": 800
+      },
+      "surface": "store",
+      "selector": ".gift-card-actions button",
+      "fontSize": "14px",
+      "lineHeight": "22px",
+      "weight": "500"
+    },
+    {
+      "viewport": {
+        "width": 1280,
+        "height": 800
+      },
+      "surface": "calendar",
+      "selector": "#calendarTitle",
+      "fontSize": "22px",
+      "lineHeight": "30px",
+      "weight": "600"
+    },
+    {
+      "viewport": {
+        "width": 1280,
+        "height": 800
+      },
+      "surface": "calendar",
+      "selector": "#todayBtn",
+      "fontSize": "14px",
+      "lineHeight": "22px",
+      "weight": "500"
+    },
+    {
+      "viewport": {
+        "width": 1280,
+        "height": 800
+      },
+      "surface": "header",
+      "selector": ".nav button",
+      "fontSize": "14px",
+      "lineHeight": "22px",
+      "weight": "500.25"
+    },
+    {
+      "viewport": {
+        "width": 1280,
+        "height": 800
+      },
+      "surface": "task-dialog",
+      "selector": "#taskDialog [data-slot=\"dialog-title\"]",
+      "fontSize": "20px",
+      "lineHeight": "28px",
+      "weight": "600"
+    },
+    {
+      "viewport": {
+        "width": 1280,
+        "height": 800
+      },
+      "surface": "task-dialog",
+      "selector": "#taskTitle",
+      "fontSize": "14px",
+      "lineHeight": "22px",
+      "weight": "400"
+    },
+    {
+      "viewport": {
+        "width": 1280,
+        "height": 800
+      },
+      "surface": "settings",
+      "selector": ".settings-nav-item",
+      "fontSize": "14px",
+      "lineHeight": "22px",
+      "weight": "600"
+    },
+    {
+      "viewport": {
+        "width": 1280,
+        "height": 800
+      },
+      "surface": "settings",
+      "selector": ".settings-nav-group h2",
+      "fontSize": "13px",
+      "lineHeight": "20px",
+      "weight": "600"
+    },
+    {
+      "viewport": {
+        "width": 1280,
+        "height": 800
+      },
+      "surface": "settings",
+      "selector": ".settings-detail-heading h2",
+      "fontSize": "20px",
+      "lineHeight": "28px",
+      "weight": "600"
+    },
+    {
+      "viewport": {
+        "width": 1280,
+        "height": 800
+      },
+      "surface": "settings-password",
+      "selector": "label[for=\"passwordNew\"]",
+      "fontSize": "14px",
+      "lineHeight": "22px",
+      "weight": "600"
+    },
+    {
+      "viewport": {
+        "width": 1280,
+        "height": 800
+      },
+      "surface": "settings-password",
+      "selector": "#passwordNew",
+      "fontSize": "14px",
+      "lineHeight": "22px",
+      "weight": "400"
+    },
+    {
+      "viewport": {
+        "width": 1280,
+        "height": 800
+      },
+      "surface": "settings-password-help",
+      "selector": "#passwordNew-help",
+      "fontSize": "13px",
+      "lineHeight": "20px",
+      "weight": "400"
+    },
+    {
+      "viewport": {
+        "width": 1280,
+        "height": 800
+      },
+      "surface": "admin-users",
+      "selector": ".ui-page-heading h1",
+      "fontSize": "22px",
+      "lineHeight": "30px",
+      "weight": "600"
+    },
+    {
+      "viewport": {
+        "width": 1280,
+        "height": 800
+      },
+      "surface": "admin-table",
+      "selector": "#userRows td",
+      "fontSize": "14px",
+      "lineHeight": "22px",
+      "weight": "400"
+    },
+    {
+      "viewport": {
+        "width": 1280,
+        "height": 800
+      },
+      "surface": "admin-create",
+      "selector": "[role=\"dialog\"] [data-slot=\"dialog-title\"]",
+      "fontSize": "20px",
+      "lineHeight": "28px",
+      "weight": "600"
+    },
+    {
+      "viewport": {
+        "width": 1280,
+        "height": 800
+      },
+      "surface": "admin-create",
+      "selector": "#createNickname",
+      "fontSize": "14px",
+      "lineHeight": "22px",
+      "weight": "400"
+    },
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "surface": "store",
+      "selector": ".gift-card h3",
+      "fontSize": "15px",
+      "lineHeight": "22px",
+      "weight": "600"
+    },
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "surface": "store",
+      "selector": ".gift-cost",
+      "fontSize": "24px",
+      "lineHeight": "32px",
+      "weight": "600"
+    },
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "surface": "store",
+      "selector": ".gift-shortage",
+      "fontSize": "13px",
+      "lineHeight": "20px",
+      "weight": "400"
+    },
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "surface": "store",
+      "selector": ".gift-card-actions button",
+      "fontSize": "14px",
+      "lineHeight": "22px",
+      "weight": "500"
+    },
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "surface": "calendar",
+      "selector": "#calendarTitle",
+      "fontSize": "22px",
+      "lineHeight": "30px",
+      "weight": "600"
+    },
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "surface": "calendar",
+      "selector": "#todayBtn",
+      "fontSize": "14px",
+      "lineHeight": "22px",
+      "weight": "500"
+    },
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "surface": "header",
+      "selector": ".nav button",
+      "fontSize": "14px",
+      "lineHeight": "22px",
+      "weight": "500.5"
+    },
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "surface": "task-dialog",
+      "selector": "#taskDialog [data-slot=\"dialog-title\"]",
+      "fontSize": "20px",
+      "lineHeight": "28px",
+      "weight": "600"
+    },
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "surface": "task-dialog",
+      "selector": "#taskTitle",
+      "fontSize": "14px",
+      "lineHeight": "22px",
+      "weight": "400"
+    },
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "surface": "settings",
+      "selector": ".settings-nav-item",
+      "fontSize": "14px",
+      "lineHeight": "22px",
+      "weight": "600"
+    },
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "surface": "settings",
+      "selector": ".settings-nav-group h2",
+      "fontSize": "13px",
+      "lineHeight": "20px",
+      "weight": "600"
+    },
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "surface": "settings",
+      "selector": ".settings-detail-heading h2",
+      "fontSize": "20px",
+      "lineHeight": "28px",
+      "weight": "600"
+    },
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "surface": "settings-password",
+      "selector": "label[for=\"passwordNew\"]",
+      "fontSize": "14px",
+      "lineHeight": "22px",
+      "weight": "600"
+    },
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "surface": "settings-password",
+      "selector": "#passwordNew",
+      "fontSize": "14px",
+      "lineHeight": "22px",
+      "weight": "400"
+    },
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "surface": "settings-password-help",
+      "selector": "#passwordNew-help",
+      "fontSize": "13px",
+      "lineHeight": "20px",
+      "weight": "400"
+    },
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "surface": "openChildNicknameSettings",
+      "selector": ".settings-detail-heading h2",
+      "fontSize": "20px",
+      "lineHeight": "28px",
+      "weight": "600"
+    },
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "surface": "openFamilySettings",
+      "selector": ".settings-detail-heading h2",
+      "fontSize": "20px",
+      "lineHeight": "28px",
+      "weight": "600"
+    },
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "surface": "openFamilySettings-empty-title",
+      "selector": ".settings-empty strong",
+      "fontSize": "14px",
+      "lineHeight": "22px",
+      "weight": "550"
+    },
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "surface": "openFamilySettings-empty-copy",
+      "selector": ".settings-empty p",
+      "fontSize": "13px",
+      "lineHeight": "20px",
+      "weight": "400"
+    },
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "surface": "openMyInvitationsSettings",
+      "selector": ".settings-detail-heading h2",
+      "fontSize": "20px",
+      "lineHeight": "28px",
+      "weight": "600"
+    },
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "surface": "openMyInvitationsSettings-empty-title",
+      "selector": ".settings-empty strong",
+      "fontSize": "14px",
+      "lineHeight": "22px",
+      "weight": "550"
+    },
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "surface": "openMyInvitationsSettings-empty-copy",
+      "selector": ".settings-empty p",
+      "fontSize": "13px",
+      "lineHeight": "20px",
+      "weight": "400"
+    },
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "surface": "openTaskPresetsSettings",
+      "selector": ".settings-detail-heading h2",
+      "fontSize": "20px",
+      "lineHeight": "28px",
+      "weight": "600"
+    },
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "surface": "openTaskPresetsSettings-empty-title",
+      "selector": ".settings-empty strong",
+      "fontSize": "14px",
+      "lineHeight": "22px",
+      "weight": "550"
+    },
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "surface": "openTaskPresetsSettings-empty-copy",
+      "selector": ".settings-empty p",
+      "fontSize": "13px",
+      "lineHeight": "20px",
+      "weight": "400"
+    },
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "surface": "openCategorySettings",
+      "selector": ".settings-detail-heading h2",
+      "fontSize": "20px",
+      "lineHeight": "28px",
+      "weight": "600"
+    },
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "surface": "openBackupSettings",
+      "selector": ".settings-detail-heading h2",
+      "fontSize": "20px",
+      "lineHeight": "28px",
+      "weight": "600"
+    },
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "surface": "openAccountManagement",
+      "selector": ".settings-detail-heading h2",
+      "fontSize": "20px",
+      "lineHeight": "28px",
+      "weight": "600"
+    },
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "surface": "openPasswordSettings",
+      "selector": ".settings-detail-heading h2",
+      "fontSize": "20px",
+      "lineHeight": "28px",
+      "weight": "600"
+    },
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "surface": "settings-text-200-percent",
+      "selector": "#passwordNew",
+      "fontSize": "28px",
+      "lineHeight": "44px",
+      "weight": "400"
+    },
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "surface": "settings-text-200-percent",
+      "selector": ".settings-nav-item",
+      "fontSize": "28px",
+      "lineHeight": "44px",
+      "weight": "500"
+    },
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "surface": "header-text-200-percent",
+      "selector": ".nav button",
+      "fontSize": "28px",
+      "lineHeight": "44px",
+      "weight": "500"
+    },
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "surface": "admin-users",
+      "selector": ".ui-page-heading h1",
+      "fontSize": "22px",
+      "lineHeight": "30px",
+      "weight": "600"
+    },
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "surface": "admin-table",
+      "selector": "#userRows td",
+      "fontSize": "14px",
+      "lineHeight": "22px",
+      "weight": "400"
+    },
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "surface": "admin-create",
+      "selector": "[role=\"dialog\"] [data-slot=\"dialog-title\"]",
+      "fontSize": "20px",
+      "lineHeight": "28px",
+      "weight": "600"
+    },
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "surface": "admin-create",
+      "selector": "#createNickname",
+      "fontSize": "14px",
+      "lineHeight": "22px",
+      "weight": "400"
+    },
+    {
+      "viewport": {
+        "width": 768,
+        "height": 1024
+      },
+      "surface": "store",
+      "selector": ".gift-card h3",
+      "fontSize": "15px",
+      "lineHeight": "22px",
+      "weight": "600"
+    },
+    {
+      "viewport": {
+        "width": 768,
+        "height": 1024
+      },
+      "surface": "store",
+      "selector": ".gift-cost",
+      "fontSize": "24px",
+      "lineHeight": "32px",
+      "weight": "600"
+    },
+    {
+      "viewport": {
+        "width": 768,
+        "height": 1024
+      },
+      "surface": "store",
+      "selector": ".gift-shortage",
+      "fontSize": "13px",
+      "lineHeight": "20px",
+      "weight": "400"
+    },
+    {
+      "viewport": {
+        "width": 768,
+        "height": 1024
+      },
+      "surface": "store",
+      "selector": ".gift-card-actions button",
+      "fontSize": "14px",
+      "lineHeight": "22px",
+      "weight": "500"
+    },
+    {
+      "viewport": {
+        "width": 768,
+        "height": 1024
+      },
+      "surface": "calendar",
+      "selector": "#calendarTitle",
+      "fontSize": "22px",
+      "lineHeight": "30px",
+      "weight": "600"
+    },
+    {
+      "viewport": {
+        "width": 768,
+        "height": 1024
+      },
+      "surface": "calendar",
+      "selector": "#todayBtn",
+      "fontSize": "14px",
+      "lineHeight": "22px",
+      "weight": "500"
+    },
+    {
+      "viewport": {
+        "width": 768,
+        "height": 1024
+      },
+      "surface": "header",
+      "selector": ".nav button",
+      "fontSize": "14px",
+      "lineHeight": "22px",
+      "weight": "500"
+    },
+    {
+      "viewport": {
+        "width": 768,
+        "height": 1024
+      },
+      "surface": "task-dialog",
+      "selector": "#taskDialog [data-slot=\"dialog-title\"]",
+      "fontSize": "20px",
+      "lineHeight": "28px",
+      "weight": "600"
+    },
+    {
+      "viewport": {
+        "width": 768,
+        "height": 1024
+      },
+      "surface": "task-dialog",
+      "selector": "#taskTitle",
+      "fontSize": "16px",
+      "lineHeight": "24px",
+      "weight": "400"
+    },
+    {
+      "viewport": {
+        "width": 768,
+        "height": 1024
+      },
+      "surface": "settings",
+      "selector": ".settings-nav-item",
+      "fontSize": "14px",
+      "lineHeight": "22px",
+      "weight": "600"
+    },
+    {
+      "viewport": {
+        "width": 768,
+        "height": 1024
+      },
+      "surface": "settings",
+      "selector": ".settings-nav-group h2",
+      "fontSize": "13px",
+      "lineHeight": "20px",
+      "weight": "600"
+    },
+    {
+      "viewport": {
+        "width": 768,
+        "height": 1024
+      },
+      "surface": "settings",
+      "selector": ".settings-detail-heading h2",
+      "fontSize": "20px",
+      "lineHeight": "28px",
+      "weight": "600"
+    },
+    {
+      "viewport": {
+        "width": 768,
+        "height": 1024
+      },
+      "surface": "settings-password",
+      "selector": "label[for=\"passwordNew\"]",
+      "fontSize": "14px",
+      "lineHeight": "22px",
+      "weight": "600"
+    },
+    {
+      "viewport": {
+        "width": 768,
+        "height": 1024
+      },
+      "surface": "settings-password",
+      "selector": "#passwordNew",
+      "fontSize": "16px",
+      "lineHeight": "24px",
+      "weight": "400"
+    },
+    {
+      "viewport": {
+        "width": 768,
+        "height": 1024
+      },
+      "surface": "settings-password-help",
+      "selector": "#passwordNew-help",
+      "fontSize": "13px",
+      "lineHeight": "20px",
+      "weight": "400"
+    },
+    {
+      "viewport": {
+        "width": 768,
+        "height": 1024
+      },
+      "surface": "admin-users",
+      "selector": ".ui-page-heading h1",
+      "fontSize": "22px",
+      "lineHeight": "30px",
+      "weight": "600"
+    },
+    {
+      "viewport": {
+        "width": 768,
+        "height": 1024
+      },
+      "surface": "admin-table",
+      "selector": "#userRows td",
+      "fontSize": "14px",
+      "lineHeight": "22px",
+      "weight": "400"
+    },
+    {
+      "viewport": {
+        "width": 768,
+        "height": 1024
+      },
+      "surface": "admin-create",
+      "selector": "[role=\"dialog\"] [data-slot=\"dialog-title\"]",
+      "fontSize": "20px",
+      "lineHeight": "28px",
+      "weight": "600"
+    },
+    {
+      "viewport": {
+        "width": 768,
+        "height": 1024
+      },
+      "surface": "admin-create",
+      "selector": "#createNickname",
+      "fontSize": "16px",
+      "lineHeight": "24px",
+      "weight": "400"
+    },
+    {
+      "viewport": {
+        "width": 820,
+        "height": 1180
+      },
+      "surface": "store",
+      "selector": ".gift-card h3",
+      "fontSize": "15px",
+      "lineHeight": "22px",
+      "weight": "600"
+    },
+    {
+      "viewport": {
+        "width": 820,
+        "height": 1180
+      },
+      "surface": "store",
+      "selector": ".gift-cost",
+      "fontSize": "24px",
+      "lineHeight": "32px",
+      "weight": "600"
+    },
+    {
+      "viewport": {
+        "width": 820,
+        "height": 1180
+      },
+      "surface": "store",
+      "selector": ".gift-shortage",
+      "fontSize": "13px",
+      "lineHeight": "20px",
+      "weight": "400"
+    },
+    {
+      "viewport": {
+        "width": 820,
+        "height": 1180
+      },
+      "surface": "store",
+      "selector": ".gift-card-actions button",
+      "fontSize": "14px",
+      "lineHeight": "22px",
+      "weight": "500"
+    },
+    {
+      "viewport": {
+        "width": 820,
+        "height": 1180
+      },
+      "surface": "calendar",
+      "selector": "#calendarTitle",
+      "fontSize": "22px",
+      "lineHeight": "30px",
+      "weight": "600"
+    },
+    {
+      "viewport": {
+        "width": 820,
+        "height": 1180
+      },
+      "surface": "calendar",
+      "selector": "#todayBtn",
+      "fontSize": "14px",
+      "lineHeight": "22px",
+      "weight": "500"
+    },
+    {
+      "viewport": {
+        "width": 820,
+        "height": 1180
+      },
+      "surface": "header",
+      "selector": ".nav button",
+      "fontSize": "14px",
+      "lineHeight": "22px",
+      "weight": "500.5"
+    },
+    {
+      "viewport": {
+        "width": 820,
+        "height": 1180
+      },
+      "surface": "task-dialog",
+      "selector": "#taskDialog [data-slot=\"dialog-title\"]",
+      "fontSize": "20px",
+      "lineHeight": "28px",
+      "weight": "600"
+    },
+    {
+      "viewport": {
+        "width": 820,
+        "height": 1180
+      },
+      "surface": "task-dialog",
+      "selector": "#taskTitle",
+      "fontSize": "16px",
+      "lineHeight": "24px",
+      "weight": "400"
+    },
+    {
+      "viewport": {
+        "width": 820,
+        "height": 1180
+      },
+      "surface": "settings",
+      "selector": ".settings-nav-item",
+      "fontSize": "14px",
+      "lineHeight": "22px",
+      "weight": "600"
+    },
+    {
+      "viewport": {
+        "width": 820,
+        "height": 1180
+      },
+      "surface": "settings",
+      "selector": ".settings-nav-group h2",
+      "fontSize": "13px",
+      "lineHeight": "20px",
+      "weight": "600"
+    },
+    {
+      "viewport": {
+        "width": 820,
+        "height": 1180
+      },
+      "surface": "settings",
+      "selector": ".settings-detail-heading h2",
+      "fontSize": "20px",
+      "lineHeight": "28px",
+      "weight": "600"
+    },
+    {
+      "viewport": {
+        "width": 820,
+        "height": 1180
+      },
+      "surface": "settings-password",
+      "selector": "label[for=\"passwordNew\"]",
+      "fontSize": "14px",
+      "lineHeight": "22px",
+      "weight": "600"
+    },
+    {
+      "viewport": {
+        "width": 820,
+        "height": 1180
+      },
+      "surface": "settings-password",
+      "selector": "#passwordNew",
+      "fontSize": "16px",
+      "lineHeight": "24px",
+      "weight": "400"
+    },
+    {
+      "viewport": {
+        "width": 820,
+        "height": 1180
+      },
+      "surface": "settings-password-help",
+      "selector": "#passwordNew-help",
+      "fontSize": "13px",
+      "lineHeight": "20px",
+      "weight": "400"
+    },
+    {
+      "viewport": {
+        "width": 820,
+        "height": 1180
+      },
+      "surface": "openChildNicknameSettings",
+      "selector": ".settings-detail-heading h2",
+      "fontSize": "20px",
+      "lineHeight": "28px",
+      "weight": "600"
+    },
+    {
+      "viewport": {
+        "width": 820,
+        "height": 1180
+      },
+      "surface": "openFamilySettings",
+      "selector": ".settings-detail-heading h2",
+      "fontSize": "20px",
+      "lineHeight": "28px",
+      "weight": "600"
+    },
+    {
+      "viewport": {
+        "width": 820,
+        "height": 1180
+      },
+      "surface": "openFamilySettings-empty-title",
+      "selector": ".settings-empty strong",
+      "fontSize": "14px",
+      "lineHeight": "22px",
+      "weight": "550"
+    },
+    {
+      "viewport": {
+        "width": 820,
+        "height": 1180
+      },
+      "surface": "openFamilySettings-empty-copy",
+      "selector": ".settings-empty p",
+      "fontSize": "13px",
+      "lineHeight": "20px",
+      "weight": "400"
+    },
+    {
+      "viewport": {
+        "width": 820,
+        "height": 1180
+      },
+      "surface": "openMyInvitationsSettings",
+      "selector": ".settings-detail-heading h2",
+      "fontSize": "20px",
+      "lineHeight": "28px",
+      "weight": "600"
+    },
+    {
+      "viewport": {
+        "width": 820,
+        "height": 1180
+      },
+      "surface": "openMyInvitationsSettings-empty-title",
+      "selector": ".settings-empty strong",
+      "fontSize": "14px",
+      "lineHeight": "22px",
+      "weight": "550"
+    },
+    {
+      "viewport": {
+        "width": 820,
+        "height": 1180
+      },
+      "surface": "openMyInvitationsSettings-empty-copy",
+      "selector": ".settings-empty p",
+      "fontSize": "13px",
+      "lineHeight": "20px",
+      "weight": "400"
+    },
+    {
+      "viewport": {
+        "width": 820,
+        "height": 1180
+      },
+      "surface": "openTaskPresetsSettings",
+      "selector": ".settings-detail-heading h2",
+      "fontSize": "20px",
+      "lineHeight": "28px",
+      "weight": "600"
+    },
+    {
+      "viewport": {
+        "width": 820,
+        "height": 1180
+      },
+      "surface": "openTaskPresetsSettings-empty-title",
+      "selector": ".settings-empty strong",
+      "fontSize": "14px",
+      "lineHeight": "22px",
+      "weight": "550"
+    },
+    {
+      "viewport": {
+        "width": 820,
+        "height": 1180
+      },
+      "surface": "openTaskPresetsSettings-empty-copy",
+      "selector": ".settings-empty p",
+      "fontSize": "13px",
+      "lineHeight": "20px",
+      "weight": "400"
+    },
+    {
+      "viewport": {
+        "width": 820,
+        "height": 1180
+      },
+      "surface": "openCategorySettings",
+      "selector": ".settings-detail-heading h2",
+      "fontSize": "20px",
+      "lineHeight": "28px",
+      "weight": "600"
+    },
+    {
+      "viewport": {
+        "width": 820,
+        "height": 1180
+      },
+      "surface": "openBackupSettings",
+      "selector": ".settings-detail-heading h2",
+      "fontSize": "20px",
+      "lineHeight": "28px",
+      "weight": "600"
+    },
+    {
+      "viewport": {
+        "width": 820,
+        "height": 1180
+      },
+      "surface": "openAccountManagement",
+      "selector": ".settings-detail-heading h2",
+      "fontSize": "20px",
+      "lineHeight": "28px",
+      "weight": "600"
+    },
+    {
+      "viewport": {
+        "width": 820,
+        "height": 1180
+      },
+      "surface": "openPasswordSettings",
+      "selector": ".settings-detail-heading h2",
+      "fontSize": "20px",
+      "lineHeight": "28px",
+      "weight": "600"
+    },
+    {
+      "viewport": {
+        "width": 820,
+        "height": 1180
+      },
+      "surface": "admin-users",
+      "selector": ".ui-page-heading h1",
+      "fontSize": "22px",
+      "lineHeight": "30px",
+      "weight": "600"
+    },
+    {
+      "viewport": {
+        "width": 820,
+        "height": 1180
+      },
+      "surface": "admin-table",
+      "selector": "#userRows td",
+      "fontSize": "14px",
+      "lineHeight": "22px",
+      "weight": "400"
+    },
+    {
+      "viewport": {
+        "width": 820,
+        "height": 1180
+      },
+      "surface": "admin-create",
+      "selector": "[role=\"dialog\"] [data-slot=\"dialog-title\"]",
+      "fontSize": "20px",
+      "lineHeight": "28px",
+      "weight": "600"
+    },
+    {
+      "viewport": {
+        "width": 820,
+        "height": 1180
+      },
+      "surface": "admin-create",
+      "selector": "#createNickname",
+      "fontSize": "16px",
+      "lineHeight": "24px",
+      "weight": "400"
+    },
+    {
+      "viewport": {
+        "width": 1024,
+        "height": 768
+      },
+      "surface": "store",
+      "selector": ".gift-card h3",
+      "fontSize": "15px",
+      "lineHeight": "22px",
+      "weight": "600"
+    },
+    {
+      "viewport": {
+        "width": 1024,
+        "height": 768
+      },
+      "surface": "store",
+      "selector": ".gift-cost",
+      "fontSize": "24px",
+      "lineHeight": "32px",
+      "weight": "600"
+    },
+    {
+      "viewport": {
+        "width": 1024,
+        "height": 768
+      },
+      "surface": "store",
+      "selector": ".gift-shortage",
+      "fontSize": "13px",
+      "lineHeight": "20px",
+      "weight": "400"
+    },
+    {
+      "viewport": {
+        "width": 1024,
+        "height": 768
+      },
+      "surface": "store",
+      "selector": ".gift-card-actions button",
+      "fontSize": "14px",
+      "lineHeight": "22px",
+      "weight": "500"
+    },
+    {
+      "viewport": {
+        "width": 1024,
+        "height": 768
+      },
+      "surface": "calendar",
+      "selector": "#calendarTitle",
+      "fontSize": "22px",
+      "lineHeight": "30px",
+      "weight": "600"
+    },
+    {
+      "viewport": {
+        "width": 1024,
+        "height": 768
+      },
+      "surface": "calendar",
+      "selector": "#todayBtn",
+      "fontSize": "14px",
+      "lineHeight": "22px",
+      "weight": "500"
+    },
+    {
+      "viewport": {
+        "width": 1024,
+        "height": 768
+      },
+      "surface": "header",
+      "selector": ".nav button",
+      "fontSize": "14px",
+      "lineHeight": "22px",
+      "weight": "500.25"
+    },
+    {
+      "viewport": {
+        "width": 1024,
+        "height": 768
+      },
+      "surface": "task-dialog",
+      "selector": "#taskDialog [data-slot=\"dialog-title\"]",
+      "fontSize": "20px",
+      "lineHeight": "28px",
+      "weight": "600"
+    },
+    {
+      "viewport": {
+        "width": 1024,
+        "height": 768
+      },
+      "surface": "task-dialog",
+      "selector": "#taskTitle",
+      "fontSize": "16px",
+      "lineHeight": "24px",
+      "weight": "400"
+    },
+    {
+      "viewport": {
+        "width": 1024,
+        "height": 768
+      },
+      "surface": "settings",
+      "selector": ".settings-nav-item",
+      "fontSize": "14px",
+      "lineHeight": "22px",
+      "weight": "600"
+    },
+    {
+      "viewport": {
+        "width": 1024,
+        "height": 768
+      },
+      "surface": "settings",
+      "selector": ".settings-nav-group h2",
+      "fontSize": "13px",
+      "lineHeight": "20px",
+      "weight": "600"
+    },
+    {
+      "viewport": {
+        "width": 1024,
+        "height": 768
+      },
+      "surface": "settings",
+      "selector": ".settings-detail-heading h2",
+      "fontSize": "20px",
+      "lineHeight": "28px",
+      "weight": "600"
+    },
+    {
+      "viewport": {
+        "width": 1024,
+        "height": 768
+      },
+      "surface": "settings-password",
+      "selector": "label[for=\"passwordNew\"]",
+      "fontSize": "14px",
+      "lineHeight": "22px",
+      "weight": "600"
+    },
+    {
+      "viewport": {
+        "width": 1024,
+        "height": 768
+      },
+      "surface": "settings-password",
+      "selector": "#passwordNew",
+      "fontSize": "16px",
+      "lineHeight": "24px",
+      "weight": "400"
+    },
+    {
+      "viewport": {
+        "width": 1024,
+        "height": 768
+      },
+      "surface": "settings-password-help",
+      "selector": "#passwordNew-help",
+      "fontSize": "13px",
+      "lineHeight": "20px",
+      "weight": "400"
+    },
+    {
+      "viewport": {
+        "width": 1024,
+        "height": 768
+      },
+      "surface": "admin-users",
+      "selector": ".ui-page-heading h1",
+      "fontSize": "22px",
+      "lineHeight": "30px",
+      "weight": "600"
+    },
+    {
+      "viewport": {
+        "width": 1024,
+        "height": 768
+      },
+      "surface": "admin-table",
+      "selector": "#userRows td",
+      "fontSize": "14px",
+      "lineHeight": "22px",
+      "weight": "400"
+    },
+    {
+      "viewport": {
+        "width": 1024,
+        "height": 768
+      },
+      "surface": "admin-create",
+      "selector": "[role=\"dialog\"] [data-slot=\"dialog-title\"]",
+      "fontSize": "20px",
+      "lineHeight": "28px",
+      "weight": "600"
+    },
+    {
+      "viewport": {
+        "width": 1024,
+        "height": 768
+      },
+      "surface": "admin-create",
+      "selector": "#createNickname",
+      "fontSize": "16px",
+      "lineHeight": "24px",
+      "weight": "400"
+    },
+    {
+      "viewport": {
+        "width": 1180,
+        "height": 820
+      },
+      "surface": "store",
+      "selector": ".gift-card h3",
+      "fontSize": "15px",
+      "lineHeight": "22px",
+      "weight": "600"
+    },
+    {
+      "viewport": {
+        "width": 1180,
+        "height": 820
+      },
+      "surface": "store",
+      "selector": ".gift-cost",
+      "fontSize": "24px",
+      "lineHeight": "32px",
+      "weight": "600"
+    },
+    {
+      "viewport": {
+        "width": 1180,
+        "height": 820
+      },
+      "surface": "store",
+      "selector": ".gift-shortage",
+      "fontSize": "13px",
+      "lineHeight": "20px",
+      "weight": "400"
+    },
+    {
+      "viewport": {
+        "width": 1180,
+        "height": 820
+      },
+      "surface": "store",
+      "selector": ".gift-card-actions button",
+      "fontSize": "14px",
+      "lineHeight": "22px",
+      "weight": "500"
+    },
+    {
+      "viewport": {
+        "width": 1180,
+        "height": 820
+      },
+      "surface": "calendar",
+      "selector": "#calendarTitle",
+      "fontSize": "22px",
+      "lineHeight": "30px",
+      "weight": "600"
+    },
+    {
+      "viewport": {
+        "width": 1180,
+        "height": 820
+      },
+      "surface": "calendar",
+      "selector": "#todayBtn",
+      "fontSize": "14px",
+      "lineHeight": "22px",
+      "weight": "500"
+    },
+    {
+      "viewport": {
+        "width": 1180,
+        "height": 820
+      },
+      "surface": "header",
+      "selector": ".nav button",
+      "fontSize": "14px",
+      "lineHeight": "22px",
+      "weight": "500.5"
+    },
+    {
+      "viewport": {
+        "width": 1180,
+        "height": 820
+      },
+      "surface": "task-dialog",
+      "selector": "#taskDialog [data-slot=\"dialog-title\"]",
+      "fontSize": "20px",
+      "lineHeight": "28px",
+      "weight": "600"
+    },
+    {
+      "viewport": {
+        "width": 1180,
+        "height": 820
+      },
+      "surface": "task-dialog",
+      "selector": "#taskTitle",
+      "fontSize": "16px",
+      "lineHeight": "24px",
+      "weight": "400"
+    },
+    {
+      "viewport": {
+        "width": 1180,
+        "height": 820
+      },
+      "surface": "settings",
+      "selector": ".settings-nav-item",
+      "fontSize": "14px",
+      "lineHeight": "22px",
+      "weight": "600"
+    },
+    {
+      "viewport": {
+        "width": 1180,
+        "height": 820
+      },
+      "surface": "settings",
+      "selector": ".settings-nav-group h2",
+      "fontSize": "13px",
+      "lineHeight": "20px",
+      "weight": "600"
+    },
+    {
+      "viewport": {
+        "width": 1180,
+        "height": 820
+      },
+      "surface": "settings",
+      "selector": ".settings-detail-heading h2",
+      "fontSize": "20px",
+      "lineHeight": "28px",
+      "weight": "600"
+    },
+    {
+      "viewport": {
+        "width": 1180,
+        "height": 820
+      },
+      "surface": "settings-password",
+      "selector": "label[for=\"passwordNew\"]",
+      "fontSize": "14px",
+      "lineHeight": "22px",
+      "weight": "600"
+    },
+    {
+      "viewport": {
+        "width": 1180,
+        "height": 820
+      },
+      "surface": "settings-password",
+      "selector": "#passwordNew",
+      "fontSize": "16px",
+      "lineHeight": "24px",
+      "weight": "400"
+    },
+    {
+      "viewport": {
+        "width": 1180,
+        "height": 820
+      },
+      "surface": "settings-password-help",
+      "selector": "#passwordNew-help",
+      "fontSize": "13px",
+      "lineHeight": "20px",
+      "weight": "400"
+    },
+    {
+      "viewport": {
+        "width": 1180,
+        "height": 820
+      },
+      "surface": "admin-users",
+      "selector": ".ui-page-heading h1",
+      "fontSize": "22px",
+      "lineHeight": "30px",
+      "weight": "600"
+    },
+    {
+      "viewport": {
+        "width": 1180,
+        "height": 820
+      },
+      "surface": "admin-table",
+      "selector": "#userRows td",
+      "fontSize": "14px",
+      "lineHeight": "22px",
+      "weight": "400"
+    },
+    {
+      "viewport": {
+        "width": 1180,
+        "height": 820
+      },
+      "surface": "admin-create",
+      "selector": "[role=\"dialog\"] [data-slot=\"dialog-title\"]",
+      "fontSize": "20px",
+      "lineHeight": "28px",
+      "weight": "600"
+    },
+    {
+      "viewport": {
+        "width": 1180,
+        "height": 820
+      },
+      "surface": "admin-create",
+      "selector": "#createNickname",
+      "fontSize": "16px",
+      "lineHeight": "24px",
+      "weight": "400"
+    },
+    {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "surface": "store",
+      "selector": ".gift-card h3",
+      "fontSize": "15px",
+      "lineHeight": "22px",
+      "weight": "600"
+    },
+    {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "surface": "store",
+      "selector": ".gift-cost",
+      "fontSize": "24px",
+      "lineHeight": "32px",
+      "weight": "600"
+    },
+    {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "surface": "store",
+      "selector": ".gift-shortage",
+      "fontSize": "13px",
+      "lineHeight": "20px",
+      "weight": "400"
+    },
+    {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "surface": "store",
+      "selector": ".gift-card-actions button",
+      "fontSize": "14px",
+      "lineHeight": "22px",
+      "weight": "500"
+    },
+    {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "surface": "calendar",
+      "selector": "#calendarTitle",
+      "fontSize": "22px",
+      "lineHeight": "30px",
+      "weight": "600"
+    },
+    {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "surface": "calendar",
+      "selector": "#todayBtn",
+      "fontSize": "14px",
+      "lineHeight": "22px",
+      "weight": "500"
+    },
+    {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "surface": "header",
+      "selector": ".nav button",
+      "fontSize": "14px",
+      "lineHeight": "22px",
+      "weight": "500.5"
+    },
+    {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "surface": "task-dialog",
+      "selector": "#taskDialog [data-slot=\"dialog-title\"]",
+      "fontSize": "20px",
+      "lineHeight": "28px",
+      "weight": "600"
+    },
+    {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "surface": "task-dialog",
+      "selector": "#taskTitle",
+      "fontSize": "16px",
+      "lineHeight": "24px",
+      "weight": "400"
+    },
+    {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "surface": "settings",
+      "selector": ".settings-nav-item",
+      "fontSize": "14px",
+      "lineHeight": "22px",
+      "weight": "600"
+    },
+    {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "surface": "settings",
+      "selector": ".settings-nav-group h2",
+      "fontSize": "13px",
+      "lineHeight": "20px",
+      "weight": "600"
+    },
+    {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "surface": "settings",
+      "selector": ".settings-detail-heading h2",
+      "fontSize": "20px",
+      "lineHeight": "28px",
+      "weight": "600"
+    },
+    {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "surface": "settings-password",
+      "selector": "label[for=\"passwordNew\"]",
+      "fontSize": "14px",
+      "lineHeight": "22px",
+      "weight": "600"
+    },
+    {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "surface": "settings-password",
+      "selector": "#passwordNew",
+      "fontSize": "16px",
+      "lineHeight": "24px",
+      "weight": "400"
+    },
+    {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "surface": "settings-password-help",
+      "selector": "#passwordNew-help",
+      "fontSize": "13px",
+      "lineHeight": "20px",
+      "weight": "400"
+    },
+    {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "surface": "admin-users",
+      "selector": ".ui-page-heading h1",
+      "fontSize": "22px",
+      "lineHeight": "30px",
+      "weight": "600"
+    },
+    {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "surface": "admin-table",
+      "selector": "#userRows td",
+      "fontSize": "14px",
+      "lineHeight": "22px",
+      "weight": "400"
+    },
+    {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "surface": "admin-create",
+      "selector": "[role=\"dialog\"] [data-slot=\"dialog-title\"]",
+      "fontSize": "20px",
+      "lineHeight": "28px",
+      "weight": "600"
+    },
+    {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "surface": "admin-create",
+      "selector": "#createNickname",
+      "fontSize": "16px",
+      "lineHeight": "24px",
+      "weight": "400"
+    }
+  ],
+  "browser": "Chromium / repository Playwright; Browser plugin not available",
+  "limits": "Touch and text scaling are emulated. Physical iPad, Safari and native browser zoom remain device acceptance."
+}

@@ -3,7 +3,7 @@ from postgres_store import ARRAY_TABLES, BUSINESS_TABLES, KNOWN_DATA_KEYS, KNOWN
 from storage import StoreError, BACKUP_LIMIT
 from http import HTTPStatus
 from psycopg.types.json import Jsonb
-DB_SCHEMA_VERSION = 3
+DB_SCHEMA_VERSION = 4
 
 class ChildStore:
     @staticmethod
@@ -48,6 +48,8 @@ class ChildStore:
         return record
 
     def replace(self, cursor, child_id, data: dict) -> None:
+        from media_service import MediaService
+        MediaService.require_external(data)
         for table in BUSINESS_TABLES:
             cursor.execute(f"DELETE FROM lele.{table} WHERE child_id=%s", (child_id,))
         cursor.execute("INSERT INTO lele.app_settings(child_id,id,record_json) VALUES (%s,1,%s)", (child_id,self._json(data["settings"]),))

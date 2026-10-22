@@ -83,7 +83,7 @@ export function ChildProfile({ controller, child }: { controller: Controller; ch
       {!editable && (
         <Notice>
           {child.archived
-            ? "孩子已归档，当前仅可查看和导出。"
+            ? "孩子已归档，当前仅可查看。"
             : "孩子昵称由管理员修改，你可以共同管理任务、积分和礼品。"}
         </Notice>
       )}
@@ -94,7 +94,7 @@ export function ChildProfile({ controller, child }: { controller: Controller; ch
             id="renameChild"
             label="孩子昵称"
             required
-            help="用于孩子卡片、日历和导出记录，最多 40 个字。"
+            help="用于孩子卡片和日历，最多 40 个字。"
           >
             <Input
               ref={nickname}

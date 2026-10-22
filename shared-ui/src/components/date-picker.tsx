@@ -135,7 +135,7 @@ export function DateRangePicker({
             setOpen(false)
           }}
         />
-        <p className="px-4 pb-3 text-xs text-muted-foreground" aria-live="polite">
+        <p className="px-4 pb-3 text-caption text-muted-foreground" aria-live="polite">
           {from && !to ? "请选择结束日期" : "依次选择开始和结束日期"}
         </p>
       </PopoverContent>

@@ -21,7 +21,6 @@ import { FormField } from "@shared/components/form-field"
 import {
   ChevronRight,
   ClipboardList,
-  History,
   KeyRound,
   LayoutGrid,
   LogOut,
@@ -128,7 +127,6 @@ const icons: Record<string, LucideIcon> = {
   mail: Mail,
   task: ClipboardList,
   category: LayoutGrid,
-  backup: History,
   key: KeyRound,
   logout: LogOut,
   arrow: ChevronRight,

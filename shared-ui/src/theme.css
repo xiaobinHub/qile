@@ -1,4 +1,5 @@
 @import "./shadcn-variants.css";
+@import "./typography.css";
 
 @font-face {
   font-family: "Inter Variable";
@@ -150,7 +151,7 @@
     min-width: 320px;
   }
   body {
-    @apply m-0 bg-background font-sans text-sm leading-[22px] text-foreground antialiased;
+    @apply m-0 bg-background font-sans text-sm text-foreground antialiased;
   }
   button,
   input,
@@ -177,6 +178,12 @@
 }
 
 @media (pointer: coarse) {
+  [data-slot="input"],
+  [data-slot="textarea"] {
+    font-size: var(--text-section);
+    line-height: var(--text-section--line-height);
+    min-height: 44px;
+  }
   [data-slot="button"],
   [data-slot="input"],
   [data-slot="select-trigger"],
@@ -223,15 +230,15 @@
   margin-bottom: 24px;
 }
 .ui-page-heading h1 {
-  font-size: 24px;
-  line-height: 32px;
+  font-size: var(--text-page);
+  line-height: var(--text-page--line-height);
   font-weight: 600;
 }
 .ui-page-heading p {
   margin-top: 8px;
   color: var(--text-secondary);
-  font-size: 13px;
-  line-height: 20px;
+  font-size: var(--text-caption);
+  line-height: var(--text-caption--line-height);
 }
 .ui-page-actions {
   display: flex;
@@ -240,14 +247,62 @@
   flex-wrap: wrap;
 }
 .ui-field > [data-slot="label"] {
-  font-size: 14px;
-  line-height: 22px;
+  font-size: var(--text-body);
+  line-height: var(--text-body--line-height);
 }
 .ui-field [data-slot="select-trigger"] {
   width: 100%;
 }
 .ui-overlay-immersive {
   background: rgb(0 0 0 / 72%);
+}
+.time-wheel {
+  position: relative;
+  isolation: isolate;
+  min-width: 0;
+  height: calc(var(--time-wheel-row) * 5 + 2px);
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--card);
+}
+.time-wheel:has(:focus-visible) {
+  border-color: var(--ring);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ring) 50%, transparent);
+}
+.time-wheel-selection {
+  position: absolute;
+  top: calc(var(--time-wheel-row) * 2);
+  inset-inline: 4px;
+  height: var(--time-wheel-row);
+  border: 1px solid var(--primary);
+  border-radius: var(--radius-md);
+  background: var(--accent);
+  pointer-events: none;
+}
+.time-wheel-scroll {
+  position: relative;
+  height: 100%;
+  padding-block: calc(var(--time-wheel-row) * 2);
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  scroll-snap-type: y mandatory;
+  scrollbar-width: none;
+  touch-action: pan-y;
+  outline: none;
+}
+.time-wheel-scroll::-webkit-scrollbar {
+  display: none;
+}
+.time-wheel-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: var(--time-wheel-row);
+  scroll-snap-align: center;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  user-select: none;
 }
 [data-slot="dialog-content"],
 [data-slot="alert-dialog-content"] {
@@ -278,8 +333,8 @@
   border-bottom: 1px solid var(--border);
 }
 .ui-modal-header [data-slot="dialog-description"] {
-  font-size: 13px;
-  line-height: 20px;
+  font-size: var(--text-caption);
+  line-height: var(--text-caption--line-height);
 }
 .ui-modal-body {
   min-height: 0;
@@ -302,7 +357,24 @@
   margin-right: auto;
   align-self: center;
   color: var(--text-secondary);
-  font-size: 13px;
+  font-size: var(--text-body);
+}
+/* A software keyboard must not squeeze a long form between a fixed header and
+   footer. Keep its natural height and scroll the complete panel in one region. */
+.ui-modal-frame[data-keyboard-scroll="true"] {
+  /* Geometry must update before focus visibility is measured. */
+  transition-property: opacity, box-shadow;
+}
+[data-app-keyboard-open] .ui-modal-frame[data-keyboard-scroll="true"] {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  scroll-padding-block: 24px;
+}
+[data-app-keyboard-open] .ui-modal-frame[data-keyboard-scroll="true"] > .ui-modal-body {
+  flex: none;
+  overflow: visible;
+  scrollbar-gutter: auto;
 }
 .ui-modal-body .form-actions {
   margin-bottom: 0;
