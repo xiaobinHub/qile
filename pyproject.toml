@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lele-growth"
+version = "0.1.0"
+description = "成长计划家长端与管理端后端服务"
+readme = "README.md"
+requires-python = ">=3.13"
+dynamic = ["dependencies"]
+
+[tool.setuptools.packages.find]
+where = ["backend"]
+include = ["lele_growth*"]
+
+[tool.setuptools.package-data]
+lele_growth = ["db/*.sql"]
+
+[tool.setuptools.dynamic]
+dependencies = {file = ["requirements.txt"]}

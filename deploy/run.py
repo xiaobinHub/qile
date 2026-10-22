@@ -4,10 +4,10 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "backend"))
 
 if __name__ == '__main__':
-    from accounts_app import create_app
+    from lele_growth.accounts_app import create_app
     import uvicorn
     config = os.environ.get('LELE_ACCOUNTS_CONFIG')
     surface = os.environ.get('LELE_SURFACE')

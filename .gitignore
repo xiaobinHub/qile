@@ -8,5 +8,17 @@ data/
 
 .playwright-cli/
 
-output/playwright/
+output/
 node_modules/
+
+# Python package/build metadata
+*.egg-info/
+/build/
+/dist/
+*.py[cod]
+
+# Private configuration is supplied outside the source tree
+.env.*
+!.env.example
+/config/*.local.json
+/config/*credentials*.json

@@ -1,0 +1,121 @@
+{
+  "registry": "https://ui.shadcn.com/r/styles/new-york-v4",
+  "retrievedOn": "2026-10-16",
+  "style": "new-york-v4",
+  "transformations": {
+    "from \"cn\"": "from \"@shared/lib/utils\"",
+    "@/registry/new-york-v4/ui/": "@shared/components/ui/"
+  },
+  "components": [
+    {
+      "name": "alert-dialog",
+      "registryUrl": "https://ui.shadcn.com/r/styles/new-york-v4/alert-dialog.json",
+      "upstreamPath": "registry/new-york-v4/ui/alert-dialog.tsx",
+      "upstreamSha256": "b3dfb83e54ed8c82071df5289e5149628bf573458fc2da2d62f93f8380041b28",
+      "localPath": "../shared/src/components/ui/alert-dialog.tsx",
+      "localSha256": "7883596f28d960e9a9023d33825650da10530e6d2481c4b363722f6b36645e19"
+    },
+    {
+      "name": "badge",
+      "registryUrl": "https://ui.shadcn.com/r/styles/new-york-v4/badge.json",
+      "upstreamPath": "registry/new-york-v4/ui/badge.tsx",
+      "upstreamSha256": "13a9380dfff853ee730c14a52df49f22aecd31f40f2998d7c1e7ec458b6e1650",
+      "localPath": "../shared/src/components/ui/badge.tsx",
+      "localSha256": "8c3969edfb4cbd716950f8d96c66da4c8e533d7d8daf8ad4baf44c224b86f491"
+    },
+    {
+      "name": "button",
+      "registryUrl": "https://ui.shadcn.com/r/styles/new-york-v4/button.json",
+      "upstreamPath": "registry/new-york-v4/ui/button.tsx",
+      "upstreamSha256": "79dd6f75f8136394442202d6b8b922fb269eaad0a5dba579397c9d5b41f893bb",
+      "localPath": "../shared/src/components/ui/button.tsx",
+      "localSha256": "149237be2624bf26ab95cc7c0323df4ff94deadf30fc1d490d64df17f67daf5a"
+    },
+    {
+      "name": "card",
+      "registryUrl": "https://ui.shadcn.com/r/styles/new-york-v4/card.json",
+      "upstreamPath": "registry/new-york-v4/ui/card.tsx",
+      "upstreamSha256": "ef8305b12c3112dab42a4708b41b1ebcc042fa5ab4c20f039da8d45b09ed5059",
+      "localPath": "../shared/src/components/ui/card.tsx",
+      "localSha256": "2ed1387a0d545dade9a7e0791efe8c761c9b8c160f0a93ee68e9227756d1905a"
+    },
+    {
+      "name": "dialog",
+      "registryUrl": "https://ui.shadcn.com/r/styles/new-york-v4/dialog.json",
+      "upstreamPath": "registry/new-york-v4/ui/dialog.tsx",
+      "upstreamSha256": "2ade6074e5fad0a4eb171ead44c43d3301a3c83d186d7236fb1fdbea80ee556b",
+      "localPath": "../shared/src/components/ui/dialog.tsx",
+      "localSha256": "9a4cc0a1ccf9c7c18a42bdca04e21eedd1a49ac19bfeddf1bd6f2c163694b46f"
+    },
+    {
+      "name": "dropdown-menu",
+      "registryUrl": "https://ui.shadcn.com/r/styles/new-york-v4/dropdown-menu.json",
+      "upstreamPath": "registry/new-york-v4/ui/dropdown-menu.tsx",
+      "upstreamSha256": "d954efb735f13734751207ad22cb0cddd7f6ec53c59d16675d103dae08cb61fb",
+      "localPath": "../shared/src/components/ui/dropdown-menu.tsx",
+      "localSha256": "061cd7052d446fd38401f8d443e1037a06c722ff5f69a9770b1ff0758555b85f"
+    },
+    {
+      "name": "input",
+      "registryUrl": "https://ui.shadcn.com/r/styles/new-york-v4/input.json",
+      "upstreamPath": "registry/new-york-v4/ui/input.tsx",
+      "upstreamSha256": "0c9457181f6ddc80969bcf854e92c362903a55b6e889fbef3fd85343ecc4af5b",
+      "localPath": "../shared/src/components/ui/input.tsx",
+      "localSha256": "c6ff930afcea48365250d8c67d42494d92f1eda1eced5b44da345f164f7cb97c"
+    },
+    {
+      "name": "label",
+      "registryUrl": "https://ui.shadcn.com/r/styles/new-york-v4/label.json",
+      "upstreamPath": "registry/new-york-v4/ui/label.tsx",
+      "upstreamSha256": "344bde38b8531615dbf8e14af3895517c24d8ef6ce56ddeda7e2e6fe4b5d0c00",
+      "localPath": "../shared/src/components/ui/label.tsx",
+      "localSha256": "aed2bf26185dcb764a8c25af710b4a38df98befd26e93a010409b73cfa29703b"
+    },
+    {
+      "name": "select",
+      "registryUrl": "https://ui.shadcn.com/r/styles/new-york-v4/select.json",
+      "upstreamPath": "registry/new-york-v4/ui/select.tsx",
+      "upstreamSha256": "962830436bd0b7ee50e556f0747e277d6a86869ed27d167516346b15f26309d8",
+      "localPath": "../shared/src/components/ui/select.tsx",
+      "localSha256": "ce5d21f1917f47dc5c6b2dd61e0b267de75a9825b6020b7886c2d991c148a886"
+    },
+    {
+      "name": "separator",
+      "registryUrl": "https://ui.shadcn.com/r/styles/new-york-v4/separator.json",
+      "upstreamPath": "registry/new-york-v4/ui/separator.tsx",
+      "upstreamSha256": "ad7d5403fe337160e41dbf04147896e448ae3a747b8d06660d627d74d60021bc",
+      "localPath": "../shared/src/components/ui/separator.tsx",
+      "localSha256": "4ed650b450d8c6d65f86e22a377ecf54756ecfd30769be99a68da7e68aac5874"
+    },
+    {
+      "name": "sheet",
+      "registryUrl": "https://ui.shadcn.com/r/styles/new-york-v4/sheet.json",
+      "upstreamPath": "registry/new-york-v4/ui/sheet.tsx",
+      "upstreamSha256": "ea473d38a26a9b0b879e5a13139899ad45e9782e896b3fa205c7763a6c506876",
+      "localPath": "../shared/src/components/ui/sheet.tsx",
+      "localSha256": "403a3829f05528a912df699ac6a8fda63856ba67950f7c16fa425aa405af0b85"
+    },
+    {
+      "name": "skeleton",
+      "registryUrl": "https://ui.shadcn.com/r/styles/new-york-v4/skeleton.json",
+      "upstreamPath": "registry/new-york-v4/ui/skeleton.tsx",
+      "upstreamSha256": "f51ce0fcd31e5c31437382e80ea0af94b4fc3d64221d27091d36824546780a43",
+      "localPath": "../shared/src/components/ui/skeleton.tsx",
+      "localSha256": "bde8222aebdd98c6e619e28df87c718aeff1c0ec1c1cb338a59bd522eee7955c"
+    },
+    {
+      "name": "table",
+      "registryUrl": "https://ui.shadcn.com/r/styles/new-york-v4/table.json",
+      "upstreamPath": "registry/new-york-v4/ui/table.tsx",
+      "upstreamSha256": "bd1a9fc83a5a2149e504038e274bb7e5a0351af59f6896df52ac4d5b439695ac",
+      "localPath": "../shared/src/components/ui/table.tsx",
+      "localSha256": "127bed701e9b716f20bcc0b26b8f5bc6a875d161966cf6f5960824bad22c40f1"
+    }
+  ],
+  "sharedSourceNote": "Existing registry-derived sources moved to ../shared/src; accessible sizes, Chinese close labels, and theme tokens adapted locally. New shared primitives are local Radix/DayPicker compositions.",
+  "localAdaptations": [
+    "Shared source ownership and @shared imports",
+    "Unified theme/control sizes/Chinese labels/modal layers",
+    "Source formatted with repository Prettier configuration"
+  ]
+}

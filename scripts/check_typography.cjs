@@ -18,7 +18,7 @@ function walk(folder) {
     }
   }
 }
-for (const folder of ["parent-ui/src", "admin-ui/src", "shared-ui/src"]) walk(path.join(root, folder))
+for (const folder of ["frontend/parent/src", "frontend/admin/src", "frontend/shared/src"]) walk(path.join(root, folder))
 if (violations.length) {
   console.error("Use shared typography roles; see docs/ui/字体与响应式规范.md\n" + violations.join("\n"))
   process.exitCode = 1

@@ -10,13 +10,13 @@
 
 Bucket 和上传对象保持 private。正常应用需要限定项目目录的读取、上传及设置对象私有 ACL 权限；清理工具另需相应对象删除权限。不要为这个项目调整全桶 CORS、ACL 或生命周期。建议使用受限 RAM 凭据，并在本机私有配置替换曾在对话中提供的密钥。
 
-新环境先安装 `requirements.txt` 约束的依赖（包括 `certifi>=2026.10.19`）并构建两端。使用 `uv pip install --python .venv/bin/python -r requirements.txt`，然后运行 `npm ci` 和 `npm run build`。有旧业务数据的库应先停服并保存私有完整备份，再显式升级：
+新环境先安装 `requirements.txt` 约束的依赖（包括 `certifi>=2026.10.19`）并构建两端。使用 `uv pip install --python .venv/bin/python -e .`，然后运行 `npm ci` 和 `npm run build`。有旧业务数据的库应先停服并保存私有完整备份，再显式升级：
 
 ```sh
-.venv/bin/python child_service.py --config data/development/config.json upgrade
-.venv/bin/python media_migration.py --config data/development/config.json
-.venv/bin/python media_migration.py --config data/development/config.json --apply --backup-dir data/development/oss-migration-backup
-.venv/bin/python dev.py start
+PYTHONPATH=backend .venv/bin/python -m lele_growth.child_service --config data/development/config.json upgrade
+PYTHONPATH=backend .venv/bin/python -m lele_growth.media_migration --config data/development/config.json
+PYTHONPATH=backend .venv/bin/python -m lele_growth.media_migration --config data/development/config.json --apply --backup-dir data/development/oss-migration-backup
+.venv/bin/python scripts/dev.py start
 ```
 
 备份目录必须仅当前用户可访问（0700）；工具新建时自动设置。结构升级支持 v2/v3 到 v4、重复执行及全新初始化，不修改业务修订号。未知结构拒绝升级。仅结构升级尚不代表图片迁移完成；必须执行迁移并确认残留为零再恢复写入。工具拒绝 production 环境。
@@ -48,7 +48,7 @@ OSS Key 为 `{prefix}/children/{childId}/images/{sha256}.{extension}`。同一�
 
 工具在数据库外保存原始受限备份和逐记录摘要清单；每个孩子在锁内核对源摘要后提交，更新快照内容摘要，保留业务修订号、历史时间、权限和原幂等指纹。全库再次扫描 `imageData`，数量及字节数必须为 0；不能仅统计当前礼品。
 
-家长端数据备份菜单、JSON 导出及导入恢复已删除；`GET /api/children/{id}/data/export` 与 `POST /api/children/{id}/data/restore` 不再开放。旧页面不能通过恢复接口整包覆盖业务。普通读取的数据兼容处理位于 `parent-ui/src/domain/normalize.ts`，不提供文件导入功能。
+家长端数据备份菜单、JSON 导出及导入恢复已删除；`GET /api/children/{id}/data/export` 与 `POST /api/children/{id}/data/restore` 不再开放。旧页面不能通过恢复接口整包覆盖业务。普通读取的数据兼容处理位于 `frontend/parent/src/domain/normalize.ts`，不提供文件导入功能。
 
 内部历史快照继续按原规则保留，旧的受限 `import-child` 仅供运维一次性迁移旧版本数据库原始留档，不能由网页触发，不是家长导入备份入口。数据库外已有原始留档及历史审计不会因功能删除而清除。打印及 PDF 保持现有用途；本轮没有自动启用云厂商独立备份策略。
 
@@ -63,8 +63,8 @@ OSS Key 为 `{prefix}/children/{childId}/images/{sha256}.{extension}`。同一�
 清理默认预览，不自动运行或配置全桶生命周期：
 
 ```sh
-.venv/bin/python media_migration.py --config data/development/config.json --cleanup-staged
-.venv/bin/python media_migration.py --config data/development/config.json --cleanup-staged --apply
+PYTHONPATH=backend .venv/bin/python -m lele_growth.media_migration --config data/development/config.json --cleanup-staged
+PYTHONPATH=backend .venv/bin/python -m lele_growth.media_migration --config data/development/config.json --cleanup-staged --apply
 ```
 
 替换图片、删除礼品或逻辑删除孩子均不物理删除已关联历史图片。已关联对象的永久清理另行设计。PostgreSQL 的旧行/TOAST/WAL 按正常维护策略回收，逻辑残留为零不保证磁盘文件立刻缩小。
@@ -76,7 +76,7 @@ OSS Key 为 `{prefix}/children/{childId}/images/{sha256}.{extension}`。同一�
 `test-filesystem` 只允许 development 且库名为 `lele_test*`；不能用于 `lele_dev` 或 production。真实 OSS 测试还要求独立 `checks` 或 `tests` 前缀。自动化测试不会使用开发前缀。
 
 ```sh
-LELE_TEST_CONFIG=data/development/oss-test-config.json .venv/bin/python -m unittest test_child_backend test_child_schema_upgrade test_media_storage -v
+LELE_TEST_CONFIG=data/development/oss-test-config.json PYTHONPATH=backend .venv/bin/python -m unittest tests.backend.test_child_backend tests.backend.test_child_schema_upgrade tests.backend.test_media_storage -v
 npm run test:domain
 npm run build
 npm run test:browser

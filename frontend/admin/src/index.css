@@ -1,0 +1,38 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "../../shared/src/theme.css";
+@source "../../shared/src";
+
+@layer components {
+  .overview-cell + .overview-cell {
+    @apply border-l;
+  }
+  .overview-cell:nth-child(n + 3) {
+    @apply border-t sm:border-t-0;
+  }
+  .overview-cell:nth-child(3) {
+    @apply border-l-0 sm:border-l;
+  }
+  .admin-user-table [data-slot="table-container"] {
+    max-height: min(620px, 62dvh);
+    overflow: auto;
+  }
+  .field-help {
+    @apply text-caption text-muted-foreground;
+  }
+  .admin-dialog {
+    @apply border-border bg-card shadow-[0_20px_80px_-24px_rgba(0,0,0,0.3)];
+  }
+  .profile-icon {
+    @apply flex size-10 shrink-0 items-center justify-center rounded-lg border bg-muted/25 text-muted-foreground;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
