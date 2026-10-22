@@ -1,6 +1,5 @@
 import { useRef, useState, type FormEvent } from "react"
 import { ArrowRight, LoaderCircle } from "lucide-react"
-import { Brand } from "@/components/brand"
 import { PageHeading } from "@shared/components/page-heading"
 import { FormFeedback } from "@shared/components/form-feedback"
 import { PasswordInput } from "@shared/components/password-input"
@@ -42,9 +41,6 @@ export function LoginPage() {
   }
   return (
     <main className="flex min-h-svh flex-col items-center justify-center px-5 py-10">
-      <div className="mb-6">
-        <Brand />
-      </div>
       <Card className="w-full max-w-[420px] gap-0 overflow-hidden rounded-xl border-border/90 py-0 shadow-[0_12px_48px_-24px_rgba(24,56,39,0.22)]">
         <CardContent className="p-6 sm:p-7">
           <PageHeading title="管理员登录" description="登录后，开通与维护家长账号。" />
