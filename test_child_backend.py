@@ -159,6 +159,35 @@ class ChildBackendTests(unittest.TestCase):
         badlogin=renewed.post('/api/auth/login',json={'loginName':'parenta','password':NEW_PASSWORD},headers={'Origin':self.service.config['admin_origin']})
         self.assertEqual(badlogin.status_code,403)
 
+    def test_port_forwarded_login_keeps_csrf_and_surface_isolation(self):
+        config = json.loads(Path(CONFIG).read_text())
+        config.update(parent_trusted_origins=['http://forward.example.test:28787'],
+                      admin_trusted_origins=['https://admin.example.test:28788'])
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'config.json'
+            path.write_text(json.dumps(config))
+            parent = TestClient(create_app(path, 'parent'), base_url=config['parent_trusted_origins'][0])
+            self.assertEqual(self.login(parent, 'parenta', NEW_PASSWORD).status_code, 200)
+            self.assertEqual(parent.get('/api/auth/me').status_code, 200)
+            # Denial happens before writes, and successful login still requires CSRF afterward.
+            for csrf in ('', 'wrong'):
+                response = parent.patch('/api/account/profile', json={'nickname': 'must not save'},
+                                        headers={'Origin': str(parent.base_url).rstrip('/'), 'X-CSRF-Token': csrf})
+                self.assertEqual(response.status_code, 403)
+                self.assertIn('请求校验失败', response.json()['error'])
+            for headers in ({'Origin': config['admin_trusted_origins'][0]},
+                            {'Origin': 'http://forward.example.test:28788'},
+                            {'Origin': 'http://evil.example', 'Host': 'forward.example.test:28787',
+                             'X-Forwarded-Host': 'forward.example.test:28787', 'X-Forwarded-Proto': 'http'},
+                            {'X-Forwarded-Origin': config['parent_trusted_origins'][0]}):
+                response = parent.post('/api/auth/login', json={'loginName':'parenta','password':NEW_PASSWORD}, headers=headers)
+                self.assertEqual(response.status_code, 403)
+                self.assertIn('请求来源不受信任', response.json()['error'])
+            admin = TestClient(create_app(path, 'admin'), base_url=config['admin_trusted_origins'][0])
+            self.assertEqual(self.login(admin, 'testadmin', NEW_PASSWORD).status_code, 200)
+            self.assertEqual(admin.get('/api/admin/users').status_code, 200)
+            self.assertEqual(self.login(admin, 'parenta', NEW_PASSWORD).status_code, 401)
+
     def test_forced_password_revokes_sessions_and_login_normalization(self):
         name='force'+uuid.uuid4().hex[:8]
         r=self.call(self.admin,'POST','/api/admin/users',{'loginName':name.upper(),'nickname':'Forced','password':PASSWORD})

@@ -87,11 +87,31 @@ def public_user(row):
     return dict(id=row[0], loginName=row[1], nickname=row[2], role=row[3], mustChangePassword=row[5])
 
 
+def normalized_origin(value):
+    """Parse one explicit web origin, never a wildcard, URL path or proxy header."""
+    require(isinstance(value, str) and bool(value) and not any(c.isspace() or ord(c) < 32 or ord(c) == 127 for c in value))
+    url = urlsplit(value)
+    require(url.scheme in ('http', 'https') and url.hostname and url.username is None and url.password is None)
+    require(re.fullmatch(r'(?:\[[0-9a-fA-F:.]+\]|[a-zA-Z0-9.-]+)(?::[0-9]+)?', url.netloc) is not None)
+    require(url.path in ('', '/') and '?' not in value and '#' not in value)
+    host = url.hostname
+    try:
+        address = ipaddress.ip_address(host)
+        host = '[' + str(address) + ']' if address.version == 6 else str(address)
+    except ValueError:
+        require(len(host) <= 253 and all(re.fullmatch(r'[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?', label) for label in host.split('.')))
+    port = url.port
+    require(port is None or 1 <= port <= 65535)
+    require(not url.netloc.endswith(':'))
+    suffix = '' if port is None or port == (443 if url.scheme == 'https' else 80) else ':' + str(port)
+    return url.scheme + '://' + host + suffix
+
+
 def load_config(config_path):
-    """Never falls back to an RDS configuration or accepts DNS aliases in dev."""
+    """Never falls back to RDS or accepts DNS aliases for a development database."""
     try:
         config = json.loads(Path(config_path).read_text())
-        require(isinstance(config, dict) and set(config) <= {'environment','database','parent_origin','admin_origin'})
+        require(isinstance(config, dict) and set(config) <= {'environment','database','parent_origin','admin_origin','parent_trusted_origins','admin_trusted_origins'})
         require(config.get('environment') in ('development','production'))
         db = config.get('database')
         require(isinstance(db, dict) and set(db) <= {'host','port','dbname','user','password','sslmode','sslrootcert','allow_unencrypted','connect_timeout'})
@@ -120,6 +140,16 @@ def load_config(config_path):
             else:
                 require(url.scheme == 'https')
         require(config['parent_origin'] != config['admin_origin'])
+        origins = {}
+        for surface in ('parent', 'admin'):
+            key = surface + '_trusted_origins'
+            # Additional forwarding addresses are opt-in and development-only.
+            require(dev or key not in config)
+            extra = config.get(key, [])
+            require(isinstance(extra, list) and len(extra) <= 32)
+            config[key] = list(dict.fromkeys(normalized_origin(value) for value in extra))
+            origins[surface] = {normalized_origin(config[surface + '_origin']), *config[key]}
+        require(origins['parent'].isdisjoint(origins['admin']))
         params = {k:v for k,v in db.items() if k not in ('allow_unencrypted','connect_timeout')}
         params.update(port=db.get('port',5432),sslmode=mode,connect_timeout=5,options='-c statement_timeout=10000 -c lock_timeout=5000')
         if params.get('sslrootcert'):
@@ -194,14 +224,19 @@ class ChildService:
         if self.config.get('environment') != 'development':
             return False
         try:
-            got = urlsplit(origin or '')
-            want = urlsplit(expected)
-        except ValueError:
+            normalized = normalized_origin(origin)
+            if normalized in self.config.get(surface + '_trusted_origins', []):
+                return True
+            got = urlsplit(normalized)
+            want = urlsplit(normalized_origin(expected))
+        except (ValueError, ApiError):
             return False
         if not got.hostname or got.scheme != want.scheme or got.port != want.port:
             return False
         if got.path not in ('', '/') or got.username or got.password or got.query or got.fragment:
             return False
+        if got.hostname == 'localhost':
+            return True
         try:
             address = ipaddress.ip_address(got.hostname)
         except ValueError:
