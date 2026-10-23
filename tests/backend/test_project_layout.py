@@ -60,7 +60,7 @@ class ProjectLayoutTests(unittest.TestCase):
         self.assertFalse(any(Path(name).parts[0] in forbidden for name in relative))
         self.assertFalse(any("credentials" in name for name in relative))
         with tempfile.TemporaryDirectory() as directory:
-            archive_path = package(PROJECT_ROOT, Path(directory))
+            archive_path = package(PROJECT_ROOT, Path(directory), allow_dirty=True)
             with tarfile.open(archive_path) as archive:
                 self.assertEqual(set(archive.getnames()), relative | {"release-manifest.json"})
                 manifest = json.load(archive.extractfile("release-manifest.json"))

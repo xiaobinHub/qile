@@ -1,46 +1,28 @@
-# 项目目录规范
+# 当前项目目录规范
 
-## 约定
-
-1. 根目录只放项目说明、依赖清单、工具配置及兼容开发入口。业务 Python 代码只在 `backend/lele_growth/`，统一通过 `lele_growth.*` 导入。
-2. 两个前端使用独立 Vite 入口，共用 `frontend/shared/`，使用根目录同一份 `package.json` 和锁文件。不引入 npm workspace 或其他工作区工具。公共 TypeScript 编译规则在 `frontend/tsconfig.base.json`，两个入口互不继承配置。第三方分发许可集中在 `licenses/`。
-3. SQL 是 `lele_growth` 包内资源，通过模块位置定位，不依赖启动时工作目录。静态文件从仓库发布根目录的 `web/` 读取，仅允许构建资源路由访问。
-4. `tests/` 不包含正式数据；测试夹具不能成为生产服务运行依赖。浏览器测试的临时进程使用隔离数据库和端口。
-5. `config/` 和 `deploy/` 只放示例，实际配置放本地被忽略的 `data/development/` 或云端 `/etc/lele-growth/`，权限为 0600。不要把云端凭据复制到源码目录。
-6. `output/` 为可再生检查及打包结果，全部忽略。需要长期保存的已脱敏验收资料放在 `docs/`。
-7. `legacy/` 是历史入口及兼容测试的对照材料，发布包不包含该目录；当前后端不得导入旧版服务。本地生产控制脚本和启动器已删除，历史说明移入 docs/archive/local-production/。
-8. `web/` 继续纳入 Git，生产运行无需 Node.js。每次修改前端后必须重建并验证，不能把新 HTML 与旧分块混用。
-
-## 路径映射
-
-| 整理前 | 整理后 |
+| 目录 | 现用职责 |
 | --- | --- |
-| `accounts_app.py` 等后端模块 | `backend/lele_growth/`，以 `lele_growth.accounts_app` 等包名导入 |
-| `db/` | `backend/lele_growth/db/` |
-| `parent-ui/` | `frontend/parent/` |
-| `admin-ui/` | `frontend/admin/` |
-| `shared-ui/` | `frontend/shared/` |
-| 根目录 `test_*.py` | `tests/backend/` |
-| `scripts/*_tests.cjs` | `tests/domain/` |
-| `scripts/*smoke.cjs`、UI 验收脚本 | `tests/browser/` |
-| `scripts/fixtures/` | `tests/fixtures/` |
-| `dev.py` 实现 | `scripts/dev.py`；根入口仅转发 |
-| `server.py`、`index.html`、`migrate_to_rds.py` | `legacy/` |
-| `scripts/local_production.py` | 已删除，本地不再运行生产环境 |
-| 旧生产 `.app` 和启动命令 | 已删除，本地仅开发测试 |
-| `docs/rds/` | `docs/archive/rds/`，旧单孩子版本资料 |
-| `deploy/production.example.json` | `config/production.example.json` |
+| `backend/lele_growth/` | FastAPI、业务、事务、存储、媒体及 SQL |
+| `frontend/parent/`、`frontend/admin/` | 两个 Vite 应用 |
+| `frontend/shared/` | 共享 shadcn/ui 组件及主题 |
+| `tests/backend/`、`tests/browser/`、`tests/domain/` | 当前后端、浏览器及领域回归 |
+| `tests/fixtures/` | 回归实际引用的规则对照及视觉样例 |
+| `scripts/` | 开发、检查、打包工具 |
+| `deploy/`、`config/` | Linux 入口、部署模板和无密钥示例 |
+| `web/`、`licenses/` | 已构建资源及第三方许可 |
+| `docs/` | 当前操作、组件及验证说明 |
+| `data/development/` | 现用开发数据库、配置、凭据和活跃运行文件 |
+| `data/testing/` | 可再生的隔离测试配置、日志和测试对象 |
 
-早期设计、审查及验收记录中的路径描述保留当时事实；实际操作使用本表和 README 中的新命令。
+## 边界
 
-## 常用命令
+- Python 统一通过 `lele_growth.*` 导入；SQL 从包位置定位，公开静态文件仅来自 `web/`。
+- 前端共用根 npm 清单/锁文件和 `frontend/tsconfig.base.json`，通用控件只从共享目录组合。
+- `.git/`、`.venv/`、`node_modules/` 和开发数据库是现用版本管理或开发依赖，不是废弃文件。配置、依赖、测试产物、构建缓存不进入发布包。
+- 历史配置副本、迁移原始留档、测试对象和审查摘要不再混入 `data/development/`。测试运行使用 `data/testing/`，可再生检查结果使用 `output/`。
+- 旧服务入口、局域网口令功能、本地生产工具、旧数据及历史文档已移到项目外私有归档。当前代码和测试不依赖 `legacy/`。
+- `tests/fixtures/calendar-legacy.cjs` 仍用于当前 33 组算法等值验证；共享存储模块及 SQL 基线仍用于当前校验、升级或回归，所以保留。
+- 根 `dev.py` 为受支持的兼容入口；本地测试快捷方式调用 `scripts/dev.py`，生产运行入口为 `deploy/run.py`，显式离线维护入口为 `deploy/manage.py`，两者职责分离。
+- 两端 `web/*-dist/.vite/manifest.json` 是发布资源依赖校验的输入，随构建和发布保存，不对外公开；正式包要求源码及构建结果已提交，开发验收包必须显式加 `--allow-dirty`。
 
-```sh
-.venv/bin/python scripts/dev.py start
-.venv/bin/python scripts/dev.py stop
-.venv/bin/python scripts/dev.py test
-PYTHONPATH=backend .venv/bin/python -m lele_growth.child_service --help
-PYTHONPATH=backend .venv/bin/python -m lele_growth.media_migration --help
-```
-
-`python deploy/run.py` 可从任意工作目录运行，先定位发布根目录再加载应用包；前后端资源都从模块路径定位。开发命令保留旧 `python dev.py ...` 兼容入口。云端配置路径仍须显式提供，不能复制本地开发配置作为生产配置。
+操作见 [本地开发](development.md)、[部署说明](../deploy/README.md) 和 [OSS 说明](oss-storage.md)；移出项目的数量及恢复位置见 [清理记录](local-cleanup-2026-10-23.md)。

@@ -1,6 +1,6 @@
 """Integration tests require an explicit isolated local PostgreSQL app config.
 
-LELE_TEST_CONFIG=data/development/test-config.json PYTHONPATH=backend .venv/bin/python -m unittest tests.backend.test_child_backend -v
+LELE_TEST_CONFIG=data/testing/backend/config.json PYTHONPATH=backend .venv/bin/python -m unittest tests.backend.test_child_backend -v
 The suite refuses any database not named lele_test*. Never uses production config.
 """
 import concurrent.futures

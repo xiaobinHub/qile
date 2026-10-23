@@ -528,49 +528,15 @@ class ChildService:
 def initialize(config_path, *, upgrade_only=False):
     service=ChildService(config_path)
     require(service.config['environment']=='development',403,'此初始化工具仅允许本地开发环境。')
-    source=Path(__file__).with_name('db').joinpath('schema_v2.sql').read_text()
-    source_hash=hashlib.sha256(source.encode()).hexdigest()
-    migration=Path(__file__).with_name('db').joinpath('migrate_v2_to_v3.sql').read_text()
-    media_migration=Path(__file__).with_name('db').joinpath('migrate_v3_to_v4.sql').read_text()
-    v3_hash=hashlib.sha256((source+'\n'+migration).encode()).hexdigest()
-    v4_hash=hashlib.sha256((source+'\n'+migration+'\n'+media_migration).encode()).hexdigest()
-    def run(cur):
-        cur.execute("SELECT obj_description(oid,'pg_namespace') FROM pg_namespace WHERE nspname='lele'")
-        namespace=cur.fetchone()
-        version=2
-        if namespace:
-            catalog=PostgresStore._catalog(cur)
-            markers={2:source_hash,3:v3_hash,4:v4_hash}
-            matches=[v for v,h in markers.items() if namespace[0]==f'lele-schema-v{v}:{h}:{catalog}']
-            require(len(matches)==1,409,'检测到未知数据库结构，升级停止。')
-            version=matches[0]
-            cur.execute('SELECT version FROM lele.schema_versions')
-            require(cur.fetchall()==[(version,)],409,'数据库版本与结构标记不一致，升级停止。')
-            if version==4:
-                return {'initialized':False,'upgraded':False,'version':4}
-        else:
-            require(not upgrade_only,409,'数据库尚未初始化，请先执行 initialize。')
-            cur.execute(source)
-        if version==2:
-            cur.execute(migration)
-        cur.execute(media_migration)
-        marker=f'lele-schema-v4:{v4_hash}:{PostgresStore._catalog(cur)}'
-        cur.execute(psycopg.sql.SQL('COMMENT ON SCHEMA lele IS {}').format(psycopg.sql.Literal(marker)))
-        return {'initialized':not bool(namespace),'upgraded':bool(namespace),'version':4}
-    return service.transaction(run,exclusive=True,schema_check=False)
+    from lele_growth.maintenance import initialize_service
+    return initialize_service(service, upgrade_only=upgrade_only)
 
 
 def bootstrap(config_path,login_name,nickname,password):
     service=ChildService(config_path)
     require(service.config['environment']=='development',403,'引导工具仅允许本地开发环境。')
-    def run(cur):
-        cur.execute('SELECT EXISTS(SELECT 1 FROM lele.users)')
-        require(not cur.fetchone()[0],409,'已有账号，不能重复引导管理员。')
-        uid=identity()
-        cur.execute("INSERT INTO lele.users(id,login_name,nickname,password_hash,role,status) VALUES(%s,%s,%s,%s,'admin','active') RETURNING "+USER_COLUMNS,(uid,login_value(login_name),text_value(nickname),PASSWORDS.hash(password_value(password))))
-        result=public_user(cur.fetchone()); service.audit(cur,uid,'bootstrap.admin')
-        return result
-    return service.transaction(run,exclusive=True)
+    from lele_growth.maintenance import bootstrap_service
+    return bootstrap_service(service, login_name, nickname, password)
 
 
 def import_child(config_path,owner_id,record):

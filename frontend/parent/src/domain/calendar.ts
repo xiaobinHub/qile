@@ -63,7 +63,7 @@ export function makeOcc(s: Series, date: string, originalDate = date): Occurrenc
     endTime: s.endTime,
     categoryId: s.categoryId,
     points: Number(s.points) || 0,
-    recurring: !!s.recurrence,
+    recurring: !!s.recurrence || (s.revisions?.length || 0) > 1,
   }
 }
 function endAllows(r: Rule, d: string, index: number) {
@@ -120,7 +120,6 @@ export function expandRevision(task: Series, from: string, to: string): Occurren
   return out
 }
 export function baseOccurrences(s: Series, from: string, to: string) {
-  if (!s.recurrence) return expandRevision(s, from, to)
   const revisions = seriesRevisions(s),
     out: Occurrence[] = []
   for (let i = 0; i < revisions.length; i++) {

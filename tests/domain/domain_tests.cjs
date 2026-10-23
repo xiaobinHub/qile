@@ -16,3 +16,22 @@ assert.deepEqual(d.expandRevision(monthly,'2026-10-20','2027-03-01').map(o=>o.da
 assert.deepEqual(d.expandRevision(monthly,'2026-12-01','2027-03-01').map(o=>o.date),['2026-12-01','2027-01-01']);
 assert.deepEqual(d.expandRevision({...monthly,recurrence:{...monthly.recurrence,interval:2}},'2026-10-20','2027-08-01').map(o=>o.date),['2026-12-01','2027-02-01','2027-04-01']);
 console.log(JSON.stringify({passed:true,legacyComparisons:cases,timezone:process.env.TZ||'system',checks:['month clamping','rule versions','date movement','frozen completion','deleted-series history','balance','A4 grouping','density','ISO week']}));
+// Independent expectations: the newest rule must never hide earlier segments.
+const stopped={...task,startDate:'2026-10-05',recurrence:null,revisions:[
+  {...task,id:'daily-rule',effectiveFrom:'2026-10-01',recurrence:{freq:'daily',interval:1,endType:'never'}},
+  {...task,id:'single-rule',effectiveFrom:'2026-10-05',recurrence:null},
+]};
+const history=make([stopped]);
+assert.deepEqual(d.occurrences(history,'2026-10-01','2026-10-10').map(o=>o.date),['2026-10-01','2026-10-02','2026-10-03','2026-10-04','2026-10-05']);
+assert.ok(d.occurrences(history,'2026-10-05','2026-10-05')[0].recurring);
+assert.equal(printEngine(history).printWeeks('2026-10-01','2026-10-05').reduce((n,w)=>n+w.items.length,0),5);
+const frozen=d.occurrences(history,'2026-10-02','2026-10-02')[0];
+history.completions=[{occurrenceKey:frozen.occurrenceKey,completed:true,snapshot:{...frozen,title:'冻结历史'}}];
+assert.equal(d.occurrences(history,'2026-10-02','2026-10-02')[0].title,'冻结历史');
+history.completions[0].completed=false;
+assert.equal(d.occurrences(history,'2026-10-02','2026-10-02')[0].title,'阅读');
+const resumed={...stopped,recurrence:{freq:'daily',interval:1,endType:'count',count:2},revisions:[stopped.revisions[0],{...stopped.revisions[1],recurrence:{freq:'daily',interval:1,endType:'count',count:2}}]};
+assert.deepEqual(d.occurrences(make([resumed]),'2026-10-01','2026-10-10').map(o=>o.date),['2026-10-01','2026-10-02','2026-10-03','2026-10-04','2026-10-05','2026-10-06']);
+const singleThenRepeated={...resumed,revisions:[{...stopped.revisions[0],recurrence:null},resumed.revisions[1]]};
+assert.deepEqual(d.occurrences(make([singleThenRepeated]),'2026-10-01','2026-10-10').map(o=>o.date),['2026-10-01','2026-10-05','2026-10-06']);
+console.log('Independent recurrence history, stop/resume, completion reversal and print expectations passed.');

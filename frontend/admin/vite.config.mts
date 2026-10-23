@@ -19,5 +19,6 @@ export default defineConfig({
     assetsDir: "",
     emptyOutDir: true,
     sourcemap: false,
+    manifest: true,
   },
 })

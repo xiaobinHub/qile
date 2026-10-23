@@ -17,6 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "backend"))
 RUNTIME = ROOT / 'data' / 'development'
 CONFIG = RUNTIME / 'config.json'
+TEST_RUNTIME = ROOT / 'data' / 'testing' / 'backend'
 
 
 def private_json(path, value):
@@ -71,13 +72,16 @@ def prepare_database():
         for name in ('lele_dev', 'lele_test_accounts', 'lele_test'):
             if not connection.execute('SELECT 1 FROM pg_database WHERE datname=%s', (name,)).fetchone():
                 connection.execute(sql.SQL('CREATE DATABASE {}').format(sql.Identifier(name)))
-    for filename, database in [('test-config.json', 'lele_test_accounts'), ('legacy-test-config.json', 'lele_test')]:
-        target = RUNTIME / filename
+    TEST_RUNTIME.mkdir(parents=True, exist_ok=True, mode=0o700)
+    TEST_RUNTIME.parent.chmod(0o700)
+    TEST_RUNTIME.chmod(0o700)
+    for filename, database in [('config.json', 'lele_test_accounts'), ('postgres-config.json', 'lele_test')]:
+        target = TEST_RUNTIME / filename
         if not target.exists():
             db = {**config['database'], 'dbname': database}
-            value = db if filename.startswith('legacy') else {k: v for k, v in config.items() if not k.startswith('_')}
-            if not filename.startswith('legacy'):
-                value = {**value, 'database': db, 'object_storage': {'provider': 'test-filesystem', 'root': str(RUNTIME / (database + '-objects'))}}
+            value = db if filename == 'postgres-config.json' else {k: v for k, v in config.items() if not k.startswith('_')}
+            if filename != 'postgres-config.json':
+                value = {**value, 'database': db, 'object_storage': {'provider': 'test-filesystem', 'root': str(TEST_RUNTIME / 'objects')}}
             private_json(target, value)
     return config
 
@@ -275,8 +279,8 @@ def main():
             print(json.dumps({surface: health('http://127.0.0.1:' + str(port)) for surface, port in [('parent',18787),('admin',18788)]}))
         else:
             prepare_database()
-            environment = {**os.environ, 'PYTHONPATH': str(ROOT / 'backend'), 'LELE_TEST_CONFIG': str(RUNTIME / 'test-config.json'),
-                           'LELE_TEST_DB_CONFIG': str(RUNTIME / 'legacy-test-config.json')}
+            environment = {**os.environ, 'PYTHONPATH': str(ROOT / 'backend'), 'LELE_TEST_CONFIG': str(TEST_RUNTIME / 'config.json'),
+                           'LELE_TEST_DB_CONFIG': str(TEST_RUNTIME / 'postgres-config.json')}
             subprocess.run([sys.executable, '-m', 'unittest', 'discover', '-s', 'tests/backend', '-t', '.', '-v'], cwd=ROOT, env=environment, check=True)
     except Exception as error:
         # Do not print raw DB exceptions: they may include connection information.

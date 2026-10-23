@@ -56,7 +56,7 @@ Inter is bundled from `@fontsource-variable/inter` with `licenses/Inter-OFL.txt`
 
 以下为紧凑化前的还原基线；尺寸以末尾的字体与紧凑布局规范为准。
 
-- 以 `docs/ui/reference-20261022/` 的设置 V2、日历 V2、商城原稿为视觉基准。1487×1058 下设置侧栏宽 308px，主区横向边距 34px、栏间距 26px，白色顶部高 112px；iPad 按现有断点缩放，保持两栏和 44px 操作入口。
+- 保留已验收的设置、日历和商城布局；历史设计稿已移到项目外归档。1487×1058 下设置侧栏宽 308px，主区横向边距 34px、栏间距 26px，白色顶部高 112px；iPad 按现有断点缩放，保持两栏和 44px 操作入口。
 - 家长工作区 `#EEF1F3`、内容及设置侧栏/星期表头 `#FFFFFF`、正文 `#1F2933`、普通导航 `#374151`、主操作 `#FACC15`、选中面 `#FFF0B3`。日历任务类型颜色保留业务配置。
 - `Button variant="navigation" size="navigation"` 使用 `aria-current="page"` 表示顶部选中项，呈现浅黄底和黄色下划线；`variant="sidebar-navigation" size="menu"` 表示设置导航。控件颜色、选中和焦点由共享组件负责。
 - `Badge variant="role"` 用于孩子管理员角色；普通成员使用 secondary。商城与设置不恢复先前删掉的总标题或额外入口。

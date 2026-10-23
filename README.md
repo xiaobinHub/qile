@@ -19,13 +19,12 @@ scripts/             开发启动、检查及发布包生成工具
 deploy/              Linux 运行入口、systemd 与 Nginx 模板
 config/              不含真实凭据的配置示例
 web/                 两端已构建的静态文件，纳入版本
-docs/                开发、部署、设计及验收记录
+docs/                当前开发、部署、组件及验证说明
 licenses/            随应用分发的第三方组件及字体许可
-legacy/              旧版程序，仅历史对照，不参与新服务发布
 data/                私有本地运行文件，被 Git 和发布包排除
 ```
 
-详细边界和旧路径映射见 [目录规范](docs/project-structure.md)。
+目录边界与保留规则见 [目录规范](docs/project-structure.md)。
 
 ## 本地开发
 
@@ -40,7 +39,7 @@ npm run build
 .venv/bin/python scripts/dev.py start
 ```
 
-也支持在虚拟环境中运行 `python -m pip install -e .`。开发服务为家长端 <http://127.0.0.1:18787> 和管理端 <http://127.0.0.1:18788>。本地数据库、初始账号和日志继续位于 `data/development/`；真实配置及密码不纳入版本。根目录 `dev.py` 和本地测试快捷方式保留兼容。
+也支持在虚拟环境中运行 `python -m pip install -e .`。开发服务为家长端 <http://127.0.0.1:18787> 和管理端 <http://127.0.0.1:18788>。现用开发数据库、账号、配置和日志位于 `data/development/`；隔离测试运行文件位于 `data/testing/`；真实配置及密码不纳入版本。根目录 `dev.py` 和本地测试快捷方式保留兼容。
 
 启动器只初始化和操作本地开发环境，不可作为云端部署命令。详见 [本地开发说明](docs/development.md)。
 
@@ -66,6 +65,6 @@ npm run build
 
 发布包位于 `output/releases/`，只收录当前后端、SQL、构建产物、依赖清单、第三方许可及部署模板，排除本地数据、密钥、测试输出和旧版入口。打包不等于发布。
 
-云端启动入口为 `deploy/run.py`，配置由 `LELE_ACCOUNTS_CONFIG` 显式指定。运行阶段不自动建库、迁移或初始化账号。数据库版本和存量图片迁移须另行核对、备份及演练。
+云端启动入口为 `deploy/run.py`，配置由 `LELE_ACCOUNTS_CONFIG` 显式指定。运行阶段不自动建库、迁移或初始化账号。离线生产维护入口 `deploy/manage.py` 默认只预览，显式目标确认后可初始化/升级、引导空库管理员及安全清理暂存图片；详见部署说明。数据库版本、恢复点和存量图片仍须另行核对及演练。
 
-见 [部署说明](deploy/README.md)、[配置示例](config/README.md) 和 [OSS 说明](docs/oss-storage.md)。本次整理没有执行服务器发布，也未操作独立旧生产目录；本地生产启动工具已从当前仓库删除。
+见 [部署说明](deploy/README.md)、[配置示例](config/README.md) 和 [OSS 说明](docs/oss-storage.md)。本次整理没有执行服务器发布，也未操作独立旧生产目录；旧版服务、本地生产工具和历史运行文件已移出项目。

@@ -1,7 +1,8 @@
-"""Explicit, resumable development-only migration and conservative staged cleanup.
+"""Development-only image migration and shared conservative cleanup primitives.
 
 Defaults to a read-only scan. Original content is backed up OUTSIDE PostgreSQL.
-Never deploys, operates production, or rewrites request idempotency fingerprints.
+This CLI rejects production. Its cleanup runner is also used by the separately
+authorized offline production operator. Never rewrites idempotency fingerprints.
 """
 import argparse
 import copy
@@ -139,13 +140,31 @@ def migrate(config_path,*,apply=False,backup_dir=None):
 def cleanup(config_path,*,apply=False):
     s=ChildService(config_path)
     require(s.config['environment']=='development',403,'此清理工具仅允许本地开发环境。')
+    return cleanup_service(s, apply=apply)
+
+
+def cleanup_service(s, *, apply=False, audit_detail=None):
+    """Internal shared runner; environment authorization belongs to its callers."""
     # One session lock spans external I/O, without holding business transactions.
     # It prevents another cleaner from completing a tombstone while this cleaner
     # still has an in-flight DELETE for the same immutable object key.
     with psycopg.connect(**s.config['_connect'],autocommit=True) as maintenance:
         require(maintenance.execute('SELECT pg_try_advisory_lock(1818586213,5)').fetchone()[0],409,'图片清理正在进行，请稍后重试。')
         try:
-            return _cleanup(s,apply=apply)
+            if apply and audit_detail is not None:
+                s.transaction(lambda cur:s.audit(cur,None,'maintenance.media.cleanup.start',detail=audit_detail))
+            try:
+                result = _cleanup(s,apply=apply)
+            except Exception:
+                if apply and audit_detail is not None:
+                    try:
+                        s.transaction(lambda cur:s.audit(cur,None,'maintenance.media.cleanup.failed',detail=audit_detail))
+                    except Exception:
+                        pass  # Preserve the original error and committed tombstones.
+                raise
+            if apply and audit_detail is not None:
+                s.transaction(lambda cur:s.audit(cur,None,'maintenance.media.cleanup.complete',detail={**audit_detail,**result}))
+            return result
         finally:
             maintenance.execute('SELECT pg_advisory_unlock(1818586213,5)')
 

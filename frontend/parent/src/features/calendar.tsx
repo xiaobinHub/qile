@@ -721,7 +721,15 @@ export function TaskEditor({
                     </Field>
                   )}
                   {rule.endType === "count" && (
-                    <Field label="重复次数" id="repeatCount">
+                    <Field
+                      label="重复次数"
+                      id="repeatCount"
+                      help={
+                        o
+                          ? "选择“本次及以后”时：未修改则保留原剩余次数；修改后从本次起按新次数安排。"
+                          : undefined
+                      }
+                    >
                       <Input
                         id="repeatCount"
                         type="number"

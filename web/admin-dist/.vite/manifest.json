@@ -1,0 +1,18 @@
+{
+  "../../node_modules/@fontsource-variable/inter/files/inter-latin-wght-normal.woff2": {
+    "file": "inter-latin-wght-normal-Dx4kXJAl.woff2",
+    "src": "../../node_modules/@fontsource-variable/inter/files/inter-latin-wght-normal.woff2"
+  },
+  "index.html": {
+    "file": "index--ce8izGc.js",
+    "name": "index",
+    "src": "index.html",
+    "isEntry": true,
+    "css": [
+      "index-BBs2cOSP.css"
+    ],
+    "assets": [
+      "inter-latin-wght-normal-Dx4kXJAl.woff2"
+    ]
+  }
+}

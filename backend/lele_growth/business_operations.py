@@ -89,7 +89,8 @@ def make_occ(task, day, original=None):
     return {"seriesId": task["id"], "occurrenceKey": f'{task["id"]}@{original}', "date": day,
             "originalDate": original, "title": task["title"], "note": task.get("note") or "",
             "startTime": task["startTime"], "endTime": task["endTime"],
-            "categoryId": task["categoryId"], "points": task["points"], "recurring": bool(task.get("recurrence"))}
+            "categoryId": task["categoryId"], "points": task["points"],
+            "recurring": bool(task.get("recurrence")) or len(task.get("revisions") or []) > 1}
 
 
 def expand(task, start, end):
@@ -161,14 +162,11 @@ def occurrence(data, key):
         if ex["action"] == "cancel":
             fail("该次任务已取消。", HTTPStatus.CONFLICT)
         return {**ex["data"], "seriesId": sid, "originalDate": original, "occurrenceKey": key, "recurring": True}
-    if not series.get("recurrence"):
-        candidates = expand(series, original, original)
-    else:
-        candidates = []
-        revs = revisions(series)
-        for i, rev in enumerate(revs):
-            if rev["effectiveFrom"] <= original and (i + 1 == len(revs) or original < revs[i + 1]["effectiveFrom"]):
-                candidates.extend(expand({**series, **rev, "id": series["id"], "startDate": rev["effectiveFrom"]}, original, original))
+    candidates = []
+    revs = revisions(series)
+    for i, rev in enumerate(revs):
+        if rev["effectiveFrom"] <= original and (i + 1 == len(revs) or original < revs[i + 1]["effectiveFrom"]):
+            candidates.extend(expand({**series, **rev, "id": series["id"], "startDate": rev["effectiveFrom"]}, original, original))
     if not candidates:
         fail("该日期没有此任务，请刷新后重试。", HTTPStatus.CONFLICT)
     return candidates[0]
@@ -231,6 +229,8 @@ def _apply(data, kind, p, stamp, today):
         if p["scope"] not in ("only", "future", "all"):
             fail("请选择有效的修改范围。")
         task = task_input(p.get("task"))
+        revs, pivot = revisions(series), old["originalDate"]
+        source = next((r for r in reversed(revs) if r["effectiveFrom"] <= pivot), revs[0])
         if not old["recurring"]:
             series.update(task, updatedAt=stamp)
             if series.get("revisions"):
@@ -243,17 +243,21 @@ def _apply(data, kind, p, stamp, today):
         elif p["scope"] == "all":
             changed = task["startDate"] != old["date"]
             if not changed:
-                task["startDate"] = series["startDate"]
+                task["startDate"] = revs[0]["effectiveFrom"]
             if task.get("recurrence") and task["recurrence"]["freq"] == "monthly":
-                task["recurrence"]["monthDay"] = date.fromisoformat(task["startDate"]).day if changed else (series.get("recurrence") or {}).get("monthDay", date.fromisoformat(series["startDate"]).day)
+                source_rule = source.get("recurrence") or {}
+                # An explicit rule edit wins over automatic date linkage.
+                source_day = source_rule.get("monthDay", date.fromisoformat(source["effectiveFrom"]).day)
+                if changed and source_rule.get("freq") == "monthly" and task["recurrence"].get("monthDay") == source_day:
+                    task["recurrence"]["monthDay"] = date.fromisoformat(task["startDate"]).day
             series["revisions"] = [revision(task, task["startDate"])]
             data["exceptions"] = [e for e in data["exceptions"] if e["seriesId"] != series["id"]]
             sync_series(series)
             series["updatedAt"] = stamp
         else:
-            revs, pivot = revisions(series), old["originalDate"]
-            source = next((r for r in reversed(revs) if r["effectiveFrom"] <= pivot), revs[0])
-            if (task.get("recurrence") or {}).get("endType") == "count" and (source.get("recurrence") or {}).get("endType") == "count":
+            if ((task.get("recurrence") or {}).get("endType") == "count"
+                    and (source.get("recurrence") or {}).get("endType") == "count"
+                    and task["recurrence"]["count"] == source["recurrence"]["count"]):
                 before = (date.fromisoformat(pivot) - timedelta(days=1)).isoformat()
                 used = len(expand({**series, **source, "startDate": source["effectiveFrom"]}, source["effectiveFrom"], before))
                 task["recurrence"]["count"] = max(1, source["recurrence"]["count"] - used)

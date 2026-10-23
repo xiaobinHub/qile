@@ -1,6 +1,6 @@
 # OSS 图片存储
 
-本轮只更新本地开发家长端 18787、管理端 18788 和 `lele_dev`。独立生产 8787、生产目录、生产数据库及阿里云应用发布未参与。
+当前家长端和管理端通过后端鉴权访问私有 OSS；本地仅开发测试，阿里云生产使用服务器独立配置。历史图片迁移留档已移出工作目录，现用配置仍在 `data/development/`。
 
 ## 配置
 
@@ -15,7 +15,7 @@ Bucket 和上传对象保持 private。正常应用需要限定项目目录的�
 ```sh
 PYTHONPATH=backend .venv/bin/python -m lele_growth.child_service --config data/development/config.json upgrade
 PYTHONPATH=backend .venv/bin/python -m lele_growth.media_migration --config data/development/config.json
-PYTHONPATH=backend .venv/bin/python -m lele_growth.media_migration --config data/development/config.json --apply --backup-dir data/development/oss-migration-backup
+PYTHONPATH=backend .venv/bin/python -m lele_growth.media_migration --config data/development/config.json --apply --backup-dir /absolute/private/archive/oss-migration-backup
 .venv/bin/python scripts/dev.py start
 ```
 
@@ -67,16 +67,26 @@ PYTHONPATH=backend .venv/bin/python -m lele_growth.media_migration --config data
 PYTHONPATH=backend .venv/bin/python -m lele_growth.media_migration --config data/development/config.json --cleanup-staged --apply
 ```
 
+上面的 `media_migration` 入口继续仅限 development。生产环境使用独立的离线维护入口：
+
+```sh
+.venv/bin/python deploy/manage.py cleanup-staged --config /etc/lele-growth/production.json
+.venv/bin/python deploy/manage.py cleanup-staged --config /etc/lele-growth/production.json \
+  --apply --confirm TARGET_ID_FROM_PREVIEW
+```
+
+先核对预览的数据库、OSS 桶和独立前缀，再使用其 `targetId` 执行。两端复用同一引用保护、清理锁及持久删除标记算法。生产执行额外记录开始、完成或失败审计。配置权限及初始化/升级步骤见 [部署说明](../deploy/README.md)。本轮自动化只用隔离库和临时文件验证该入口，没有执行真实 OSS 清理。
+
 替换图片、删除礼品或逻辑删除孩子均不物理删除已关联历史图片。已关联对象的永久清理另行设计。PostgreSQL 的旧行/TOAST/WAL 按正常维护策略回收，逻辑残留为零不保证磁盘文件立刻缩小。
 
-日常回退必须使用理解 v4 和 OSS 引用的兼容代码，保留现有配置和元数据，不回写 Base64。原始数据库备份仅用于隔离恢复与核验；不得直接覆盖当前库，否则会重引入图片且丢失新业务操作。先将备份恢复到独立库，使用图片迁移工具归一化，再制定切换步骤。不得把旧的 v3 前端/服务直接连到 v4 库。回退包位置记录在本轮验收报告。
+日常回退必须使用理解 v4 和 OSS 引用的兼容代码，保留现有配置和元数据，不回写 Base64。原始数据库备份仅用于隔离恢复与核验；不得直接覆盖当前库，否则会重引入图片且丢失新业务操作。先将备份恢复到独立库，使用图片迁移工具归一化，再制定切换步骤。不得把旧的 v3 前端/服务直接连到 v4 库。历史回退副本和迁移清单位于项目外私有归档，位置见 [清理记录](local-cleanup-2026-10-23.md)。
 
 ## 隔离测试
 
 `test-filesystem` 只允许 development 且库名为 `lele_test*`；不能用于 `lele_dev` 或 production。真实 OSS 测试还要求独立 `checks` 或 `tests` 前缀。自动化测试不会使用开发前缀。
 
 ```sh
-LELE_TEST_CONFIG=data/development/oss-test-config.json PYTHONPATH=backend .venv/bin/python -m unittest tests.backend.test_child_backend tests.backend.test_child_schema_upgrade tests.backend.test_media_storage -v
+LELE_TEST_CONFIG=data/testing/backend/config.json PYTHONPATH=backend .venv/bin/python -m unittest tests.backend.test_child_backend tests.backend.test_child_schema_upgrade tests.backend.test_media_storage -v
 npm run test:domain
 npm run build
 npm run test:browser

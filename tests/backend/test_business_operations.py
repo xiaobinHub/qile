@@ -52,6 +52,69 @@ class BusinessCommandsTest(unittest.TestCase):
         self.assertEqual(self.data['series'][0]['revisions'][-1]['recurrence']['count'],3)
         self.assertEqual(occurrence(self.data,key)['title'],'阅读')
         self.assertEqual(occurrence(self.data,key.replace('@2026-10-15','@2026-10-17'))['title'],'新版')
+    def test_stop_repeating_preserves_history_and_reediting_single_segment(self):
+        key = self.create(dict(freq='daily', interval=1, endType='never'))
+        single = key.replace('2026-10-15', '2026-10-19')
+        self.run_op('task.edit', occurrenceKey=single,
+                    task={**self.task, 'startDate': '2026-10-19', 'recurrence': None}, scope='future')
+        self.assertEqual(occurrence(self.data, key)['date'], '2026-10-15')
+        self.run_op('completion.set', occurrenceKey=key, completed=True)
+        self.run_op('completion.set', occurrenceKey=key, completed=False)
+        self.assertEqual(sum(row['amount'] for row in self.data['ledger']), 0)
+        self.assertTrue(occurrence(self.data, single)['recurring'])
+        self.run_op('task.edit', occurrenceKey=single,
+                    task={**self.task, 'startDate': '2026-10-19', 'title': '再次重复'}, scope='future')
+        self.assertEqual(occurrence(self.data, key)['title'], '阅读')
+        self.assertEqual(occurrence(self.data, single.replace('@2026-10-19', '@2026-10-20'))['title'], '再次重复')
+
+    def test_single_tail_only_edit_and_delete_leave_previous_revision_intact(self):
+        key = self.create(dict(freq='daily', interval=1, endType='never'))
+        tail = key.replace('2026-10-15', '2026-10-19')
+        task = {**self.task, 'startDate': '2026-10-19', 'recurrence': None}
+        self.run_op('task.edit', occurrenceKey=tail, task=task, scope='future')
+        self.run_op('task.edit', occurrenceKey=tail, task={**task, 'title': '单次修改'}, scope='only')
+        self.assertEqual(occurrence(self.data, tail)['title'], '单次修改')
+        self.assertEqual(occurrence(self.data, key)['title'], '阅读')
+        self.run_op('task.delete', occurrenceKey=tail, scope='only')
+        self.assertEqual(occurrence(self.data, key)['title'], '阅读')
+        with self.assertRaises(StoreError): occurrence(self.data, tail)
+
+    def test_monthly_all_edits_honor_date_day_and_both(self):
+        key = self.create(dict(freq='monthly', interval=1, monthDay=15, endType='never'))
+        original = copy.deepcopy(self.data)
+        for start, day, expected in [('2026-10-15', 20, 20), ('2026-10-18', 15, 18), ('2026-10-18', 20, 20)]:
+            with self.subTest(start=start, day=day):
+                self.data = copy.deepcopy(original)
+                task = {**self.task, 'startDate': start, 'recurrence': {**self.task['recurrence'], 'monthDay': day}}
+                self.run_op('task.edit', occurrenceKey=key, task=task, scope='all')
+                self.assertEqual(self.data['series'][0]['recurrence']['monthDay'], expected)
+
+    def test_monthly_all_uses_historical_source_and_original_series_start(self):
+        key = self.create(dict(freq='monthly', interval=1, monthDay=15, endType='never'))
+        self.run_op('task.edit', occurrenceKey=key.replace('2026-10-15', '2026-11-15'),
+                    task={**self.task, 'startDate': '2026-11-15', 'recurrence': {**self.task['recurrence'], 'monthDay': 20}}, scope='future')
+        task = {**self.task, 'recurrence': {**self.task['recurrence'], 'monthDay': 25}}
+        self.run_op('task.edit', occurrenceKey=key, task=task, scope='all')
+        self.assertEqual(self.data['series'][0]['startDate'], '2026-10-15')
+        self.assertEqual(self.data['series'][0]['recurrence']['monthDay'], 25)
+
+    def test_changed_repeat_count_applies_from_pivot_unchanged_keeps_remaining(self):
+        key = self.create(dict(freq='daily', interval=1, endType='count', count=5))
+        original = copy.deepcopy(self.data)
+        for count, expected in [(5, 3), (10, 10), (2, 2)]:
+            with self.subTest(count=count):
+                self.data = copy.deepcopy(original)
+                task = {**self.task, 'startDate': '2026-10-17', 'recurrence': {**self.task['recurrence'], 'count': count}}
+                self.run_op('task.edit', occurrenceKey=key.replace('2026-10-15', '2026-10-17'), task=task, scope='future')
+                self.assertEqual(self.data['series'][0]['recurrence']['count'], expected)
+    def test_repeat_count_uses_source_revision_when_editing_history(self):
+        key = self.create(dict(freq='daily', interval=1, endType='count', count=5))
+        self.run_op('task.edit', occurrenceKey=key.replace('2026-10-15', '2026-10-17'),
+                    task={**self.task, 'startDate': '2026-10-17', 'recurrence': {**self.task['recurrence'], 'count': 10}}, scope='future')
+        self.run_op('task.edit', occurrenceKey=key.replace('2026-10-15', '2026-10-16'),
+                    task={**self.task, 'startDate': '2026-10-16'}, scope='future')
+        self.assertEqual(self.data['series'][0]['recurrence']['count'], 4)
+        self.assertEqual(occurrence(self.data, key)['date'], '2026-10-15')
     def test_gift_balance_and_reversal_are_authoritative(self):
         self.run_op('gift.save',gift={'name':'绘本','points':20})
         gift=self.data['gifts'][0]['id']
