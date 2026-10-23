@@ -39,7 +39,9 @@ LELE_SURFACE=parent .venv/bin/python deploy/run.py
 
 另一个进程设置 `LELE_SURFACE=admin`。模板使用 `127.0.0.1:8787/8788`，由 Nginx 分别代理家长端和管理端 HTTPS 域名。`run.py` 根据自身位置加载发布包内后端及静态资源，支持从其他工作目录调用。
 
-`lele-growth@.service` 中的版本路径和 `/etc/lele-growth/production.env` 应与服务器一致。`nginx.example.conf` 是待填写真实域名和证书路径的模板。启用 systemd/Nginx 前先审阅现有服务与端口，避免覆盖其他应用。
+`lele-growth@.service` 中的版本路径和 `/etc/lele-growth/production.env` 应与服务器一致。`nginx.example.conf` 以现用 `le.myprd.com` / `leadmin.myprd.com` 和共享 SAN 证书为模板，应用配置的两个 Origin 必须对应。部署前核对真实证书路径，保留 ACME webroot，启用证书续期定时器，并为本证书安装验证配置后重载 Nginx 的续期钩子。启用 systemd/Nginx 前先审阅现有服务与端口，避免覆盖其他应用。
+
+2026-10-23 已正式切换至上述域名，见 [正式切换记录](../docs/myprd-launch-2026-10-23.md)。后续仅更换域名时保留当前新版数据库与 OSS，更新精确 Origin、证书和站点配置后重新登录，不重新导入旧生产数据或运行初次迁移。
 
 ## 数据与切换边界
 

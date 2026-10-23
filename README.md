@@ -67,6 +67,8 @@ npm run build
 
 云端启动入口为 `deploy/run.py`，配置由 `LELE_ACCOUNTS_CONFIG` 显式指定。运行阶段不自动建库、迁移或初始化账号。离线生产维护入口 `deploy/manage.py` 默认只预览，显式目标确认后可初始化/升级、引导空库管理员及安全清理暂存图片；详见部署说明。数据库版本、恢复点和存量图片仍须另行核对及演练。
 
-见 [部署说明](deploy/README.md)、[配置示例](config/README.md) 和 [OSS 说明](docs/oss-storage.md)。本次整理没有执行服务器发布，也未操作独立旧生产目录；旧版服务、本地生产工具和历史运行文件已移出项目。
+见 [部署说明](deploy/README.md)、[配置示例](config/README.md) 和 [OSS 说明](docs/oss-storage.md)。旧版服务、本地生产工具和历史运行文件不在当前项目中。
 
-当前云端部署进展见 [chenqile.cn 部署记录](docs/cloud-deployment-2026-10-23.md)：服务器内部服务、RDS 独立目标库与 OSS 迁移已核验；备案拦截导致域名 HTTPS 尚未就绪，旧生产未切换。
+正式访问：家长端 <https://le.myprd.com>，管理端 <https://leadmin.myprd.com>。云端使用生产 RDS 独立目标库和私有 OSS；旧生产历史已核对迁入，本机新版测试数据未导入。旧本机生产服务已停止并禁用自动启动，旧 RDS 库保留且默认只读，本地 18787/18788 继续用于开发测试。
+
+见 [正式切换记录](docs/myprd-launch-2026-10-23.md)；[初次内部部署记录](docs/cloud-deployment-2026-10-23.md) 保留历史过程。chenqile.cn / admin.chenqile.cn 备案完成后再安排域名切换。RDS TLS 按用户要求暂缓，网站 HTTPS 已启用，两者不能混同。
