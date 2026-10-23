@@ -4,6 +4,7 @@
 - [目录规范](project-structure.md)
 - [本地开发和隔离测试](development.md)
 - [阿里云部署准备](../deploy/README.md)
+- [chenqile.cn 云端内部部署与切换状态](cloud-deployment-2026-10-23.md)
 - [配置示例](../config/README.md)
 - [OSS 存储与受限维护](oss-storage.md)
 - [共享组件规范](../frontend/shared/README.md)
