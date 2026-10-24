@@ -16,7 +16,7 @@ import { today } from "./domain/calendar"
 
 type Editor =
   | { type: "task"; date?: string; startTime?: string; endTime?: string; occurrence?: Occurrence }
-  | { type: "preset"; id?: string }
+  | { type: "preset"; id?: string; fromTask?: boolean }
   | { type: "category" }
   | { type: "print" }
 function Application() {
@@ -33,6 +33,7 @@ function Application() {
     } | null>(null)
   const calendarPrefs = useRef({ mode: "month", cursor: today() })
   const printReturnFocus = useRef<HTMLElement | null>(null)
+  const settingsInitialPage = useRef<string | undefined>(undefined)
   const notify = (message: string) => toast({ title: message })
   useEffect(() => {
     void runtime.bootstrap()
@@ -58,6 +59,7 @@ function Application() {
     setSwitcher(false)
     setConfirmation(null)
     setLogout(false)
+    settingsInitialPage.current = undefined
     calendarPrefs.current = { mode: "month", cursor: today() }
   }, [snapshot.epoch])
   useEffect(() => {
@@ -156,7 +158,10 @@ function Application() {
                   variant="navigation"
                   size="navigation"
                   aria-current={snapshot.view === view ? "page" : undefined}
-                  onClick={() => runtime.setView(view as "calendar" | "store" | "settings")}
+                  onClick={() => {
+                    settingsInitialPage.current = undefined
+                    runtime.setView(view as "calendar" | "store" | "settings")
+                  }}
                 >
                   {
                     (
@@ -220,6 +225,7 @@ function Application() {
               <SettingsPage
                 key={`${child?.id || "account"}:${snapshot.epoch}`}
                 controller={controller}
+                initialPage={settingsInitialPage.current}
               />
             ) : !child ? (
               <Onboarding user={user} controller={controller} />
@@ -278,9 +284,24 @@ function Application() {
               child={child}
               {...editor}
               onClose={() => setEditor(null)}
+              onCreatePreset={() => {
+                settingsInitialPage.current = "tasks/presets"
+                runtime.setView("settings")
+                setEditor({ type: "preset", fromTask: true })
+              }}
             />
           ) : editor.type === "preset" ? (
-            <PresetEditor id={editor.id} data={data} onClose={() => setEditor(null)} />
+            <PresetEditor
+              id={editor.id}
+              data={data}
+              onClose={() => {
+                setEditor(null)
+                if (editor.fromTask)
+                  requestAnimationFrame(() =>
+                    document.getElementById("settingsAddPreset")?.focus({ preventScroll: true }),
+                  )
+              }}
+            />
           ) : editor.type === "category" ? (
             <CategoryEditor onClose={() => setEditor(null)} />
           ) : (

@@ -341,7 +341,7 @@
   fill: none;
 }
 .calendar-panel .done .calendar-task-toggle svg {
-  color: var(--success);
+  color: hsl(from var(--task-color) h calc(s * 0.35) l);
 }
 .calendar-panel .calendar-task-edit {
   flex: 1;
@@ -365,6 +365,9 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.calendar-panel .done .calendar-task-edit {
+  color: var(--text-secondary);
 }
 .calendar-panel .calendar-task-toggle:focus-visible,
 .calendar-panel .calendar-task-edit:focus-visible {

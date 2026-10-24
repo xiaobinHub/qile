@@ -12,6 +12,12 @@ import { Badge } from "@shared/components/ui/badge"
 import { EmptyState } from "@shared/components/empty-state"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@shared/components/ui/tabs"
 import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuCheckboxItem,
+} from "@shared/components/ui/dropdown-menu"
+import {
   Table,
   TableHeader,
   TableHead,
@@ -35,17 +41,13 @@ import {
 import { runtime, operationId } from "../lib/runtime"
 import { balance, today } from "../domain/calendar"
 import { compressGiftImage } from "../domain/images"
-import type { BusinessData, Child, Gift, Ledger } from "../domain/types"
-const source = (row: Ledger) =>
-  row.kind.startsWith("gift-") ? "gift" : row.kind === "manual" ? "manual" : "task"
-const sourceLabel = (row: Ledger) =>
-  ({
-    "task-complete": "完成任务",
-    "task-reversal": "撤销完成",
-    "gift-redeem": "兑换礼品",
-    "gift-reversal": "撤销兑换",
-    manual: "手动调整",
-  })[row.kind]
+import {
+  ledgerView,
+  ledgerActionsForSource,
+  retainLedgerActions,
+  ledgerActionLabel,
+} from "../domain/ledger"
+import type { BusinessData, Child, Gift } from "../domain/types"
 export function StorePage({
   data,
   child,
@@ -86,7 +88,7 @@ export function StorePage({
                 <Badge variant="secondary">{available.length}</Badge>
               </div>
               <Button
-                variant="outline"
+                variant="default"
                 id="giftManageBtn"
                 disabled={child.archived}
                 onClick={() => setManager(true)}
@@ -321,6 +323,71 @@ export function StorePage({
     </section>
   )
 }
+function LedgerScenePicker({
+  id,
+  source,
+  value,
+  onChange,
+}: {
+  id: string
+  source: string
+  value: string[]
+  onChange: (value: string[]) => void
+}) {
+  const options = ledgerActionsForSource(source)
+  const selected = options.filter((option) => value.includes(option.value))
+  const label =
+    selected.length === 1
+      ? selected[0].label
+      : selected.length
+        ? `已选 ${selected.length} 项`
+        : "全部场景"
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          id={id}
+          variant="outline"
+          className="w-full justify-between text-left font-normal"
+          aria-label={`积分变动场景：${selected.map((option) => option.label).join("、") || "全部场景"}`}
+        >
+          <span className="min-w-0 truncate">{label}</span>
+          <ChevronDown className="size-4 text-muted-foreground" aria-hidden="true" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        className="ledger-scene-options min-w-40"
+        aria-label="积分变动场景"
+        align="start"
+      >
+        <DropdownMenuCheckboxItem
+          checked={!value.length}
+          onSelect={(event) => event.preventDefault()}
+          onCheckedChange={() => onChange([])}
+        >
+          全部场景
+        </DropdownMenuCheckboxItem>
+        {options.map((option) => (
+          <DropdownMenuCheckboxItem
+            key={option.value}
+            checked={value.includes(option.value)}
+            onSelect={(event) => event.preventDefault()}
+            onCheckedChange={(checked) =>
+              onChange(
+                checked
+                  ? [...value, option.value]
+                  : value.filter((entry) => entry !== option.value),
+              )
+            }
+          >
+            {option.label}
+          </DropdownMenuCheckboxItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
 function LedgerPanel({
   data,
   archived,
@@ -332,45 +399,10 @@ function LedgerPanel({
 }) {
   const [range, setRange] = useState<{ from?: string; to?: string }>({}),
     [kind, setKind] = useState("all"),
-    [direction, setDirection] = useState("all")
-  let running = 0
-  const rows = [...data.ledger]
-    .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
-    .map((l) => ({ ...l, balanceAfter: (running += l.amount) }))
-    .filter(
-      (l) =>
-        (!range.from || l.date >= range.from) &&
-        (!range.to || l.date <= range.to) &&
-        (kind === "all" || source(l) === kind) &&
-        (direction === "all" || (direction === "plus" ? l.amount > 0 : l.amount < 0)),
-    )
-    .reverse()
+    [actions, setActions] = useState<string[]>([])
+  const { rows, earned, deducted } = ledgerView(data.ledger, { ...range, source: kind, actions })
   return (
-    <section className="store-ledger" aria-labelledby="ledgerOverviewTitle">
-      <header className="store-section-heading">
-        <h2 id="ledgerOverviewTitle">积分概览</h2>
-        <Button variant="outline" id="manualBtn" disabled={archived} onClick={onAdjust}>
-          手动调整
-        </Button>
-      </header>
-      <div className="stats">
-        <Card>
-          <span>当前积分</span>
-          <b>{balance(data)}</b>
-        </Card>
-        <Card>
-          <span>累计获得</span>
-          <b className="positive">
-            +{data.ledger.filter((l) => l.amount > 0).reduce((n, l) => n + l.amount, 0)}
-          </b>
-        </Card>
-        <Card>
-          <span>累计扣减</span>
-          <b className="negative">
-            {data.ledger.filter((l) => l.amount < 0).reduce((n, l) => n + l.amount, 0)}
-          </b>
-        </Card>
-      </div>
+    <section className="store-ledger" aria-label="积分流水">
       <div className="ledger-filters">
         <Field label="日期范围" id="ledgerRange">
           <DateRangePicker id="ledgerRange" value={range} onChange={setRange} />
@@ -380,7 +412,10 @@ function LedgerPanel({
             id="filterSource"
             label="流水来源"
             value={kind}
-            onChange={setKind}
+            onChange={(source) => {
+              setKind(source)
+              setActions((selected) => retainLedgerActions(selected, source))
+            }}
             options={[
               { value: "all", label: "全部来源" },
               { value: "task", label: "任务" },
@@ -389,17 +424,12 @@ function LedgerPanel({
             ]}
           />
         </Field>
-        <Field label="增减" id="filterDirection">
-          <Choice
+        <Field label="变动场景" id="filterDirection">
+          <LedgerScenePicker
             id="filterDirection"
-            label="积分增减"
-            value={direction}
-            onChange={setDirection}
-            options={[
-              { value: "all", label: "全部增减" },
-              { value: "plus", label: "增加" },
-              { value: "minus", label: "扣减" },
-            ]}
+            source={kind}
+            value={actions}
+            onChange={setActions}
           />
         </Field>
         <Button
@@ -408,14 +438,31 @@ function LedgerPanel({
           onClick={() => {
             setRange({})
             setKind("all")
-            setDirection("all")
+            setActions([])
           }}
         >
           清除筛选
         </Button>
+        <Button variant="default" id="manualBtn" disabled={archived} onClick={onAdjust}>
+          手动调整
+        </Button>
+      </div>
+      <div className="stats">
+        <Card>
+          <span>当前积分</span>
+          <b>{balance(data)}</b>
+        </Card>
+        <Card>
+          <span>获得积分</span>
+          <b className="positive">+{earned}</b>
+        </Card>
+        <Card>
+          <span>扣减积分</span>
+          <b className="negative">{deducted}</b>
+        </Card>
       </div>
       <div className="ledger-desktop">
-        <Table>
+        <Table tabIndex={0} aria-label="积分流水明细">
           <TableHeader>
             <TableRow>
               <TableHead>日期</TableHead>
@@ -429,7 +476,7 @@ function LedgerPanel({
             {rows.map((l) => (
               <TableRow key={l.id}>
                 <TableCell>{l.date}</TableCell>
-                <TableCell>{sourceLabel(l)}</TableCell>
+                <TableCell>{ledgerActionLabel(l)}</TableCell>
                 <TableCell>
                   <strong>{l.source || ""}</strong>
                   <p className="field-help">{l.reason}</p>
@@ -448,14 +495,14 @@ function LedgerPanel({
         {rows.map((l) => (
           <Card key={l.id} className="ledger-mobile-card">
             <div>
-              <strong>{l.source || sourceLabel(l)}</strong>
+              <strong>{l.source || ledgerActionLabel(l)}</strong>
               <span className={l.amount >= 0 ? "positive" : "negative"}>
                 {l.amount > 0 ? "+" : ""}
                 {l.amount}
               </span>
             </div>
             <p>
-              {l.date} · {sourceLabel(l)}
+              {l.date} · {ledgerActionLabel(l)}
             </p>
             <p>{l.reason}</p>
             <small>变动后积分 {l.balanceAfter}</small>
@@ -467,7 +514,8 @@ function LedgerPanel({
   )
 }
 function ManualEditor({ onClose }: { onClose: () => void }) {
-  const [amount, setAmount] = useState(""),
+  const [direction, setDirection] = useState("increase"),
+    [amount, setAmount] = useState(""),
     [reason, setReason] = useState(""),
     [date, setDate] = useState(today()),
     action = useAsync()
@@ -475,7 +523,7 @@ function ManualEditor({ onClose }: { onClose: () => void }) {
     <Modal
       id="manualDialog"
       title="手动调整积分"
-      description="正数增加，负数扣减；每次调整都会保留流水。"
+      description="选择增加或减少，填写积分数值；每次调整都会保留流水。"
       onClose={onClose}
       footer={
         <>
@@ -493,11 +541,11 @@ function ManualEditor({ onClose }: { onClose: () => void }) {
         onSubmit={(e) => {
           e.preventDefault()
           void action.run(async () => {
-            if (!Number.isInteger(Number(amount)) || Number(amount) === 0)
-              throw Error("请输入非零整数积分。")
+            if (!Number.isSafeInteger(Number(amount)) || Number(amount) <= 0)
+              throw Error("请输入大于 0 的整数积分。")
             if (!date) throw Error("请选择日期。")
             await runtime.command("ledger.manual", {
-              amount: Number(amount),
+              amount: Number(amount) * (direction === "decrease" ? -1 : 1),
               reason: reason.trim(),
               date,
             })
@@ -506,18 +554,35 @@ function ManualEditor({ onClose }: { onClose: () => void }) {
         }}
       >
         <fieldset disabled={action.busy}>
-          <Field label="调整积分" id="manualAmount">
-            <Input
-              id="manualAmount"
-              type="number"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              required
-              step={1}
-              placeholder="例如 10 或 -5"
-            />
-          </Field>
-          <Field label="业务日期" id="manualDate">
+          <div className="manual-amount-row">
+            <Field label="调整方式" id="manualDirection">
+              <Choice
+                id="manualDirection"
+                label="调整方式"
+                value={direction}
+                onChange={setDirection}
+                options={[
+                  { value: "increase", label: "增加" },
+                  { value: "decrease", label: "减少" },
+                ]}
+              />
+            </Field>
+            <Field label="调整积分" id="manualAmount">
+              <Input
+                id="manualAmount"
+                type="number"
+                inputMode="numeric"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                required
+                min={1}
+                max={Number.MAX_SAFE_INTEGER}
+                step={1}
+                placeholder="例如 10"
+              />
+            </Field>
+          </div>
+          <Field label="日期" id="manualDate">
             <DatePicker id="manualDate" value={date} onChange={setDate} />
           </Field>
           <Field label="调整原因" id="manualReason">

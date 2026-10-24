@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react"
 import { createPortal } from "react-dom"
-import { Button, DateRangePicker, ErrorText, Modal } from "./ui"
+import { Button, WeekPicker, ErrorText, Modal } from "./ui"
 import { printEngine } from "../domain/print"
 import { addDays, fmtDate, isDone, parseDate, startWeek, today } from "../domain/calendar"
 import type { BusinessData } from "../domain/types"
@@ -13,14 +13,12 @@ export function PrintDialog({
   onClose: () => void
   returnFocusTo?: HTMLElement | null
 }) {
-  const [range, setRange] = useState<{ from?: string; to?: string }>({
-      from: startWeek(today()),
-      to: addDays(startWeek(today()), 6),
-    }),
+  const [week, setWeek] = useState(() => startWeek(today())),
     [pdf, setPdf] = useState(""),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
     [printing, setPrinting] = useState(false)
+  const range = useMemo(() => ({ from: startWeek(week), to: addDays(startWeek(week), 6) }), [week])
   const engine = useMemo(() => printEngine(data), [data]),
     pages = useMemo(
       () =>
@@ -111,8 +109,8 @@ export function PrintDialog({
         }
       >
         <div className="form-field">
-          <label htmlFor="printRange">打印日期范围</label>
-          <DateRangePicker id="printRange" value={range} onChange={setRange} />
+          <label htmlFor="printRange">打印周</label>
+          <WeekPicker id="printRange" value={range.from} onChange={setWeek} />
         </div>
         <div className="print-shortcuts">
           {[0, 1].map((offset) => (
@@ -120,8 +118,7 @@ export function PrintDialog({
               variant="outline"
               key={offset}
               onClick={() => {
-                const from = addDays(startWeek(today()), offset * 7)
-                setRange({ from, to: addDays(from, 6) })
+                setWeek(addDays(startWeek(today()), offset * 7))
               }}
             >
               {offset ? "下周" : "本周"}
@@ -133,7 +130,7 @@ export function PrintDialog({
             ? `将打印 ${pages.length} 页自然周计划，共 ${pages.reduce((n, p) => n + p.items.length, 0)} 项任务。`
             : overflow
               ? "该周任务过多，无法完整放入一页，请调整日期或任务。"
-              : "请选择正确的起止日期。"}
+              : "请选择打印周。"}
         </div>
         <ErrorText id="printError" message={error} />
         {ipad && <p className="field-help">PDF 按 A4 横向排版，打开后可通过分享菜单打印。</p>}

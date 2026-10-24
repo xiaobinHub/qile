@@ -8,6 +8,7 @@ import {
   Printer,
   Circle,
   CircleCheck,
+  LoaderCircle,
   ArrowUp,
   ArrowDown,
 } from "lucide-react"
@@ -20,6 +21,8 @@ import {
   Input,
   DatePicker,
   TimePicker,
+  NumberPicker,
+  MonthDayPicker,
   Choice,
   Field,
   Modal,
@@ -71,11 +74,17 @@ export function CalendarPage({
     [cursor, setCursor] = useState(prefs.cursor),
     [navigation, setNavigation] = useState(0),
     [visibleMonth, setVisibleMonth] = useState(prefs.cursor.slice(0, 7)),
-    [pendingOccurrence, setPendingOccurrence] = useState<string | null>(null)
-  const action = useAsync(),
-    weekRef = useRef<HTMLDivElement>(null),
+    [completionError, setCompletionError] = useState("")
+  const weekRef = useRef<HTMLDivElement>(null),
     visibleDate = useRef(prefs.cursor),
-    weekNavigation = useRef(navigation)
+    weekNavigation = useRef(navigation),
+    mounted = useRef(true)
+  useEffect(() => {
+    mounted.current = true
+    return () => {
+      mounted.current = false
+    }
+  }, [])
   useEffect(() => {
     prefs.mode = mode
     prefs.cursor = cursor
@@ -113,19 +122,21 @@ export function CalendarPage({
     setCursor(mode === "month" ? shiftMonth(visibleMonth, n) + "-01" : addDays(cursor, n * 7))
     setNavigation((v) => v + 1)
   }
-  const busy = action.busy || runtime.getSnapshot().busy
+  const snapshot = runtime.getSnapshot(),
+    busy = snapshot.busy,
+    pendingOccurrences = new Set(snapshot.completionPending)
+  const wasUnconfirmed = useRef(snapshot.unconfirmed)
+  useEffect(() => {
+    if (wasUnconfirmed.current && !snapshot.unconfirmed) setCompletionError("")
+    wasUnconfirmed.current = snapshot.unconfirmed
+  }, [snapshot.unconfirmed])
   const toggleCompletion = (o: Occurrence) => {
-    if (child.archived || busy) return
-    void action.run(async () => {
-      setPendingOccurrence(o.occurrenceKey)
-      try {
-        await runtime.command("completion.set", {
-          occurrenceKey: o.occurrenceKey,
-          completed: !isDone(data, o),
-        })
-      } finally {
-        setPendingOccurrence(null)
-      }
+    if (child.archived) return
+    setCompletionError("")
+    void runtime.setCompletion(o, !isDone(data, o)).catch((error) => {
+      if (error.kind === "stale") return
+      if (mounted.current) setCompletionError(error.message)
+      else runtime.patch({ message: `${o.title}：${error.message}` })
     })
   }
   const editTask = (o: Occurrence) => {
@@ -207,7 +218,7 @@ export function CalendarPage({
         </div>
       </div>
       {child.archived && <p className="notice">孩子已归档，当前仅可查看。</p>}
-      <ErrorText message={action.error} />
+      <ErrorText message={completionError} />
       {mode === "month" ? (
         <MonthCalendar
           data={data}
@@ -218,7 +229,7 @@ export function CalendarPage({
           onEdit={editTask}
           readOnly={child.archived}
           busy={busy}
-          pendingOccurrence={pendingOccurrence}
+          pendingOccurrences={pendingOccurrences}
           savedPosition={prefs.monthPosition}
           onPosition={(position) => {
             prefs.monthPosition = position
@@ -292,15 +303,13 @@ export function CalendarPage({
                       key={o.occurrenceKey}
                       className={`week-event ${layout.end - layout.start < 24 ? "short-event" : ""} ${isDone(data, o) ? "done" : ""}`}
                       data-occ={o.occurrenceKey}
-                      aria-busy={pendingOccurrence === o.occurrenceKey || undefined}
+                      aria-busy={pendingOccurrences.has(o.occurrenceKey) || undefined}
                       style={
                         {
                           top: layout.start,
                           height: layout.end - layout.start,
                           left: Math.min(layout.depth, 3) * 9 + 3,
                           zIndex: layout.depth + 2,
-                          background: category(o.categoryId).color + "22",
-                          borderLeftColor: category(o.categoryId).color,
                           "--task-color": category(o.categoryId).color,
                         } as React.CSSProperties
                       }
@@ -309,7 +318,7 @@ export function CalendarPage({
                         occurrence={o}
                         completed={isDone(data, o)}
                         readOnly={child.archived}
-                        busy={pendingOccurrence === o.occurrenceKey}
+                        busy={pendingOccurrences.has(o.occurrenceKey)}
                         onToggle={toggleCompletion}
                         onEdit={editTask}
                         week
@@ -355,10 +364,17 @@ function CalendarTaskActions({
         data-task-complete={o.occurrenceKey}
         aria-label={`${completed ? "取消完成任务" : "完成任务"}：${o.title}，${fmtFull(o.date)} ${o.startTime}`}
         aria-pressed={completed}
+        aria-busy={busy || undefined}
         disabled={readOnly || busy}
         onClick={() => onToggle(o)}
       >
-        {completed ? <CircleCheck aria-hidden /> : <Circle aria-hidden />}
+        {busy ? (
+          <LoaderCircle aria-hidden className="animate-spin" />
+        ) : completed ? (
+          <CircleCheck aria-hidden />
+        ) : (
+          <Circle aria-hidden />
+        )}
       </Button>
       <Button
         type="button"
@@ -399,7 +415,7 @@ function initialTask(data: BusinessData, options: Options): Task {
     startTime: o?.startTime || options.startTime || "17:00",
     endTime: o?.endTime || options.endTime || "17:30",
     categoryId: o?.categoryId || data.categories.find((c) => c.active)?.id || "",
-    points: o?.points ?? 5,
+    points: o?.points ?? 0,
     recurrence: s ? revisionForDate(s, o!.originalDate).recurrence : null,
   }
 }
@@ -407,8 +423,14 @@ export function TaskEditor({
   data,
   child,
   onClose,
+  onCreatePreset,
   ...options
-}: { data: BusinessData; child: Child; onClose: () => void } & Options) {
+}: {
+  data: BusinessData
+  child: Child
+  onClose: () => void
+  onCreatePreset: () => void
+} & Options) {
   const [task, setTask] = useState<Task>(() => initialTask(data, options)),
     [scope, setScope] = useState(""),
     [deleting, setDeleting] = useState(false),
@@ -417,8 +439,26 @@ export function TaskEditor({
   const action = useAsync(),
     o = options.occurrence
   const readOnly = child.archived || !!(o && isDone(data, o))
+  const durationMinutes = minutes(task.endTime) - minutes(task.startTime)
+  const durationError =
+    durationMinutes <= 0
+      ? "持续时长必须大于0分钟。"
+      : minutes(task.endTime) > 1439
+        ? "结束时间超出当天，请缩短持续时长或提前开始时间。"
+        : ""
   const update = (next: Partial<Task>) => {
-    setTask((t) => ({ ...t, ...next }))
+    if (durationError && action.error === durationError) action.setError("")
+    setTask((t) => ({
+      ...t,
+      ...next,
+      ...(next.startTime !== undefined && next.endTime === undefined
+        ? {
+            endTime: timeAt(
+              Math.min(1439, minutes(next.startTime) + minutes(t.endTime) - minutes(t.startTime)),
+            ),
+          }
+        : {}),
+    }))
     setOverlap(false)
   }
   const rule = task.recurrence
@@ -427,7 +467,7 @@ export function TaskEditor({
       throw Error(child.archived ? "当前孩子仅可查看。" : "已完成任务已冻结，请先撤销完成。")
     if (!o && !data.categories.some((c) => c.id === task.categoryId && c.active))
       throw Error("请选择可用的任务类型，配置中的类型可能已停用。")
-    if (minutes(task.endTime) <= minutes(task.startTime)) throw Error("结束时间必须晚于开始时间。")
+    if (durationError) throw Error(durationError)
     if (o?.recurring && !scope) throw Error("请选择修改范围。")
     if (
       !overlap &&
@@ -517,6 +557,7 @@ export function TaskEditor({
                   id="taskTitle"
                   value={task.title}
                   data={data}
+                  onCreatePreset={onCreatePreset}
                   onChange={(title) => update({ title })}
                   onPreset={(p) =>
                     update({
@@ -534,21 +575,28 @@ export function TaskEditor({
               <Choice
                 id="taskCategory"
                 label="任务类型"
+                openDownwards
                 value={task.categoryId}
                 onChange={(categoryId) => update({ categoryId })}
                 options={data.categories
                   .filter((c) => c.active || c.id === task.categoryId)
-                  .map((c) => ({ value: c.id, label: c.name + (c.active ? "" : "（已停用）") }))}
+                  .map((c) => ({
+                    value: c.id,
+                    label: c.name + (c.active ? "" : "（已停用）"),
+                    color: c.color,
+                  }))}
               />
             </Field>
             <Field label="奖励积分" id="taskPoints">
-              <Input
+              <NumberPicker
                 id="taskPoints"
-                type="number"
+                label="奖励积分"
                 min={0}
-                step={1}
+                max={100}
+                step={5}
+                loop
                 value={task.points}
-                onChange={(e) => update({ points: Number(e.target.value) })}
+                onChange={(points) => update({ points })}
                 required
               />
             </Field>
@@ -568,11 +616,15 @@ export function TaskEditor({
                 onChange={(startTime) => update({ startTime })}
               />
             </Field>
-            <Field label="结束时间" id="taskEnd">
+            <Field label="持续时长" id="taskDuration" error={durationError || undefined}>
               <TimePicker
-                id="taskEnd"
-                value={task.endTime}
-                onChange={(endTime) => update({ endTime })}
+                id="taskDuration"
+                kind="duration"
+                maxDurationMinutes={1439 - minutes(task.startTime)}
+                value={timeAt(Math.max(0, durationMinutes))}
+                onChange={(duration) =>
+                  update({ endTime: timeAt(minutes(task.startTime) + minutes(duration)) })
+                }
               />
             </Field>
           </div>
@@ -645,13 +697,14 @@ export function TaskEditor({
                     />
                   </Field>
                   <Field label="间隔" id="repeatInterval">
-                    <Input
+                    <NumberPicker
                       id="repeatInterval"
-                      type="number"
+                      label="间隔"
                       min={1}
-                      max={99}
+                      max={15}
+                      loop
                       value={rule.interval}
-                      onChange={(e) => setRule({ interval: Number(e.target.value) })}
+                      onChange={(interval) => setRule({ interval })}
                       required
                     />
                   </Field>
@@ -679,17 +732,15 @@ export function TaskEditor({
                   </fieldset>
                 )}
                 {rule.freq === "monthly" && (
-                  <Field label="每月日期" id="repeatMonthDay">
-                    <Input
-                      id="repeatMonthDay"
-                      type="number"
-                      min={1}
-                      max={31}
-                      required
-                      value={rule.monthDay || Number(task.startDate.slice(8))}
-                      onChange={(e) => setRule({ monthDay: Number(e.target.value) })}
-                    />
-                  </Field>
+                  <div className="form-grid">
+                    <Field label="每月日期" id="repeatMonthDay">
+                      <MonthDayPicker
+                        id="repeatMonthDay"
+                        value={rule.monthDay || Number(task.startDate.slice(8))}
+                        onChange={(monthDay) => setRule({ monthDay })}
+                      />
+                    </Field>
+                  </div>
                 )}
                 <div className="form-grid recurrence-end-grid">
                   <Field label="结束方式" id="repeatEndType">
@@ -730,14 +781,15 @@ export function TaskEditor({
                           : undefined
                       }
                     >
-                      <Input
+                      <NumberPicker
                         id="repeatCount"
-                        type="number"
+                        label="重复次数"
                         min={1}
-                        max={10000}
+                        max={60}
+                        loop
                         value={rule.count || 10}
                         required
-                        onChange={(e) => setRule({ count: Number(e.target.value) })}
+                        onChange={(count) => setRule({ count })}
                       />
                     </Field>
                   )}
@@ -882,11 +934,12 @@ export function PresetEditor({
             <Choice
               id="presetCategory"
               label="任务类型"
+              openDownwards
               value={value.categoryId}
               onChange={(categoryId) => update({ categoryId })}
               options={data.categories
                 .filter((c) => c.active)
-                .map((c) => ({ value: c.id, label: c.name }))}
+                .map((c) => ({ value: c.id, label: c.name, color: c.color }))}
             />
           </Field>
           <div className="form-grid">
@@ -987,7 +1040,7 @@ function MonthCalendar({
   onEdit,
   readOnly,
   busy,
-  pendingOccurrence,
+  pendingOccurrences,
   onMonth,
   savedPosition,
   onPosition,
@@ -1000,7 +1053,7 @@ function MonthCalendar({
   onEdit: (o: Occurrence) => void
   readOnly: boolean
   busy: boolean
-  pendingOccurrence: string | null
+  pendingOccurrences: ReadonlySet<string>
   onMonth: (m: string, date: string) => void
   savedPosition?: { date: string; offset: number }
   onPosition: (position: { date: string; offset: number }) => void
@@ -1116,7 +1169,7 @@ function MonthCalendar({
                     key={o.occurrenceKey}
                     className={`month-task ${isDone(data, o) ? "done" : ""}`}
                     data-month-occ={o.occurrenceKey}
-                    aria-busy={pendingOccurrence === o.occurrenceKey || undefined}
+                    aria-busy={pendingOccurrences.has(o.occurrenceKey) || undefined}
                     style={
                       {
                         "--task-color":
@@ -1128,7 +1181,7 @@ function MonthCalendar({
                       occurrence={o}
                       completed={isDone(data, o)}
                       readOnly={readOnly}
-                      busy={pendingOccurrence === o.occurrenceKey}
+                      busy={pendingOccurrences.has(o.occurrenceKey)}
                       onToggle={onToggle}
                       onEdit={onEdit}
                     />

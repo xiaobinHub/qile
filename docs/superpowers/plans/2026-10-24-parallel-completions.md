@@ -1,0 +1,14 @@
+# Independent task completion submissions
+
+**Goal:** Show a small spinner in the completion control while saving. Allow different tasks to complete/undo concurrently, with per-task pending state and duplicate-click protection.
+
+**Architecture:** Keep the backend's strict revision checks and idempotent operation contract. Add a dedicated completion channel to Runtime with a job per occurrence, actual parallel initial requests, and a serialized retry lane only for confirmed revision conflicts. Refresh/revalidate the target before retrying a confirmed conflict; refuse to apply a stale click to a changed task. Preserve the exact operation body/ID after an uncertain result. Generic writes/navigation guards continue to account for all active/uncertain completion jobs. Recovery can refresh without discarding jobs and retry original requests; successful responses remain monotonic by revision. No backend or schema changes are required.
+
+- [x] Extend Runtime mutation tracking and error codes; implement per-occurrence completion jobs, conflict retry and uncertain-result recovery with context guards.
+- [x] Replace Calendar's single busy completion with Runtime's pending occurrence set. Render LoaderCircle in each active task's existing button in month/week views; preserve the row, touch target and scroll position.
+- [x] Add meaningful Runtime coverage for parallel requests, reverse-order responses, confirmed-conflict retries, changed targets, same-task deduplication, uncertain original-body recovery, mixed results and stale contexts.
+- [x] Extend isolated browser acceptance for simultaneous complete/undo, independent loading, duplicate clicks, error/retry, week/month rendering and ledger counts. Run build, domain/runtime and full browser regressions, inspect screenshots and verify development assets. Test writes must use the dedicated test database only.
+
+## Validation result
+
+Parent build/typecheck, domain/runtime checks including 12 concurrent-completion safety cases, formatting, typography, repository layout and diff checks passed. Full isolated browser regression passed 33 scenarios with no page errors; all 44 accessibility states had zero violations. Real test-database acceptance at 1135×789, 820×1180, 1180×820 and 390×844 verified three simultaneous complete/undo requests before any response, independent pending indicators in month/week views, duplicate-click suppression, actual revision-conflict recovery, a confirmed failure and retry, and a committed-response-loss recovery with the exact original body/ID. Ledger checks found precisely one completion and one reversal per exercised task, with no duplicate points. Existing calendar DOM/scroll stability and generic uncertain-write safeguards also passed. Read-only health and asset hashes confirmed development port 18787 serves the final build. No backend/schema changes or production deployment were made; physical iPad Safari was not tested.

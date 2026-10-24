@@ -304,6 +304,12 @@
   cursor: pointer;
   user-select: none;
 }
+@media (pointer: coarse) {
+  .month-day-grid [data-slot="button"] {
+    width: 44px;
+    height: 44px;
+  }
+}
 [data-slot="dialog-content"],
 [data-slot="alert-dialog-content"] {
   top: calc(var(--app-visible-top, 0px) + var(--app-visible-height, 100dvh) / 2);

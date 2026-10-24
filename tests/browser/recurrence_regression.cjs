@@ -1,3 +1,4 @@
+const {selectNumber,selectMonthDay}=require('./picker_actions.cjs');
 /* Independent recurrence regressions on a temporary child in the isolated UI DB. */
 const assert = require('node:assert/strict')
 const path = require('node:path')
@@ -51,12 +52,12 @@ async function exerciseRecurrence({dad, origin, firstId, api, data, choose, pers
     await dad.reload()
     await dad.locator('#calendarTitle').waitFor()
     await dad.locator(`[data-month-occ="${monthlyId}@${dates.monthly}"] [data-task-edit]`).click()
-    await dad.locator('#repeatMonthDay').fill('20')
+    await selectMonthDay(dad,20)
     await choose(dad,'taskScope','整个任务系列')
     await save()
     assert.equal((await data(dad,child.id)).data.series.find(s=>s.id===monthlyId).recurrence.monthDay,20)
     await dad.locator(`[data-month-occ="${countId}@${dates.today}"] [data-task-edit]`).click()
-    await dad.locator('#repeatCount').fill('10')
+    await selectNumber(dad,'repeatCount',10)
     await choose(dad,'taskScope','本次及以后')
     await axe(dad,'recurrence-fixed-count-help')
     await dad.screenshot({path:path.join(out,'recurrence-fixed-editor.png')})

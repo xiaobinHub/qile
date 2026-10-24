@@ -8,6 +8,8 @@ import { cn } from "@shared/lib/utils"
 
 export type TimePickerProps = Omit<ComponentProps<typeof Input>, "type" | "value" | "onChange"> & {
   value?: string
+  kind?: "time" | "duration"
+  maxDurationMinutes?: number
   onChange: (value: string) => void
 }
 const validTime = /^(?:[01]\d|2[0-3]):[0-5]\d$/
@@ -15,6 +17,8 @@ const validTime = /^(?:[01]\d|2[0-3]):[0-5]\d$/
 /** Selection-only local HH:mm; every minute remains available without text entry. */
 export function TimePicker({
   value = "",
+  kind = "time",
+  maxDurationMinutes = 1439,
   onChange,
   "aria-label": ariaLabel,
   className,
@@ -31,10 +35,15 @@ export function TimePicker({
   const time = useRef(value)
   time.current = validTime.test(value) ? value : "00:00"
   const [hour, minute] = time.current.split(":").map(Number)
+  const maximum = kind === "duration" ? Math.max(0, Math.min(1439, maxDurationMinutes)) : 1439
+  const maxHour = Math.floor(maximum / 60)
+  const minuteCount = hour >= maxHour ? (maximum % 60) + 1 : 60
+  const panelLabel = kind === "duration" ? "选择持续时长" : "选择时间"
   function changePart(part: number, next: number) {
     const parts = time.current.split(":")
     parts[part] = String(next).padStart(2, "0")
-    time.current = parts.join(":")
+    const total = Math.min(maximum, Number(parts[0]) * 60 + Number(parts[1]))
+    time.current = `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`
     onChange(time.current)
   }
   function finish() {
@@ -51,14 +60,14 @@ export function TimePicker({
             type="text"
             role="combobox"
             aria-autocomplete="none"
-            aria-label={ariaLabel || (props.id ? undefined : "选择时间")}
+            aria-label={ariaLabel || (props.id ? undefined : panelLabel)}
             inputMode="none"
             autoComplete="off"
             placeholder={props.placeholder || "选择时间"}
             className={cn("cursor-pointer pr-10 tabular-nums caret-transparent", className)}
             disabled={unavailable}
             readOnly
-            value={value}
+            value={kind === "duration" ? `${hour}小时${minute}分钟` : value}
             onKeyDown={(event) => {
               onKeyDown?.(event)
               if (!event.defaultPrevented && ["Enter", " ", "ArrowDown"].includes(event.key)) {
@@ -75,7 +84,7 @@ export function TimePicker({
       </div>
       <PopoverContent
         ref={panel}
-        aria-label="选择时间"
+        aria-label={panelLabel}
         className="w-64 gap-0 overflow-hidden p-0"
         align="start"
         sideOffset={6}
@@ -90,7 +99,7 @@ export function TimePicker({
         <div className="flex items-center gap-2 border-b border-border bg-muted/40 px-3 py-2">
           <Clock3 aria-hidden className="size-4 text-muted-foreground" />
           <output className="text-detail font-semibold tabular-nums" aria-live="polite">
-            {value || "--:--"}
+            {kind === "duration" ? `${hour}小时${minute}分钟` : value || "--:--"}
           </output>
           <Button type="button" variant="ghost" size="sm" className="ml-auto" onClick={finish}>
             完成
@@ -103,7 +112,7 @@ export function TimePicker({
               ref={hourWheel}
               label="小时"
               unit="时"
-              count={24}
+              count={maxHour + 1}
               value={hour}
               onChange={(next) => changePart(0, next)}
               onComplete={finish}
@@ -115,7 +124,7 @@ export function TimePicker({
               ref={minuteWheel}
               label="分钟"
               unit="分"
-              count={60}
+              count={minuteCount}
               value={minute}
               onChange={(next) => changePart(1, next)}
               onComplete={finish}

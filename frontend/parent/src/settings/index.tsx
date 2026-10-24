@@ -143,9 +143,15 @@ function Settings({
   )
 }
 
-export function SettingsPage({ controller }: { controller: Controller }) {
+export function SettingsPage({
+  controller,
+  initialPage,
+}: {
+  controller: Controller
+  initialPage?: string
+}) {
   const [selected, select] = useState(
-    controller.deps.context().child ? "child/profile" : "account/profile",
+    controller.deps.context().child ? initialPage || "child/profile" : "account/profile",
   )
   const [version, update] = useState(0)
   controller.render = () => update((v) => v + 1)

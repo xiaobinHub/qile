@@ -143,7 +143,7 @@ async function exerciseDirectCalendar({ browser, dad, origin, firstId, out, axe,
           "taskPoints",
           "taskDate",
           "taskStart",
-          "taskEnd",
+          "taskDuration",
         ])
           fields.push(await page.locator("#" + id).boundingBox())
         assert.ok(

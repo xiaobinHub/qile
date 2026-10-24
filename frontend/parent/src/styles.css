@@ -440,6 +440,7 @@ a {
   margin-top: 8px;
 }
 .month-task {
+  --task-background: color-mix(in srgb, var(--task-color) 12%, var(--card));
   width: 100%;
   height: 34px;
   min-height: 34px;
@@ -448,11 +449,14 @@ a {
   padding: 4px 9px;
   font-size: var(--text-body);
   font-weight: 400;
-  background: color-mix(in srgb, var(--task-color) 12%, var(--card));
+  background: var(--task-background);
   border-radius: var(--radius-control);
   overflow: hidden;
   color: var(--foreground);
   line-height: var(--text-body--line-height);
+}
+.month-task:not(.done) {
+  background: color-mix(in srgb, var(--task-color) 18%, var(--card));
 }
 .month-task > span {
   overflow: hidden;
@@ -464,8 +468,9 @@ a {
   height: 16px;
   color: var(--task-color);
 }
-.month-task.done > span {
-  color: var(--foreground);
+.month-task.done,
+.week-event.done {
+  background: hsl(from var(--task-background) h calc(s * 0.35) l);
 }
 .more-tasks {
   font-size: var(--text-meta);
@@ -540,6 +545,7 @@ a {
   border-radius: 0;
 }
 .week-event {
+  --task-background: color-mix(in srgb, var(--task-color) 13.33%, var(--card));
   position: absolute;
   right: 4px;
   display: flex;
@@ -553,7 +559,12 @@ a {
   border-radius: 5px;
   min-height: 24px;
   color: var(--foreground);
+  background: var(--task-background);
+  border-left-color: var(--task-color);
   box-shadow: 0 1px 4px color-mix(in srgb, var(--foreground) 7%, transparent);
+}
+.week-event:not(.done) {
+  background: color-mix(in srgb, var(--task-color) 20%, var(--card));
 }
 .week-event strong {
   font-size: var(--text-meta);
@@ -566,6 +577,9 @@ a {
 }
 .week-event.done strong {
   text-decoration: line-through;
+}
+.week-event.done {
+  border-left-color: hsl(from var(--task-color) h calc(s * 0.35) l);
 }
 /* Child portrait cards retain their special presentation inside accessible Dialog. */
 .child-switcher {
@@ -929,6 +943,12 @@ a {
   width: 100%;
 }
 /* Store and responsive ledger. */
+.manual-amount-row {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  align-items: end;
+  gap: 12px;
+}
 .store-page {
   border: 1px solid var(--border);
   border-radius: var(--radius-card);
@@ -1174,16 +1194,29 @@ a {
 }
 .ledger-filters {
   display: grid;
-  grid-template-columns: minmax(260px, 1.8fr) minmax(140px, 1fr) minmax(140px, 1fr) auto;
-  gap: 12px;
+  grid-template-columns: minmax(260px, 300px) repeat(2, minmax(110px, 160px)) auto minmax(
+      max-content,
+      1fr
+    );
+  gap: 10px;
   align-items: end;
-  padding: 16px;
-  background: var(--muted);
-  border-radius: var(--radius-xl);
+  justify-content: start;
   margin-bottom: 16px;
 }
 .ledger-filters .form-field {
   margin: 0;
+}
+.ledger-filters #manualBtn {
+  justify-self: end;
+}
+.ledger-scene-options [role="menuitemcheckbox"] {
+  min-height: 40px;
+}
+@media (pointer: coarse) {
+  .ledger-filters button,
+  .ledger-scene-options [role="menuitemcheckbox"] {
+    min-height: 44px;
+  }
 }
 .ledger-mobile {
   display: none;
@@ -1216,6 +1249,67 @@ a {
 .ledger-desktop td:nth-child(3) {
   white-space: normal;
   min-width: 160px;
+}
+/* Let the active ledger fill the page; its table owns desktop scrolling. */
+.app:has(.store-ledger) {
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+}
+.app:has(.store-ledger) > .topbar {
+  flex-shrink: 0;
+}
+.app:has(.store-ledger) #main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  padding-bottom: 0;
+}
+.store-page:has(.store-ledger) {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  border-bottom: 0;
+  border-bottom-right-radius: 0;
+  border-bottom-left-radius: 0;
+}
+.store-page:has(.store-ledger) .store-tabs,
+.store-tab-content:has(.store-ledger),
+.store-ledger {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+.store-page:has(.store-ledger) .store-tabs-list,
+.store-ledger > .ledger-filters,
+.store-ledger > .stats {
+  flex-shrink: 0;
+}
+.store-ledger .ledger-mobile {
+  flex: 1;
+  align-content: start;
+}
+@media (min-width: 681px) and (min-height: 600px) {
+  .app:has(.store-ledger) {
+    height: 100dvh;
+  }
+  .store-ledger .ledger-desktop {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    border-bottom: 0;
+    border-bottom-right-radius: 0;
+    border-bottom-left-radius: 0;
+  }
+  .store-ledger .ledger-desktop [data-slot="table-container"] {
+    flex: 1;
+    min-height: 0;
+    max-height: none;
+  }
 }
 .print-loading {
   display: grid;
@@ -1378,14 +1472,6 @@ a {
 @media (max-width: 1000px) {
   .nav button {
     padding-inline: 14px;
-  }
-
-  .ledger-filters {
-    grid-template-columns: minmax(230px, 1.6fr) minmax(120px, 1fr) minmax(120px, 1fr);
-  }
-  .ledger-filters > button {
-    grid-column: 3;
-    justify-self: end;
   }
 }
 @media (max-width: 680px) {
@@ -1810,17 +1896,19 @@ a {
   }
 }
 
-@media (max-width: 680px) {
+@media (max-width: 760px) {
   .ledger-filters {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    padding: 12px;
   }
   .ledger-filters > .form-field:first-child {
     grid-column: 1 / -1;
   }
-  .ledger-filters > button {
-    grid-column: 1 / -1;
-    justify-self: end;
+  .ledger-filters #clearFilters {
+    grid-column: 1;
+    justify-self: start;
+  }
+  .ledger-filters #manualBtn {
+    grid-column: 2;
   }
 }
 

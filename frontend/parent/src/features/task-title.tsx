@@ -5,11 +5,13 @@ import { Command, CommandList, CommandItem } from "@shared/components/ui/command
 import { Button } from "@shared/components/ui/button"
 import { Input } from "@shared/components/ui/input"
 import type { BusinessData, Preset } from "../domain/types"
+const createPresetValue = "__create-preset__"
 export function TaskTitle({
   id,
   value,
   onChange,
   onPreset,
+  onCreatePreset,
   data,
   ...aria
 }: {
@@ -17,6 +19,7 @@ export function TaskTitle({
   value: string
   onChange: (v: string) => void
   onPreset: (p: Preset) => void
+  onCreatePreset: () => void
   data: BusinessData
   "aria-describedby"?: string
   "aria-invalid"?: boolean | "true" | "false"
@@ -45,6 +48,10 @@ export function TaskTitle({
     setOpen(false)
     setActive("")
     input.current?.focus()
+  }
+  function createPreset() {
+    setOpen(false)
+    onCreatePreset()
   }
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -99,6 +106,10 @@ export function TaskTitle({
               } else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
                 e.preventDefault()
                 setOpen(true)
+                if (!data.taskPresets.length) {
+                  setActive(createPresetValue)
+                  return
+                }
                 const index = items.findIndex((p) => p.id === active),
                   next = Math.max(
                     0,
@@ -109,6 +120,7 @@ export function TaskTitle({
                 e.preventDefault()
                 const p = items.find((p) => p.id === active)
                 if (p) choose(p)
+                else if (active === createPresetValue && !data.taskPresets.length) createPreset()
                 else setOpen(false)
               }
             }}
@@ -157,13 +169,21 @@ export function TaskTitle({
                 </small>
               </CommandItem>
             ))}
-            {!items.length && (
+            {!data.taskPresets.length ? (
+              <CommandItem
+                value={createPresetValue}
+                onSelect={createPreset}
+                onMouseDown={(event) => event.preventDefault()}
+                className="flex-row flex-wrap gap-x-0 p-4 font-normal text-muted-foreground"
+              >
+                <span>暂无常用任务，</span>
+                <span className="text-brand-ink underline underline-offset-4">去添加。</span>
+              </CommandItem>
+            ) : !items.length ? (
               <p className="p-4 text-sm text-muted-foreground">
-                {data.taskPresets.length
-                  ? "没有匹配的常用任务，可继续手动输入"
-                  : "暂无常用任务，可在设置中配置"}
+                没有匹配的常用任务，可继续手动输入
               </p>
-            )}
+            ) : null}
           </CommandList>
         </Command>
       </PopoverContent>

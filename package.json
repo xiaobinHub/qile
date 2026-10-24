@@ -7,7 +7,7 @@
     "build:admin": "npm run check:admin && vite build --config frontend/admin/vite.config.mts",
     "check:parent": "tsc --project frontend/parent/tsconfig.json --noEmit",
     "build:parent": "npm run check:parent && vite build --config frontend/parent/vite.config.mts",
-    "test:domain": "node tests/domain/domain_tests.cjs && node tests/domain/runtime_tests.cjs",
+    "test:domain": "node tests/domain/domain_tests.cjs && node tests/domain/runtime_tests.cjs && node tests/domain/completion_runtime_tests.cjs && node tests/domain/ledger_tests.cjs",
     "check:format": "prettier --check frontend/parent/src frontend/shared/src",
     "check:typography": "node scripts/check_typography.cjs",
     "build": "npm run build:admin && npm run build:parent",

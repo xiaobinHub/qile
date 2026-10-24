@@ -20,6 +20,8 @@ export function TimeWheel({
   label,
   unit,
   count,
+  valueOffset = 0,
+  valueStep = 1,
   value,
   onChange,
   onComplete,
@@ -28,6 +30,8 @@ export function TimeWheel({
   label: string
   unit: string
   count: number
+  valueOffset?: number
+  valueStep?: number
   value: number
   onChange: (value: number) => void
   onComplete: () => void
@@ -35,21 +39,38 @@ export function TimeWheel({
 }) {
   const scroller = useRef<HTMLDivElement>(null)
   const selected = useRef(value)
+  const positionedCount = useRef(count)
   const frame = useRef(0)
   const touching = useRef(false)
   const settle = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const rows = useMemo(
     () =>
       Array.from({ length: count * copies }, (_, index) => (
-        <div className="time-wheel-row" data-wheel-index={index} key={index}>
-          {String(index % count).padStart(2, "0")}
+        <div
+          className="time-wheel-row"
+          data-wheel-index={index}
+          data-number-value={unit ? undefined : valueOffset + (index % count) * valueStep}
+          key={index}
+        >
+          {unit
+            ? String(index % count).padStart(2, "0")
+            : valueOffset + (index % count) * valueStep}
         </div>
       )),
-    [count],
+    [count, unit, valueOffset, valueStep],
   )
 
   useLayoutEffect(() => {
-    if (scroller.current && (selected.current !== value || scroller.current.scrollTop === 0)) {
+    if (
+      scroller.current &&
+      (positionedCount.current !== count ||
+        selected.current !== value ||
+        scroller.current.scrollTop === 0)
+    ) {
+      clearTimeout(settle.current)
+      cancelAnimationFrame(frame.current)
+      frame.current = 0
+      positionedCount.current = count
       selected.current = value
       scroller.current.scrollTop = (middleCopy * count + value) * rowHeight
     }
@@ -118,10 +139,14 @@ export function TimeWheel({
         role="spinbutton"
         tabIndex={0}
         aria-label={label}
-        aria-valuemin={0}
-        aria-valuemax={count - 1}
-        aria-valuenow={value}
-        aria-valuetext={`${String(value).padStart(2, "0")} ${unit}`}
+        aria-valuemin={valueOffset}
+        aria-valuemax={valueOffset + (count - 1) * valueStep}
+        aria-valuenow={valueOffset + value * valueStep}
+        aria-valuetext={
+          unit
+            ? `${String(value).padStart(2, "0")} ${unit}`
+            : String(valueOffset + value * valueStep)
+        }
         className="time-wheel-scroll"
         onScroll={scroll}
         onTouchStart={() => {

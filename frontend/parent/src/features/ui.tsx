@@ -21,8 +21,10 @@ export {
   CardTitle,
   CardDescription,
 } from "@shared/components/ui/card"
-export { DatePicker, DateRangePicker } from "@shared/components/date-picker"
+export { DatePicker, DateRangePicker, WeekPicker } from "@shared/components/date-picker"
 export { TimePicker } from "@shared/components/time-picker"
+export { NumberPicker } from "@shared/components/number-picker"
+export { MonthDayPicker } from "@shared/components/month-day-picker"
 export function ErrorText({ message, id }: { message?: string; id?: string }) {
   return message ? (
     <>
@@ -211,14 +213,16 @@ export function Field({
   id,
   children,
   help,
+  error,
 }: {
   label: string
   id: string
   children: ReactElement<{ id?: string }>
   help?: string
+  error?: string
 }) {
   return (
-    <FormField id={id} label={label} help={help} className="form-field">
+    <FormField id={id} label={label} help={help} error={error} className="form-field">
       {children}
     </FormField>
   )
@@ -245,13 +249,15 @@ export function Choice({
   options,
   label,
   disabled = false,
+  openDownwards = false,
 }: {
   id: string
   value: string
   onChange: (v: string) => void
-  options: { value: string; label: string }[]
+  options: { value: string; label: string; color?: string }[]
   label: string
   disabled?: boolean
+  openDownwards?: boolean
 }) {
   return (
     <Select
@@ -262,9 +268,21 @@ export function Choice({
       <SelectTrigger id={id} aria-label={label} className="w-full">
         <SelectValue placeholder="请选择" />
       </SelectTrigger>
-      <SelectContent>
+      <SelectContent
+        position={openDownwards ? "popper" : "item-aligned"}
+        side="bottom"
+        align={openDownwards ? "start" : "center"}
+        avoidCollisions={!openDownwards}
+      >
         {options.map((o) => (
-          <SelectItem key={o.value || "__empty"} value={o.value || "__empty"}>
+          <SelectItem key={o.value || "__empty"} value={o.value || "__empty"} textValue={o.label}>
+            {o.color && (
+              <span
+                aria-hidden="true"
+                className="size-2.5 shrink-0 rounded-full ring-1 ring-inset ring-foreground/15"
+                style={{ backgroundColor: o.color }}
+              />
+            )}
             {o.label}
           </SelectItem>
         ))}

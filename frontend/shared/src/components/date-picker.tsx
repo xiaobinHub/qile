@@ -72,6 +72,7 @@ export type DateRangeValue = { from?: string; to?: string }
 export type DateRangePickerProps = PickerBase & {
   value?: DateRangeValue
   onChange: (value: DateRangeValue) => void
+  weekOnly?: boolean
 }
 export function DateRangePicker({
   value = {},
@@ -82,6 +83,7 @@ export function DateRangePicker({
   disabledDates,
   placeholder = "选择日期范围",
   className,
+  weekOnly = false,
   ...aria
 }: DateRangePickerProps) {
   const [open, setOpen] = useState(false)
@@ -125,6 +127,15 @@ export function DateRangePicker({
           disabled={disabledDates}
           onDayClick={(date, modifiers) => {
             if (modifiers.disabled) return
+            if (weekOnly) {
+              const week = new Date(date)
+              week.setDate(week.getDate() - ((week.getDay() + 6) % 7))
+              const from = formatLocalDate(week)
+              week.setDate(week.getDate() + 6)
+              onChange({ from, to: formatLocalDate(week) })
+              setOpen(false)
+              return
+            }
             const picked = formatLocalDate(date)
             if (!from || to) {
               onChange({ from: picked })
@@ -136,9 +147,34 @@ export function DateRangePicker({
           }}
         />
         <p className="px-4 pb-3 text-caption text-muted-foreground" aria-live="polite">
-          {from && !to ? "请选择结束日期" : "依次选择开始和结束日期"}
+          {weekOnly
+            ? "点击任意日期选择整周（周一至周日）"
+            : from && !to
+              ? "请选择结束日期"
+              : "依次选择开始和结束日期"}
         </p>
       </PopoverContent>
     </Popover>
+  )
+}
+
+export function WeekPicker({
+  value,
+  onChange,
+  ...props
+}: PickerBase & { value: string; onChange: (weekStart: string) => void }) {
+  const from = parseLocalDate(value)
+  const to = from ? new Date(from) : undefined
+  to?.setDate(to.getDate() + 6)
+  return (
+    <DateRangePicker
+      {...props}
+      weekOnly
+      placeholder="选择打印周"
+      value={{ from: value, to: to ? formatLocalDate(to) : undefined }}
+      onChange={(range) => {
+        if (range.from) onChange(range.from)
+      }}
+    />
   )
 }
