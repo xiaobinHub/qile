@@ -13,7 +13,7 @@ from lele_growth.child_service import (
 from lele_growth.postgres_store import PostgresStore
 
 
-def schema_sources(*, include_ledger_date=True):
+def schema_sources(*, include_ledger_date=True, include_child_gender=True):
     directory = Path(__file__).with_name('db')
     source = (directory / 'schema_v2.sql').read_text()
     migration = (directory / 'migrate_v2_to_v3.sql').read_text()
@@ -24,6 +24,8 @@ def schema_sources(*, include_ledger_date=True):
     texts[6] = texts[5] + '\n' + (directory / 'migrate_v5_to_v6.sql').read_text()
     if include_ledger_date:
         texts[6] += '\n' + (directory / 'add_points_ledger_task_date.sql').read_text()
+    if include_child_gender:
+        texts[6] += '\n' + (directory / 'add_children_gender.sql').read_text()
     return source, migration, media, {version: hashlib.sha256(text.encode()).hexdigest() for version, text in texts.items()}
 
 
@@ -37,8 +39,11 @@ def schema_version(cur):
     catalog = PostgresStore._catalog(cur)
     matches = [v for v, h in hashes.items() if namespace[0] == f'lele-schema-v{v}:{h}:{catalog}']
     # Accept the known development v6 schema so the table-only addition can be applied.
-    legacy_v6 = schema_sources(include_ledger_date=False)[3][6]
-    if namespace[0] == f'lele-schema-v6:{legacy_v6}:{catalog}':
+    legacy_hashes = {
+        schema_sources(include_ledger_date=False, include_child_gender=False)[3][6],
+        schema_sources(include_child_gender=False)[3][6],
+    }
+    if any(namespace[0] == f'lele-schema-v6:{h}:{catalog}' for h in legacy_hashes):
         matches.append(6)
     require(len(matches) == 1, 409, '检测到未知数据库结构，升级停止。')
     version = matches[0]
@@ -56,9 +61,10 @@ def inspect_schema(service):
             users = cur.fetchone()[0]
         pending = []
         if version == 6:
-            cur.execute("SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema='lele' AND table_name='points_ledger' AND column_name='task_date')")
-            if not cur.fetchone()[0]:
-                pending.append('points_ledger.task_date')
+            for table, column in (('points_ledger','task_date'),('children','gender')):
+                cur.execute("SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema='lele' AND table_name=%s AND column_name=%s)",(table,column))
+                if not cur.fetchone()[0]:
+                    pending.append(f'{table}.{column}')
         return {'version': version, 'users': users, 'pendingTableChanges': pending}
     return service.transaction(run, exclusive=True, schema_check=False)
 
@@ -82,7 +88,13 @@ def initialize_service(service, *, upgrade_only=False, audit_detail=None):
             cur.execute((Path(__file__).with_name('db') / 'migrate_v4_to_v5.sql').read_text())
         if previous in (None, 2, 3, 4, 5):
             cur.execute((Path(__file__).with_name('db') / 'migrate_v5_to_v6.sql').read_text())
-        cur.execute((Path(__file__).with_name('db') / 'add_points_ledger_task_date.sql').read_text())
+        for table, column, script in (
+            ('points_ledger','task_date','add_points_ledger_task_date.sql'),
+            ('children','gender','add_children_gender.sql'),
+        ):
+            cur.execute("SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema='lele' AND table_name=%s AND column_name=%s)",(table,column))
+            if not cur.fetchone()[0]:
+                cur.execute((Path(__file__).with_name('db') / script).read_text())
         marker = f'lele-schema-v6:{hashes[6]}:{PostgresStore._catalog(cur)}'
         cur.execute(psycopg.sql.SQL('COMMENT ON SCHEMA lele IS {}').format(psycopg.sql.Literal(marker)))
         result = {'initialized': previous is None, 'upgraded': previous is not None, 'version': 6}

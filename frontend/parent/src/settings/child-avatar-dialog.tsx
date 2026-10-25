@@ -41,7 +41,7 @@ export function ChildAvatarDialog({
         }
         onClose()
         deps.repaint()
-        deps.toast("儿童头像已更新")
+        deps.toast("儿童头像和性别已更新")
       },
     )
   }
@@ -65,8 +65,8 @@ export function ChildAvatarDialog({
         }}
       >
         <DialogHeader>
-          <DialogTitle>更换儿童头像</DialogTitle>
-          <DialogDescription>选择喜欢的头像，保存后家人也能看到。</DialogDescription>
+          <DialogTitle>修改头像和性别</DialogTitle>
+          <DialogDescription>选择男孩或女孩头像，保存后会同步修改性别。</DialogDescription>
         </DialogHeader>
         <div className="child-avatar-options">
           {error ? (

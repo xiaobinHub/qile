@@ -38,7 +38,8 @@ async function exerciseChildManagement({
   await open(dad)
   assert.equal(await dad.locator("#settingsDetailTitle").innerText(), "儿童管理")
   assert.equal(await dad.locator("#openChildNicknameSettings,#openFamilySettings").count(), 0)
-  assert.equal(await dad.locator('.child-management-profile [data-slot="badge"]').count(), 0)
+  assert.equal(await dad.locator('.child-management-profile [data-slot="badge"]').count(), 1)
+  assert.equal(await dad.locator('[data-child-gender]').innerText(), '男孩')
   assert.equal(await dad.locator(".child-family-list").getByText("我", { exact: true }).count(), 0)
   stage("child avatar grouped selection, cancel, retry and persistence")
   const avatarId = async () => (await api(dad, "/api/children")).children.find((c) => c.id === firstId).avatarId
@@ -332,6 +333,7 @@ async function exerciseChildManagement({
   await dad.setViewportSize({width:1135,height:789})
   await dad.locator("#openCreateChild").click()
   await dad.locator("#addChildName").fill("新儿童")
+  await createDialog.getByRole("radio",{name:"男孩",exact:true}).check()
   await dad.route("**/api/children",route=>route.request().method()==="POST"?route.fulfill({status:503,json:{error:"暂时无法添加儿童"}}):route.continue(),{times:1})
   await createDialog.getByRole("button",{name:"添加儿童",exact:true}).click()
   await dad.locator("#addChildError").getByText("暂时无法添加儿童",{exact:true}).waitFor()

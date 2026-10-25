@@ -27,6 +27,9 @@ class ReleaseValidationTests(unittest.TestCase):
         self.git('init', '-q')
         self.git('config', 'user.name', 'Release Test')
         self.git('config', 'user.email', 'release@example.invalid')
+        # Keep disposable repos synchronous; detached maintenance can race cleanup.
+        self.git('config', 'maintenance.auto', 'false')
+        self.git('config', 'gc.auto', '0')
         self.commit()
 
     def git(self, *args):

@@ -31,7 +31,7 @@ from lele_growth.storage import StoreError, STORE_FORMAT, STORE_VERSION, BACKUP_
 PASSWORDS = PasswordHasher(time_cost=3, memory_cost=65536, parallelism=2)
 DUMMY_HASH = PASSWORDS.hash(secrets.token_urlsafe(32))
 SESSION_SECONDS = {'parent': 30 * 24 * 3600, 'admin': 8 * 3600}
-from lele_growth.child_avatars import AVATAR_IDS, DEFAULT_AVATAR, ACCOUNT_AVATAR_IDS, DEFAULT_ACCOUNT_AVATAR
+from lele_growth.child_avatars import AVATAR_IDS, DEFAULT_AVATAR, CHILD_GENDER_AVATARS, ACCOUNT_AVATAR_IDS, DEFAULT_ACCOUNT_AVATAR
 
 USER_COLUMNS = 'id,login_name,nickname,role,status,must_change_password,password_hash'
 
@@ -190,6 +190,8 @@ class ChildService:
                         require(cur.fetchall()==[(6,)],503,'账号表字段尚未完成更新。')
                         cur.execute("SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema='lele' AND table_name='points_ledger' AND column_name='task_date')")
                         require(cur.fetchone()[0],503,'积分流水表尚未添加任务日期字段。')
+                        cur.execute("SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema='lele' AND table_name='children' AND column_name='gender')")
+                        require(cur.fetchone()[0],503,'儿童表尚未添加性别字段。')
                     return work(cur)
         except (ApiError, StoreError):
             raise
@@ -212,7 +214,7 @@ class ChildService:
     def access(self, cur, user, child_id, *, owner=False, write=False, allow_archived=False):
         require(user[3]=='parent',403,'管理员不能访问孩子业务数据。')
         self.lock_child(cur,child_id)
-        cur.execute("SELECT c.id,c.name,c.owner_id,c.archived,m.membership_version,(SELECT record_json->>'avatarId' FROM lele.app_settings WHERE child_id=c.id AND id=1) FROM lele.children c JOIN lele.memberships m ON m.child_id=c.id WHERE c.id=%s AND m.user_id=%s AND c.deleted_at IS NULL FOR UPDATE OF c,m",(child_id,user[0]))
+        cur.execute("SELECT c.id,c.name,c.owner_id,c.archived,m.membership_version,(SELECT record_json->>'avatarId' FROM lele.app_settings WHERE child_id=c.id AND id=1),c.gender FROM lele.children c JOIN lele.memberships m ON m.child_id=c.id WHERE c.id=%s AND m.user_id=%s AND c.deleted_at IS NULL FOR UPDATE OF c,m",(child_id,user[0]))
         row=cur.fetchone()
         require(row is not None,403,'没有此孩子的访问权限。','membership_revoked')
         require(not owner or row[2]==user[0],403,'只有负责人可以执行此操作。')
@@ -221,7 +223,7 @@ class ChildService:
 
     @staticmethod
     def child_public(row, user_id):
-        return dict(id=row[0],name=row[1],ownerId=row[2],archived=row[3],role='owner' if row[2]==user_id else 'parent',membershipVersion=row[4],avatarId=(row[5] if len(row)>5 and row[5] in AVATAR_IDS else DEFAULT_AVATAR))
+        return dict(id=row[0],name=row[1],ownerId=row[2],archived=row[3],role='owner' if row[2]==user_id else 'parent',membershipVersion=row[4],avatarId=(row[5] if len(row)>5 and row[5] in AVATAR_IDS else DEFAULT_AVATAR),gender=row[6] if len(row)>6 else None)
 
     def authenticate(self, cur, token, surface):
         require(isinstance(token,str) and len(token)<200,401,'请先登录。')
@@ -381,19 +383,22 @@ class ChildService:
         self.audit(cur,user[0],'admin.'+parts[3],detail={'userId':target})
         return {'ok':True}
 
-    def create_child(self,cur,user_id,name,record=None,*,child_id=None,media_images=None):
+    def create_child(self,cur,user_id,name,record=None,*,child_id=None,media_images=None,gender=None):
         from lele_growth.business_operations import default_data
         name=text_value(name)
         child=child_id or identity(); member=identity()
-        cur.execute('INSERT INTO lele.children(id,name,owner_id) VALUES(%s,%s,%s)',(child,name,user_id))
+        require(gender is None or (isinstance(gender,str) and gender in CHILD_GENDER_AVATARS),400,'请选择儿童性别。')
+        cur.execute('INSERT INTO lele.children(id,name,owner_id,gender) VALUES(%s,%s,%s,%s)',(child,name,user_id,gender))
         cur.execute('INSERT INTO lele.memberships(child_id,user_id,membership_version) VALUES(%s,%s,%s)',(child,user_id,member))
         record=record or dict(format=STORE_FORMAT,version=STORE_VERSION,revision=0,updatedAt=now_iso(),data=default_data(name))
+        if gender is not None:
+            record['data']['settings']['avatarId']=CHILD_GENDER_AVATARS[gender]
         validate_record(record)
         for asset,image in (media_images or {}).items():
             cur.execute("INSERT INTO lele.media_assets(id,child_id,uploaded_by,upload_id,membership_version,object_key,content_sha256,mime_type,byte_size,width,height,state,attached_at) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'attached',now())",(asset,child,user_id,'import:'+image.sha256,member,self.media.objects.key(child,image),image.sha256,image.mime,len(image.content),image.width,image.height))
         self.store.replace(cur,child,record['data']); self.store.metadata(cur,child,record,insert=True)
         self.audit(cur,user_id,'child.create',child)
-        return dict(id=child,name=name,ownerId=user_id,role='owner',archived=False,membershipVersion=member,avatarId=record['data']['settings'].get('avatarId',DEFAULT_AVATAR))
+        return dict(id=child,name=name,ownerId=user_id,role='owner',archived=False,membershipVersion=member,avatarId=record['data']['settings'].get('avatarId',DEFAULT_AVATAR),gender=gender)
 
     def parent(self,cur,user,method,path,body):
         if path=='account-avatars' and method=='GET':
@@ -403,11 +408,12 @@ class ChildService:
             from lele_growth.child_avatars import avatar_catalog
             return avatar_catalog(self.media.objects)
         if path=='children' and method=='GET':
-            cur.execute("SELECT c.id,c.name,c.owner_id,c.archived,m.membership_version,(SELECT record_json->>'avatarId' FROM lele.app_settings WHERE child_id=c.id AND id=1) FROM lele.children c JOIN lele.memberships m ON m.child_id=c.id WHERE m.user_id=%s AND c.deleted_at IS NULL ORDER BY c.created_at,c.id",(user[0],))
+            cur.execute("SELECT c.id,c.name,c.owner_id,c.archived,m.membership_version,(SELECT record_json->>'avatarId' FROM lele.app_settings WHERE child_id=c.id AND id=1),c.gender FROM lele.children c JOIN lele.memberships m ON m.child_id=c.id WHERE m.user_id=%s AND c.deleted_at IS NULL ORDER BY c.created_at,c.id",(user[0],))
             return {'children':[self.child_public(r,user[0]) for r in cur.fetchall()]}
         if path=='children' and method=='POST':
-            require(set(body)=={'name'})
-            return {'child':self.create_child(cur,user[0],child_name_value(body['name']))}
+            require(set(body)=={'name','gender'},400,'请填写儿童昵称并选择性别。')
+            require(isinstance(body['gender'],str) and body['gender'] in CHILD_GENDER_AVATARS,400,'请选择儿童性别。')
+            return {'child':self.create_child(cur,user[0],child_name_value(body['name']),gender=body['gender'])}
         if path=='invitations' and method=='GET':
             cur.execute("SELECT i.id,i.child_id,c.name,i.created_by,i.expires_at,(SELECT record_json->>'avatarId' FROM lele.app_settings WHERE child_id=c.id AND id=1) FROM lele.invitations i JOIN lele.children c ON c.id=i.child_id WHERE i.target_id=%s AND i.status='pending' AND i.expires_at>now() AND c.deleted_at IS NULL ORDER BY i.created_at",(user[0],))
             return {'invitations':[dict(id=r[0],childId=r[1],childName=r[2],createdBy=r[3],expiresAt=r[4].isoformat(),childAvatarId=r[5] or DEFAULT_AVATAR) for r in cur.fetchall()]}
@@ -433,6 +439,8 @@ class ChildService:
             self.save(cur,child_id,current,data)
             if name is not None:
                 cur.execute('UPDATE lele.children SET name=%s WHERE id=%s',(name,child_id))
+            else:
+                cur.execute('UPDATE lele.children SET gender=%s WHERE id=%s',(body['avatarId'].split('-')[0],child_id))
             self.audit(cur,user[0],'child.update',child_id,body)
             return {'ok':True}
         if suffix=='transfer' and method=='POST':

@@ -66,6 +66,8 @@ LELE_SURFACE=parent .venv/bin/python deploy/run.py
 
 对现有 v4 表，待执行的账号需求只增加 `users.avatar_id`、`users.family_role`；原有 v5/v6 变更记录用于核验这些字段是否已添加。流水需求通过独立的 `add_points_ledger_task_date.sql` 在原 `points_ledger` 表增加可空 `task_date date`，既有 v6 的编号保持为 6。预览中的 `pendingTableChanges` 会列出待添加的流水字段。
 
+儿童性别通过独立的 `add_children_gender.sql` 在原 `children` 表增加可空 `gender` 字段，仅允许 `boy`/`girl`，已有值为空，不根据历史头像回填。创建接口必填性别，分别设置 boy-04/girl-10 默认头像；之后由管理员保存头像时在同一事务中同步性别。预览会列出 `children.gender`，既有结构记录仍为 6。
+
 字段增量保持原库、原表、既有行及业务修订号。历史流水不回填日期，原列值和 JSON 内容不重写；`task_date IS NULL` 时接口不返回任务日期，页面显示“——”。新完成/撤销流水将日期写入此原生列，接口的 `taskDate` 是它的字段映射。更新结构指纹和维护审计用于记录表字段变更；重复执行无变更。未知结构会停止，`upgrade` 仅接受已初始化的已知结构；配置目标变化后须重新预览。
 
 首个管理员仅在账号表完全为空时允许引导；预览无需提供密码，执行时在交互终端两次输入，不支持命令行/环境变量/管道传密码：

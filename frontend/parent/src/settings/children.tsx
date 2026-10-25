@@ -2,6 +2,7 @@ import { AccountAvatar, familyRoleLabel } from "../features/account-avatar"
 import { ChildCreateDialog } from "./child-create-dialog"
 import { ChildAvatar } from "../features/child-avatar"
 import { ChildAvatarDialog } from "./child-avatar-dialog"
+import { childGenderLabel } from "../features/child-gender-picker"
 import { useState } from "react"
 import {
   Badge,
@@ -104,8 +105,8 @@ export function ChildManagement({ controller, child }: { controller: Controller;
             type="button"
             id="changeChildAvatar"
             className="child-management-avatar"
-            aria-label="更换儿童头像"
-            title={editable ? "修改头像" : "儿童头像由管理员修改"}
+            aria-label="修改头像和性别"
+            title={editable ? "修改头像和性别" : "儿童头像和性别由管理员修改"}
             disabled={!editable || !!action.busy}
             onClick={() => setAvatarOpen(true)}
           >
@@ -128,6 +129,20 @@ export function ChildManagement({ controller, child }: { controller: Controller;
                 </Button>
               )}
             </div>
+            <Badge asChild variant="secondary" className="child-gender-tag" data-child-gender>
+              <button
+                id="changeChildGender"
+                data-gender={child.gender || undefined}
+                type="button"
+                disabled={!editable || !!action.busy}
+                aria-label={`${childGenderLabel(child.gender)}，修改头像和性别`}
+                aria-haspopup="dialog"
+                aria-expanded={avatarOpen}
+                onClick={() => setAvatarOpen(true)}
+              >
+                {childGenderLabel(child.gender)}
+              </button>
+            </Badge>
             {!child.archived && (
               <p className="child-management-profile-help">
                 儿童昵称、家庭邀请和成员权限由管理员管理。

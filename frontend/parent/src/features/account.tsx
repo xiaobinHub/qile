@@ -1,4 +1,5 @@
 import { ChildAvatar } from "./child-avatar"
+import { ChildGenderPicker, type ChildGender } from "./child-gender-picker"
 import { useEffect, useRef, useState } from "react"
 import { UserRound, ShieldCheck, Baby, Mail, ArrowRight } from "lucide-react"
 import { PasswordInput } from "@shared/components/password-input"
@@ -91,6 +92,7 @@ export function Login({ message }: { message: string }) {
 export function Onboarding({ user, controller }: { user: User; controller: Controller }) {
   const action = useAsync(),
     [name, setName] = useState("")
+  const [gender, setGender] = useState<ChildGender | "">("")
   return (
     <section id="onboarding" className="onboarding">
       <header className="onboarding-heading">
@@ -111,8 +113,10 @@ export function Onboarding({ user, controller }: { user: User; controller: Contr
             onSubmit={(e) => {
               e.preventDefault()
               void action.run(async () => {
+                if (!gender) throw Error("请选择儿童性别。")
                 const result = await runtime.api<{ child: Child }>("/api/children", "POST", {
                   name: name.trim(),
+                  gender,
                 })
                 await runtime.sync(false)
                 await runtime.selectChild(result.child.id)
@@ -134,6 +138,7 @@ export function Onboarding({ user, controller }: { user: User; controller: Contr
                   placeholder="请输入孩子昵称"
                 />
               </Field>
+              <ChildGenderPicker value={gender} onChange={setGender} />
               <ErrorText message={action.error} id="childrenError" />
               <div className="form-actions">
                 <Button type="submit">{action.busy ? "正在创建…" : "创建孩子"}</Button>

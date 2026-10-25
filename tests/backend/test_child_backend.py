@@ -74,7 +74,7 @@ class ChildBackendTests(unittest.TestCase):
         return client,user
 
     def child(self):
-        r=self.call(self.a,'POST','/api/children',{'name':'测试孩子'})
+        r=self.call(self.a,'POST','/api/children',{'name':'测试孩子','gender':'boy'})
         self.assertEqual(r.status_code,200,r.text)
         return r.json()['child']
 
@@ -377,8 +377,51 @@ class ChildBackendTests(unittest.TestCase):
         self.assertEqual(member['familyRole'],'mother')
         self.call(self.a,'PATCH','/api/account/profile',{'avatarId':'father'})
 
+    def test_child_gender_is_required_persistent_and_bound_to_avatar(self):
+        before=len(self.a.get('/api/children').json()['children'])
+        for body in ({'name':'测试'}, {'name':'测试','gender':None}, {'name':'测试','gender':'other'}, {'name':'测试','gender':True}, {'name':'测试','gender':['girl']}, {'name':'测试','gender':'girl','avatarId':'boy-04'}):
+            self.assertEqual(self.call(self.a,'POST','/api/children',body).status_code,400)
+        self.assertEqual(len(self.a.get('/api/children').json()['children']),before)
+        for gender,avatar in (('boy','boy-04'),('girl','girl-10')):
+            result=self.call(self.a,'POST','/api/children',{'name':'性别测试','gender':gender})
+            self.assertEqual(result.status_code,200,result.text)
+            child=result.json()['child']; root='/api/children/'+child['id']
+            self.assertEqual((child['gender'],child['avatarId']),(gender,avatar))
+            self.assertEqual(self.service.transaction(lambda cur:cur.execute('SELECT gender FROM lele.children WHERE id=%s',(child['id'],)).fetchone())[0],gender)
+            self.assertEqual(self.data(child)['data']['settings']['avatarId'],avatar)
+            self.assertEqual(self.a.get(root+'/context').json()['child']['gender'],gender)
+            self.assertEqual(next(c for c in self.a.get('/api/children').json()['children'] if c['id']==child['id'])['gender'],gender)
+        self.join(child)
+        before=self.data(child)
+        self.assertEqual(self.call(self.b,'PATCH',root,{'avatarId':'boy-09'}).status_code,403)
+        self.assertEqual(self.call(self.a,'PATCH',root,{'avatarId':'invalid'}).status_code,400)
+        self.assertEqual(self.data(child)['revision'],before['revision'])
+        self.assertEqual(self.a.get(root+'/context').json()['child']['gender'],'girl')
+        self.assertEqual(self.call(self.a,'PATCH',root,{'avatarId':'boy-09'}).status_code,200)
+        self.assertEqual(self.a.get(root+'/context').json()['child']['gender'],'boy')
+        self.assertEqual(self.b.get(root+'/context').json()['child']['gender'],'boy')
+        self.assertEqual(self.data(child)['data']['settings']['avatarId'],'boy-09')
+        self.archive_fixture(child,True)
+        self.assertEqual(self.call(self.a,'PATCH',root,{'avatarId':'girl-10'}).status_code,409)
+        self.assertEqual(self.a.get(root+'/context').json()['child']['gender'],'boy')
+
+    def test_historical_child_gender_stays_null_until_avatar_save(self):
+        child=self.child(); root='/api/children/'+child['id']
+        self.assertEqual(self.call(self.a,'PATCH',root,{'avatarId':'girl-02'}).status_code,200)
+        self.service.transaction(lambda cur:cur.execute('UPDATE lele.children SET gender=NULL WHERE id=%s',(child['id'],)))
+        context=self.a.get(root+'/context').json()['child']
+        self.assertEqual(context['avatarId'],'girl-02')
+        self.assertIsNone(context['gender'])
+        self.assertEqual(self.call(self.a,'PATCH',root,{'name':'保留性别'}).status_code,200)
+        self.assertIsNone(self.a.get(root+'/context').json()['child']['gender'])
+        self.assertEqual(self.call(self.a,'PATCH',root,{'avatarId':'girl-02'}).status_code,200)
+        self.assertEqual(self.a.get(root+'/context').json()['child']['gender'],'girl')
+        with self.assertRaises(ApiError):
+            self.service.transaction(lambda cur:cur.execute("UPDATE lele.children SET gender='other' WHERE id=%s",(child['id'],)))
+        self.assertEqual(self.a.get(root+'/context').json()['child']['gender'],'girl')
+
     def test_child_name_limit_create_and_rename(self):
-        self.assertEqual(self.call(self.a,'POST','/api/children',{'name':'一二三四五六'}).status_code,400)
+        self.assertEqual(self.call(self.a,'POST','/api/children',{'name':'一二三四五六','gender':'boy'}).status_code,400)
         child=self.child(); root='/api/children/'+child['id']; before=self.data(child)
         self.assertEqual(self.call(self.a,'PATCH',root,{'name':'一二三四五六'}).status_code,400)
         self.assertEqual(self.data(child)['revision'],before['revision'])

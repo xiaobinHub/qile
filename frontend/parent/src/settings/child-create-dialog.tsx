@@ -1,4 +1,5 @@
-import { useRef, type FormEvent } from "react"
+import { useRef, useState, type FormEvent } from "react"
+import { ChildGenderPicker, type ChildGender } from "../features/child-gender-picker"
 import {
   Dialog,
   DialogContent,
@@ -18,6 +19,7 @@ export function ChildCreateDialog({
   onClose: () => void
 }) {
   const action = useAction(controller)
+  const [gender, setGender] = useState<ChildGender | "">("")
   const input = useRef<HTMLInputElement>(null)
   const returnFocus = useRef<HTMLElement | null>(null)
   const { deps } = controller
@@ -29,9 +31,13 @@ export function ChildCreateDialog({
       input.current?.focus()
       return
     }
+    if (!gender) {
+      action.setError("请选择儿童性别。")
+      return
+    }
     void action.run(
       "create-child",
-      () => deps.api<{ child: { id: string } }>("/api/children", "POST", { name }),
+      () => deps.api<{ child: { id: string } }>("/api/children", "POST", { name, gender }),
       async (result) => {
         await deps.sync(false)
         if (!action.active()) return
@@ -76,6 +82,7 @@ export function ChildCreateDialog({
                 placeholder="请输入儿童昵称"
               />
             </FormField>
+            <ChildGenderPicker value={gender} onChange={setGender} />
             <Feedback id="addChildError" message={action.error} />
             <DialogFooter>
               <Button type="button" variant="outline" onClick={onClose}>

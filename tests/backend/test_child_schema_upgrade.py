@@ -22,6 +22,46 @@ CONFIG = os.environ.get('LELE_TEST_CONFIG')
 
 @unittest.skipUnless(CONFIG, 'Set LELE_TEST_CONFIG to an isolated local test database')
 class ChildSchemaUpgradeTests(unittest.TestCase):
+    def test_existing_v6_gender_field_addition_preserves_child_and_business_rows(self):
+        base=ChildService(CONFIG).config
+        self.assertEqual(base['environment'],'development')
+        self.assertTrue(base['_connect']['dbname'].startswith('lele_test'))
+        name='lele_test_upgrade_'+uuid.uuid4().hex[:12]
+        admin={**base['_connect'],'dbname':'postgres'}
+        with psycopg.connect(**admin,autocommit=True) as db:
+            db.execute(sql.SQL('CREATE DATABASE {}').format(sql.Identifier(name)))
+        try:
+            with tempfile.TemporaryDirectory() as temp:
+                config=copy.deepcopy({k:v for k,v in base.items() if not k.startswith('_')})
+                config['database']['dbname']=name
+                path=Path(temp)/'config.json';path.write_text(json.dumps(config));path.chmod(0o600)
+                initialize(path);service=ChildService(path)
+                def fixture(cur):
+                    cur.execute("INSERT INTO lele.users(id,login_name,nickname,password_hash,role,status) VALUES('owner','owner','Owner','unused','parent','active')")
+                    child=service.create_child(cur,'owner','历史儿童',gender='girl')
+                    record=service.store.read(cur,child['id'])
+                    cur.execute('SET CONSTRAINTS ALL IMMEDIATE')
+                    cur.execute('ALTER TABLE lele.children DROP COLUMN gender')
+                    row=cur.execute('SELECT to_jsonb(c) FROM lele.children c WHERE id=%s',(child['id'],)).fetchone()[0]
+                    table_id=cur.execute("SELECT 'lele.children'::regclass::oid").fetchone()[0]
+                    marker=f'lele-schema-v6:{schema_sources(include_child_gender=False)[3][6]}:{PostgresStore._catalog(cur)}'
+                    cur.execute(sql.SQL('COMMENT ON SCHEMA lele IS {}').format(sql.Literal(marker)))
+                    return child['id'],row,record,table_id
+                child_id,row,record,table_id=service.transaction(fixture,exclusive=True)
+                self.assertEqual(inspect_schema(service)['pendingTableChanges'],['children.gender'])
+                self.assertEqual(initialize(path,upgrade_only=True),{'initialized':False,'upgraded':True,'version':6})
+                def verify(cur):
+                    self.assertEqual(cur.execute('SELECT current_database()').fetchone()[0],name)
+                    self.assertEqual(cur.execute("SELECT 'lele.children'::regclass::oid").fetchone()[0],table_id)
+                    self.assertEqual(cur.execute("SELECT to_jsonb(c)-'gender',gender FROM lele.children c WHERE id=%s",(child_id,)).fetchone(),(row,None))
+                    self.assertEqual(service.store.read(cur,child_id),record)
+                service.transaction(verify)
+                self.assertEqual(inspect_schema(service)['pendingTableChanges'],[])
+                self.assertEqual(initialize(path),{'initialized':False,'upgraded':False,'version':6})
+        finally:
+            with psycopg.connect(**admin,autocommit=True) as db:
+                db.execute(sql.SQL('DROP DATABASE {}').format(sql.Identifier(name)))
+
     def test_existing_v6_table_addition_keeps_database_rows_and_revision(self):
         from psycopg.types.json import Jsonb
         base = ChildService(CONFIG).config
@@ -45,7 +85,7 @@ class ChildSchemaUpgradeTests(unittest.TestCase):
                     child=service.create_child(cur,'owner','测试')
                     cur.execute('ALTER TABLE lele.points_ledger DROP COLUMN task_date')
                     cur.execute("INSERT INTO lele.points_ledger(child_id,record_json,sort_order,business_date,created_at) VALUES(%s,%s,0,'2026-10-18','2026-10-18T01:00:00Z')",(child['id'],Jsonb(old_ledger)))
-                    marker=f'lele-schema-v6:{schema_sources(include_ledger_date=False)[3][6]}:{PostgresStore._catalog(cur)}'
+                    marker=f'lele-schema-v6:{schema_sources(include_ledger_date=False, include_child_gender=False)[3][6]}:{PostgresStore._catalog(cur)}'
                     cur.execute(sql.SQL('COMMENT ON SCHEMA lele IS {}').format(sql.Literal(marker)))
                     return child['id'],cur.execute('SELECT revision FROM lele.app_metadata WHERE child_id=%s',(child['id'],)).fetchone()[0]
                 child_id,revision=service.transaction(fixture,exclusive=True)

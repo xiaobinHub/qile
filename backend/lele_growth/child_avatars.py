@@ -1,5 +1,6 @@
 """Curated shared avatars; signing credentials never leave the server."""
 DEFAULT_AVATAR = 'boy-04'
+CHILD_GENDER_AVATARS = {'boy': DEFAULT_AVATAR, 'girl': 'girl-10'}
 AVATAR_IDS = tuple(f'{group}-{number:02d}' for group in ('boy', 'girl') for number in range(1, 11))
 
 

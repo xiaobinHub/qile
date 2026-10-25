@@ -100,6 +100,7 @@ export type User = {
   mustChangePassword?: boolean
 }
 export type Child = {
+  gender?: "boy" | "girl" | null
   avatarId?: string
   id: string
   name: string
