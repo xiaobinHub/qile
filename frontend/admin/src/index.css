@@ -36,3 +36,95 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+.family-role-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+.family-role-option {
+  position: relative;
+  display: grid;
+  gap: 6px;
+  text-align: center;
+  font-size: var(--text-caption);
+  cursor: pointer;
+}
+.family-role-option > input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+.family-role-image {
+  position: relative;
+  display: block;
+  aspect-ratio: 1;
+  padding: 3px;
+  overflow: hidden;
+  border: 2px solid transparent;
+  border-radius: var(--radius-lg);
+  background: var(--muted);
+}
+.family-role-image img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.family-role-option > input:checked + .family-role-image {
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 22%, var(--card));
+}
+.family-role-option > input:focus-visible + .family-role-image {
+  outline: 2px solid var(--ring);
+  outline-offset: 3px;
+}
+.family-role-check {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: var(--primary-foreground);
+}
+.family-role-check svg {
+  width: 14px;
+  height: 14px;
+}
+.family-role-option > input:checked + .family-role-image .family-role-check {
+  display: flex;
+}
+.family-role-option:has(input:disabled) {
+  opacity: 0.6;
+  cursor: default;
+}
+@media (max-width: 380px) {
+  .family-role-grid {
+    gap: 8px;
+  }
+}
+
+.admin-account-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  padding: 1px;
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+  background: var(--muted);
+}
+.admin-account-avatar img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}

@@ -1,5 +1,17 @@
-export type Child = { id: string; name: string; role: "owner" | "parent"; archived: boolean }
-export type User = { id: string; nickname: string; loginName: string }
+export type Child = {
+  avatarId?: string
+  id: string
+  name: string
+  role: "owner" | "parent"
+  archived: boolean
+}
+export type User = {
+  familyRole?: string | null
+  avatarId?: string
+  id: string
+  nickname: string
+  loginName: string
+}
 export type Category = { id: string; name: string; color: string; active: boolean }
 export type Preset = {
   id: string
@@ -16,9 +28,12 @@ export type Context = {
   updatedAt: string | null
 }
 export type Invitation = {
+  familyRole?: string | null
+  avatarId?: string
   id: string
   childId: string
   childName: string
+  childAvatarId?: string
   userId: string
   nickname: string
   loginName: string

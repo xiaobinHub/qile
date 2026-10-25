@@ -23,11 +23,13 @@ class BusinessCommandsTest(unittest.TestCase):
         self.run_op('completion.set', occurrenceKey=key, completed=True)
         self.assertEqual(len(self.data['ledger']), 1)
         self.assertEqual(self.data['ledger'][0]['date'], '2026-10-16')
+        self.assertEqual(self.data['ledger'][0]['taskDate'], '2026-10-15')
         self.data['series'][0]['points'] = 100
         self.run_op('completion.set', occurrenceKey=key, completed=False)
         self.assertEqual(sum(x['amount'] for x in self.data['ledger']), 0)
         self.run_op('completion.set', occurrenceKey=key, completed=False)
         self.assertEqual(len(self.data['ledger']), 2)
+        self.assertEqual(self.data['ledger'][1]['taskDate'], '2026-10-15')
     def test_delete_preserves_completed_history(self):
         key = self.create(dict(freq='daily', interval=1, endType='never'))
         self.run_op('completion.set', occurrenceKey=key, completed=True)
@@ -44,6 +46,9 @@ class BusinessCommandsTest(unittest.TestCase):
         self.assertEqual((item['date'],item['originalDate']), ('2026-10-17','2026-10-15'))
         self.run_op('completion.set', occurrenceKey=key, completed=True)
         self.assertEqual(self.data['completions'][0]['snapshot']['title'],'改期')
+        self.assertEqual(self.data['ledger'][-1]['taskDate'],'2026-10-17')
+        self.run_op('completion.set', occurrenceKey=key, completed=False)
+        self.assertEqual(self.data['ledger'][-1]['taskDate'],'2026-10-17')
     def test_month_end_clamp_and_future_count(self):
         task={**self.task,'id':'monthly','startDate':'2026-01-31','recurrence':dict(freq='monthly',interval=1,monthDay=31,endType='count',count=3)}
         self.assertEqual([x['date'] for x in expand(task,'2026-01-01','2026-04-30')],['2026-01-31','2026-02-28','2026-03-31'])

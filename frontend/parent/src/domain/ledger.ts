@@ -81,3 +81,14 @@ export function ledgerView(ledger: Ledger[], filters: LedgerFilters = {}) {
     ),
   }
 }
+
+/** Only show a task date explicitly returned from the database. */
+export function ledgerTaskDate(row: Ledger): string | null {
+  if (row.kind !== "task-complete" && row.kind !== "task-reversal") return null
+  const candidate = row.taskDate
+  if (!candidate || !/^\d{4}-\d{2}-\d{2}$/.test(candidate)) return null
+  const date = new Date(candidate + "T12:00:00Z")
+  return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === candidate
+    ? candidate
+    : null
+}

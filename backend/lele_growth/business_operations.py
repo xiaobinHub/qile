@@ -289,7 +289,7 @@ def _apply(data, kind, p, stamp, today):
         snap = c["snapshot"]
         data["ledger"].append({"id": uid(), "kind": "task-complete" if p["completed"] else "task-reversal",
                                "amount": snap["points"] * (1 if p["completed"] else -1), "date": today,
-                               "createdAt": stamp, "occurrenceKey": p["occurrenceKey"], "source": snap["title"],
+                               "createdAt": stamp, "occurrenceKey": p["occurrenceKey"], "taskDate": snap["date"], "source": snap["title"],
                                "reason": "完成任务" if p["completed"] else "撤销任务完成"})
     elif kind == "ledger.manual":
         fields(p, ("amount", "reason", "date"), ("amount", "reason", "date"))

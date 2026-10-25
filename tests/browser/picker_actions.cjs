@@ -43,7 +43,7 @@ async function selectMonthDay(page, day) {
 async function selectTime(page, id, hour, minute) {
   await page.locator(`#${id}`).click()
   const panel = page.getByRole("dialog", {
-    name: id === "taskDuration" ? "选择持续时长" : "选择时间",
+    name: id === "taskDuration" || id === "presetDuration" ? "选择持续时长" : "选择时间",
     exact: true,
   })
   for (const [label, value] of [

@@ -1,3 +1,4 @@
+import { ChildAvatar } from "./child-avatar"
 import { useEffect, useRef, useState } from "react"
 import { UserRound, ShieldCheck, Baby, Mail, ArrowRight } from "lucide-react"
 import { PasswordInput } from "@shared/components/password-input"
@@ -119,13 +120,17 @@ export function Onboarding({ user, controller }: { user: User; controller: Contr
             }}
           >
             <fieldset disabled={action.busy}>
-              <Field label="孩子昵称" id="newChildName" help="每个孩子都有独立的任务、积分和礼品。">
+              <Field
+                label="孩子昵称"
+                id="newChildName"
+                help="昵称最多 5 个字，每个孩子都有独立的任务、积分和礼品。"
+              >
                 <Input
                   id="newChildName"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   required
-                  maxLength={40}
+                  maxLength={5}
                   placeholder="请输入孩子昵称"
                 />
               </Field>
@@ -256,7 +261,7 @@ export function ChildSwitcher({
             >
               <span className="portrait-decoration" aria-hidden />
               <span className="child-portrait" aria-hidden>
-                {Array.from(c.name)[0]}
+                <ChildAvatar id={c.avatarId} />
               </span>
               <strong>{c.name}</strong>
               <span>

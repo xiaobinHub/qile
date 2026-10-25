@@ -1246,7 +1246,7 @@ a {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
-.ledger-desktop td:nth-child(3) {
+.ledger-desktop td:nth-child(4) {
   white-space: normal;
   min-width: 160px;
 }
@@ -1504,9 +1504,6 @@ a {
   .nav button {
     flex: 1;
     min-height: 44px;
-  }
-  .topbar > #refreshData {
-    order: 2;
   }
   .calendar-toolbar h1 {
     flex: 1;
@@ -2041,16 +2038,6 @@ a {
   }
 }
 
-.topbar > #refreshData {
-  width: 36px;
-  height: 36px;
-  min-height: 36px;
-}
-.topbar > #refreshData svg {
-  width: 18px;
-  height: 18px;
-}
-
 .calendar-toolbar svg {
   width: 18px;
   height: 18px;
@@ -2154,9 +2141,6 @@ a {
   .child-profile {
     order: 1;
   }
-  .topbar > #refreshData {
-    order: 2;
-  }
   .nav {
     order: 3;
     width: 100%;
@@ -2198,7 +2182,6 @@ a {
 }
 
 @media (pointer: coarse) {
-  .topbar > #refreshData,
   .nav [data-size="navigation"],
   .child-profile,
   .calendar-toolbar [data-slot="button"],
@@ -2208,9 +2191,15 @@ a {
     min-height: 44px;
     height: auto;
   }
-  .topbar > #refreshData,
   .calendar-toolbar [data-size="icon"],
   .calendar-toolbar [data-slot="toggle-group-item"] {
     min-width: 44px;
   }
+}
+
+.child-avatar-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }

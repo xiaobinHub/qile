@@ -1,9 +1,136 @@
+import { AccountAvatar, familyRoleLabel } from "../features/account-avatar"
+import { AccountAvatarDialog } from "./account-avatar-dialog"
+import { Pencil } from "lucide-react"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@shared/components/ui/dialog"
 import { useRef, useState, type FormEvent } from "react"
 import { PasswordInput, passwordPolicy } from "@shared/components/password-input"
-import { Button, Feedback, FormField, Input, useAction } from "./primitives"
+import { Badge, Button, Feedback, FormField, Input, useAction } from "./primitives"
 import type { Controller, User } from "./types"
 
-export function AccountProfile({ controller, user }: { controller: Controller; user: User }) {
+export function AccountManagement({ controller, user }: { controller: Controller; user: User }) {
+  const [avatarOpen, setAvatarOpen] = useState(false)
+  const [editing, setEditing] = useState(false)
+  const returnFocus = useRef<HTMLElement | null>(null)
+  return (
+    <div className="account-management">
+      <section className="account-profile-card">
+        <h2 id="settingsDetailTitle" tabIndex={-1}>
+          账号管理
+        </h2>
+        <div className="account-profile-row">
+          <button
+            id="changeAccountAvatar"
+            className="account-profile-avatar"
+            type="button"
+            title="更换角色"
+            aria-label="更换角色"
+            onClick={() => setAvatarOpen(true)}
+          >
+            <AccountAvatar id={user.avatarId} />
+          </button>
+          <div className="account-profile-copy">
+            <div className="account-profile-name">
+              <strong>{user.nickname}</strong>
+              <Button
+                id="editAccountNickname"
+                type="button"
+                variant="ghost"
+                size="icon"
+                aria-label="修改账号昵称"
+                onClick={() => setEditing(true)}
+              >
+                <Pencil strokeWidth={1.5} />
+              </Button>
+            </div>
+            <p data-account-login>账号 ID：{user.loginName}</p>
+            <Badge
+              asChild
+              variant="secondary"
+              className="account-family-role"
+              data-account-family-role
+            >
+              <button
+                id="changeAccountRole"
+                type="button"
+                title="更换角色"
+                aria-label={`${familyRoleLabel(user.avatarId)}，更换角色`}
+                aria-haspopup="dialog"
+                aria-expanded={avatarOpen}
+                onClick={() => setAvatarOpen(true)}
+              >
+                {familyRoleLabel(user.avatarId)}
+              </button>
+            </Badge>
+          </div>
+        </div>
+      </section>
+      <section className="account-password-card" aria-labelledby="accountPasswordTitle">
+        <h3 id="accountPasswordTitle">修改密码</h3>
+        <AccountPassword controller={controller} />
+      </section>
+      {avatarOpen && (
+        <AccountAvatarDialog
+          controller={controller}
+          user={user}
+          onClose={() => setAvatarOpen(false)}
+        />
+      )}
+      <Dialog
+        open={editing}
+        onOpenChange={(open) => {
+          if (!controller.pending) setEditing(open)
+        }}
+      >
+        <DialogContent
+          id="accountNicknameDialog"
+          className="child-management-dialog"
+          showCloseButton={!controller.pending}
+          onOpenAutoFocus={() => {
+            returnFocus.current = document.activeElement as HTMLElement
+          }}
+          onCloseAutoFocus={(event) => {
+            event.preventDefault()
+            if (returnFocus.current?.isConnected) returnFocus.current.focus()
+          }}
+        >
+          <DialogHeader>
+            <DialogTitle>修改账号昵称</DialogTitle>
+            <DialogDescription>家人会通过这个昵称识别你。</DialogDescription>
+          </DialogHeader>
+          {editing && (
+            <AccountProfile
+              controller={controller}
+              user={user}
+              onCancel={() => setEditing(false)}
+              onSaved={() => {
+                setEditing(false)
+                controller.deps.toast("账号昵称已更新")
+              }}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+    </div>
+  )
+}
+
+export function AccountProfile({
+  controller,
+  user,
+  onSaved,
+  onCancel,
+}: {
+  controller: Controller
+  user: User
+  onSaved?: () => void
+  onCancel?: () => void
+}) {
   const action = useAction(controller),
     [success, setSuccess] = useState(false)
   const nickname = useRef<HTMLInputElement>(null)
@@ -19,21 +146,13 @@ export function AccountProfile({ controller, user }: { controller: Controller; u
       (result) => {
         controller.deps.updateUser(result.user)
         setSuccess(true)
-        controller.render()
+        onSaved?.()
       },
     )
   }
   return (
     <form id="profileForm" className="settings-form" onSubmit={submit}>
       <fieldset disabled={!!action.busy}>
-        <FormField
-          className="settings-field"
-          id="profileLogin"
-          label="登录名"
-          help="登录名由管理员开通，不支持修改。"
-        >
-          <Input id="profileLogin" value={user.loginName} readOnly autoComplete="username" />
-        </FormField>
         <FormField
           className="settings-field"
           id="profileNickname"
@@ -56,6 +175,9 @@ export function AccountProfile({ controller, user }: { controller: Controller; u
           success={success && !action.error}
         />
         <div className="settings-form-footer">
+          <Button variant="outline" type="button" onClick={onCancel}>
+            取消
+          </Button>
           <Button variant="default" type="submit">
             {action.busy ? "正在处理…" : "保存昵称"}
           </Button>
@@ -131,7 +253,7 @@ export function AccountPassword({ controller }: { controller: Controller }) {
             />
           </FormField>
         ))}
-        <Feedback id="profileError" message={action.error} />
+        <Feedback id="accountPasswordError" message={action.error} />
         <div className="settings-form-footer">
           <span>修改后，所有已登录页面需要重新登录。</span>
           <Button variant="default" type="submit">

@@ -210,6 +210,8 @@ def _validate_data(data: Any) -> dict:
             _bad()
         if not ((kind == "task-complete" and amount >= 0) or (kind == "task-reversal" and amount <= 0) or (kind == "manual" and amount != 0) or (kind == "gift-redeem" and amount < 0) or (kind == "gift-reversal" and amount > 0)):
             _bad()
+        if "taskDate" in row and not _date(row["taskDate"]):
+            _bad()
         if kind == "manual" and (not isinstance(row.get("reason"), str) or not row["reason"]):
             _bad()
         if kind == "gift-redeem":

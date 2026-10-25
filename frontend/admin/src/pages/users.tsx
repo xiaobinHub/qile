@@ -1,3 +1,4 @@
+import { AccountAvatar, useAccountAvatars } from "@/components/account-avatar"
 import { useCallback, useEffect, useRef, useState } from "react"
 import {
   ArrowUpRight,
@@ -45,7 +46,13 @@ import {
 } from "@shared/components/ui/table"
 import { FormFeedback } from "@shared/components/form-feedback"
 import { errorMessage, isIgnoredError, useSession } from "@/lib/session"
-import { accountStatus, statusLabels, type AccountStatus, type User } from "@/lib/types"
+import {
+  accountStatus,
+  familyRoleLabels,
+  statusLabels,
+  type AccountStatus,
+  type User,
+} from "@/lib/types"
 import { useMounted } from "@/lib/use-mounted"
 import {
   CreateUserDialog,
@@ -143,6 +150,7 @@ function UserActions({
 }
 
 export function UsersPage() {
+  const avatars = useAccountAvatars()
   const { request } = useSession()
   const [users, setUsers] = useState<User[] | null>(null)
   const [loading, setLoading] = useState(true)
@@ -324,7 +332,7 @@ export function UsersPage() {
           </div>
         )}
         <div className="admin-user-table min-w-0" aria-busy={loading}>
-          <Table className="w-full table-fixed">
+          <Table className="w-full min-w-[640px] table-fixed sm:min-w-0">
             <TableHeader className="sticky top-0 z-10 bg-card">
               <TableRow className="bg-muted/30 hover:bg-muted/30">
                 <TableHead className="h-11 w-[34%] pl-3 text-caption font-normal text-muted-foreground sm:pl-5 xl:w-[30%]">
@@ -370,11 +378,7 @@ export function UsersPage() {
                     <TableRow key={user.id} data-user-id={user.id} className="h-16">
                       <TableCell className="py-2 pl-3 sm:pl-5">
                         <div className="flex min-w-0 items-center gap-3">
-                          <div
-                            className={`hidden size-9 shrink-0 sm:flex items-center justify-center rounded-full text-sm font-medium ${user.role === "admin" ? "bg-primary/10 text-brand-ink" : "bg-muted text-muted-foreground"}`}
-                          >
-                            {Array.from(user.nickname || user.loginName)[0]}
-                          </div>
+                          <AccountAvatar id={user.avatarId} avatars={avatars} />
                           <div className="min-w-0">
                             <span
                               className="block truncate text-sm font-medium"
@@ -382,8 +386,11 @@ export function UsersPage() {
                             >
                               {user.nickname}
                             </span>
-                            <span className="mt-0.5 block text-caption text-muted-foreground xl:hidden">
-                              {user.role === "admin" ? "管理员" : "成员"}
+                            <span
+                              data-family-role
+                              className="mt-0.5 block text-caption text-muted-foreground"
+                            >
+                              {user.familyRole ? familyRoleLabels[user.familyRole] : "未设置"}
                             </span>
                           </div>
                         </div>

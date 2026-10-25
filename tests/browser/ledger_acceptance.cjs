@@ -49,13 +49,13 @@ async function exerciseLedger({
     const ledger = [
       row("cancelled", "task-complete", 10, 5, "a"),
       row("old-completion", "task-complete", 20, 5, "b"),
-      row("still-complete", "task-complete", 30, 5, "c"),
+      row("still-complete", "task-complete", 30, 5, `c@${month}-05`),
       row("bonus", "manual", 50, 5),
       row("undo-a", "task-reversal", -10, 6, "a"),
       row("undo-b", "task-reversal", -20, 6, "b"),
       row("deduction", "manual", -7, 6),
       row("redeem", "gift-redeem", -15, 6),
-      row("new-completion", "task-complete", 20, 7, "b"),
+      { ...row("new-completion", "task-complete", 20, 7, "b"), taskDate: `${month}-03` },
       { ...row("refund", "gift-reversal", 15, 7), relatedLedgerId: "redeem" },
     ]
     await context.route("**/api/**", async (route) => {
@@ -145,6 +145,14 @@ async function exerciseLedger({
       await page.locator("#calendarTitle").waitFor()
       await page.locator('[data-view="store"]').click()
       await page.locator('[data-store-tab="ledger"]').click()
+      if (width > 680) {
+        assert.equal(await page.locator('[data-ledger-id="still-complete"] [data-ledger-task-date]').innerText(), "——")
+        assert.equal(await page.locator('[data-ledger-id="new-completion"] [data-ledger-task-date]').innerText(), `${month}-03`)
+      } else {
+        const cards=panel.locator('.ledger-mobile-card')
+        assert.match(await cards.filter({hasText:'验收记录-still-complete'}).innerText(), /任务日期：——/)
+        assert.match(await cards.filter({hasText:'验收记录-new-completion'}).innerText(), new RegExp(`任务日期：${month}-03`))
+      }
       assert.equal(new URL(page.url()).pathname, `/children/${firstId}`)
       assert.ok(await page.title())
       assert.deepEqual(await panel.locator(".stats span").allTextContents(), [

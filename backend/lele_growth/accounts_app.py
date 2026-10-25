@@ -32,6 +32,8 @@ def create_app(config_path, surface='parent'):
         raise ApiError(503,'服务入口配置无效。')
     service=ChildService(config_path)
     production=service.config['environment']=='production'
+    storage=service.config['_object_storage']
+    avatar_origin = f" https://{storage['bucket']}.oss-{storage['region']}.aliyuncs.com" if storage and storage['provider']=='oss' else ''
     cookie_name=('__Host-' if production else '')+'lele_'+surface
     app=FastAPI(docs_url=None,redoc_url=None,openapi_url=None)
     app.state.service=service
@@ -58,7 +60,7 @@ def create_app(config_path, surface='parent'):
         response.headers['X-Content-Type-Options']='nosniff'
         response.headers['Referrer-Policy']='same-origin'
         response.headers['X-Frame-Options']='DENY'
-        response.headers['Content-Security-Policy']="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; frame-src 'self' blob:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
+        response.headers['Content-Security-Policy']=f"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:{avatar_origin}; connect-src 'self'; frame-src 'self' blob:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
         if production: response.headers['Strict-Transport-Security']='max-age=31536000'
         return response
 

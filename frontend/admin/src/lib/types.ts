@@ -1,7 +1,11 @@
+export type FamilyRole = "father" | "mother" | "grandfather" | "grandmother"
+
 export type SessionUser = {
   id: string
   loginName: string
   nickname: string
+  familyRole?: FamilyRole | null
+  avatarId?: string
   role: "admin" | "parent"
   mustChangePassword: boolean
 }
@@ -19,4 +23,11 @@ export const statusLabels: Record<AccountStatus, string> = {
   active: "已启用",
   pending: "待改密",
   disabled: "已停用",
+}
+
+export const familyRoleLabels: Record<FamilyRole, string> = {
+  father: "爸爸",
+  mother: "妈妈",
+  grandfather: "爷爷",
+  grandmother: "奶奶",
 }

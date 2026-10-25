@@ -1,3 +1,4 @@
+import { FamilyRolePicker } from "@/components/family-role-picker"
 import { useRef, useState, type FormEvent } from "react"
 import { LoaderCircle, Plus, ShieldAlert, X } from "lucide-react"
 import { FormFeedback } from "@shared/components/form-feedback"
@@ -96,6 +97,7 @@ export function CreateUserDialog({ onComplete }: { onComplete: MutationComplete 
         loginName: data.get("loginName"),
         nickname: data.get("nickname"),
         password: data.get("password"),
+        familyRole: data.get("familyRole"),
       })
       form.reset()
       await onComplete("账号已开通，请将初始登录信息交给该家长。")
@@ -168,6 +170,7 @@ export function CreateUserDialog({ onComplete }: { onComplete: MutationComplete 
               disabled={busy}
             />
           </div>
+          <FamilyRolePicker disabled={busy} />
           <div className="space-y-2">
             <Label htmlFor="createPassword">初始密码</Label>
             <PasswordInput
