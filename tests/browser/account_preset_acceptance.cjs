@@ -1,6 +1,6 @@
 const assert = require('node:assert/strict')
 const path = require('node:path')
-const { selectTime } = require('./picker_actions.cjs')
+const { selectTime, selectNumber } = require('./picker_actions.cjs')
 
 async function exercisePresetDuration({dad,firstId,out,api,axe,stage}) {
   stage('preset duration: same-row fields, midnight validation, persistence and edit round trip')
@@ -14,7 +14,7 @@ async function exercisePresetDuration({dad,firstId,out,api,axe,stage}) {
     const category=await dad.locator('#presetCategory').boundingBox(), points=await dad.locator('#presetPoints').boundingBox()
     assert.ok(Math.abs(category.y-points.y)<2,'Category and reward share a row')
     await dad.locator('#presetTitle').fill('时长配置'+width)
-    await dad.locator('#presetPoints').fill('13')
+    await selectNumber(dad,'presetPoints',15)
     await selectTime(dad,'presetDuration',1,10)
     await selectTime(dad,'presetStart',18,15)
     assert.equal(await dad.locator('#presetDuration').inputValue(),'1小时10分钟')
@@ -24,7 +24,7 @@ async function exercisePresetDuration({dad,firstId,out,api,axe,stage}) {
     await dialog.waitFor({state:'hidden'})
     let record=await api(dad,`/api/children/${firstId}/data`)
     const preset=record.data.taskPresets.find(p=>p.title==='时长配置'+width)
-    assert.equal(preset.startTime,'18:15'); assert.equal(preset.endTime,'19:25'); assert.equal(preset.points,13)
+    assert.equal(preset.startTime,'18:15'); assert.equal(preset.endTime,'19:25'); assert.equal(preset.points,15)
     await dad.locator(`[data-preset-edit="${preset.id}"]`).click()
     assert.equal(await dad.locator('#presetDuration').inputValue(),'1小时10分钟')
     await selectTime(dad,'presetStart',23,30)

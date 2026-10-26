@@ -24,6 +24,7 @@ export type Preset = {
 }
 export type Context = {
   child: Child | null
+  children: Child[]
   user: User
   data: { categories: Category[]; taskPresets: Preset[] } | null
   updatedAt: string | null
