@@ -58,11 +58,11 @@ async function exercisePCIPad({ browser, dad, admin, origin, adminOrigin, firstI
       await page.waitForFunction(()=>document.activeElement===document.querySelector('#openChildrenDialog'));
       await page.locator('[data-mode="week"]').click();
       const before=await page.locator('.week-wrap').evaluate(el=>{el.scrollTop=680;el.scrollLeft=100;return {top:el.scrollTop,left:el.scrollLeft}});
-      await page.locator('[data-view="settings"]').click();await page.locator('#openPasswordSettings').click();
+      await page.locator('[data-view="settings"]').click();await page.locator('#openAccountManagement').click();
       const full=await page.locator('#passwordNew').evaluate(el=>({input:el.parentElement.getBoundingClientRect().width,form:el.closest('form').getBoundingClientRect().width}));assert.ok(Math.abs(full.input-full.form)<2,'Password field spans available content');
       const sidebar=await page.locator('.settings-sidebar').boundingBox();assert.ok(Math.abs(sidebar.width-(width<1200?184:208))<=2,'Compact settings sidebar width');
       assert.equal(await page.locator('.settings-sidebar').evaluate(el=>getComputedStyle(el).backgroundColor),'rgb(255, 255, 255)','Settings sidebar stays white');
-      await page.locator('#openChildNicknameSettings').click();
+      await page.locator('#openChildManagementSettings').click();
       assert.equal(await page.locator('.settings-nav-item[aria-current="page"]').evaluate(el=>getComputedStyle(el).backgroundColor),'rgb(255, 240, 179)','Selected settings entry has the approved pale yellow surface');
       if(width===1487){
         const detail=await page.locator('.settings-detail').boundingBox();

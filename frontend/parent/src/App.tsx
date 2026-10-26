@@ -1,5 +1,6 @@
+import { ChildAvatar } from "./features/child-avatar"
 import { Suspense, lazy, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react"
-import { RefreshCw, ChevronDown, Sprout } from "lucide-react"
+import { Sprout } from "lucide-react"
 import { ToastProvider, useToast } from "@shared/components/ui/toast"
 import { Button, Confirm, ErrorText, SaveResolution, Modal } from "./features/ui"
 import { Skeleton } from "@shared/components/ui/skeleton"
@@ -177,20 +178,6 @@ function Application() {
             {child && (
               <>
                 <Button
-                  id="refreshData"
-                  variant="ghost"
-                  size="icon"
-                  aria-label="刷新数据"
-                  disabled={snapshot.busy}
-                  onClick={() => {
-                    void runtime.refresh().catch((e) => {
-                      if (e.kind !== "stale") notify(e.message)
-                    })
-                  }}
-                >
-                  <RefreshCw aria-hidden />
-                </Button>
-                <Button
                   id="openChildrenDialog"
                   disabled={snapshot.busy}
                   variant="ghost"
@@ -202,13 +189,12 @@ function Application() {
                   onClick={() => setSwitcher(true)}
                 >
                   <span className="child-avatar" aria-hidden>
-                    {Array.from(child.name)[0]}
+                    <ChildAvatar id={child.avatarId} />
                   </span>
                   <span className="child-profile-copy">
                     <strong>{child.name}</strong>
                     {child.archived && <small>已归档 · 只读</small>}
                   </span>
-                  <ChevronDown aria-hidden />
                 </Button>
               </>
             )}

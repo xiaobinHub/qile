@@ -1,3 +1,6 @@
+import { ChildAvatar } from "./child-avatar"
+import { ChildGenderPicker, type ChildGender } from "./child-gender-picker"
+import { useChildCreation } from "./use-child-creation"
 import { useEffect, useRef, useState } from "react"
 import { UserRound, ShieldCheck, Baby, Mail, ArrowRight } from "lucide-react"
 import { PasswordInput } from "@shared/components/password-input"
@@ -90,6 +93,8 @@ export function Login({ message }: { message: string }) {
 export function Onboarding({ user, controller }: { user: User; controller: Controller }) {
   const action = useAsync(),
     [name, setName] = useState("")
+  const [gender, setGender] = useState<ChildGender | "">("")
+  const creation = useChildCreation(runtime)
   return (
     <section id="onboarding" className="onboarding">
       <header className="onboarding-heading">
@@ -110,28 +115,41 @@ export function Onboarding({ user, controller }: { user: User; controller: Contr
             onSubmit={(e) => {
               e.preventDefault()
               void action.run(async () => {
-                const result = await runtime.api<{ child: Child }>("/api/children", "POST", {
-                  name: name.trim(),
-                })
-                await runtime.sync(false)
-                await runtime.selectChild(result.child.id)
+                if (!gender) throw Error("请选择儿童性别。")
+                const child = await creation.save(name.trim(), gender)
+                await creation.refresh()
+                await runtime.selectChild(child.id)
               })
             }}
           >
             <fieldset disabled={action.busy}>
-              <Field label="孩子昵称" id="newChildName" help="每个孩子都有独立的任务、积分和礼品。">
+              <Field
+                label="孩子昵称"
+                id="newChildName"
+                help="昵称最多 5 个字，每个孩子都有独立的任务、积分和礼品。"
+              >
                 <Input
                   id="newChildName"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   required
-                  maxLength={40}
+                  disabled={creation.locked}
+                  maxLength={5}
                   placeholder="请输入孩子昵称"
                 />
               </Field>
+              <ChildGenderPicker value={gender} onChange={setGender} disabled={creation.locked} />
               <ErrorText message={action.error} id="childrenError" />
               <div className="form-actions">
-                <Button type="submit">{action.busy ? "正在创建…" : "创建孩子"}</Button>
+                <Button type="submit">
+                  {creation.created
+                    ? action.busy
+                      ? "正在刷新…"
+                      : "重试刷新"
+                    : action.busy
+                      ? "正在创建…"
+                      : "创建孩子"}
+                </Button>
               </div>
             </fieldset>
           </form>
@@ -256,7 +274,7 @@ export function ChildSwitcher({
             >
               <span className="portrait-decoration" aria-hidden />
               <span className="child-portrait" aria-hidden>
-                {Array.from(c.name)[0]}
+                <ChildAvatar id={c.avatarId} />
               </span>
               <strong>{c.name}</strong>
               <span>

@@ -5,7 +5,7 @@ const path = require('node:path')
 
 async function exerciseRecurrence({dad, origin, firstId, api, data, choose, persisted, out, axe, stage}) {
   stage('recurrence history survives stop and single-tail reedit; explicit monthly day and repeat count persist')
-  const child = (await api(dad, '/api/children', 'POST', {name:'规则修复隔离验收'})).child
+  const child = (await api(dad, '/api/children', 'POST', {name:'规则验收'})).child
   assert.ok(child?.id)
   const dates = await dad.evaluate(() => {
     const date = new Date(), format = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
@@ -38,6 +38,8 @@ async function exerciseRecurrence({dad, origin, firstId, api, data, choose, pers
     await old.locator('[data-task-complete]').click()
     await persisted(dad,child.id,p=>p.data.completions.some(c=>c.occurrenceKey===key&&c.completed))
     await old.locator('[data-task-complete]').click()
+    await dad.locator('#undoTaskCompletionDialog').getByRole('button',{name:'确认撤销',exact:true}).click()
+    await dad.locator('#undoTaskCompletionDialog').waitFor({state:'hidden'})
     await persisted(dad,child.id,p=>p.data.ledger.length===2&&p.data.ledger.reduce((n,l)=>n+l.amount,0)===0)
     await dad.locator(`[data-month-occ="${tail}"] [data-task-edit]`).click()
     assert.equal(await dad.locator('#taskRepeat').getAttribute('data-state'),'unchecked')

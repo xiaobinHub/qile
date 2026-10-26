@@ -74,9 +74,70 @@ class ChildBackendTests(unittest.TestCase):
         return client,user
 
     def child(self):
-        r=self.call(self.a,'POST','/api/children',{'name':'测试孩子'})
+        r=self.call(self.a,'POST','/api/children',{'name':'测试孩子','gender':'boy','requestId':str(uuid.uuid4())})
         self.assertEqual(r.status_code,200,r.text)
         return r.json()['child']
+
+    def test_child_creation_retry_is_durable_actor_scoped_and_allows_same_names(self):
+        body={'name':'重试儿童','gender':'boy','requestId':str(uuid.uuid4())}
+        first=self.call(self.a,'POST','/api/children',body)
+        self.assertEqual(first.status_code,200,first.text)
+        replay=self.call(self.a,'POST','/api/children',body)
+        self.assertEqual(replay.status_code,200,replay.text)
+        self.assertEqual(replay.json()['child']['id'],first.json()['child']['id'])
+        other_actor=self.call(self.b,'POST','/api/children',body)
+        separate=self.call(self.a,'POST','/api/children',{**body,'requestId':str(uuid.uuid4())})
+        self.assertEqual(other_actor.status_code,200,other_actor.text)
+        self.assertEqual(separate.status_code,200,separate.text)
+        self.assertEqual(len({first.json()['child']['id'],other_actor.json()['child']['id'],separate.json()['child']['id']}),3)
+        def verify(cur):
+            cur.execute('SELECT child_id FROM lele.idempotency_records WHERE actor_id=%s AND creation_request_id=%s',(self.au['id'],body['requestId']))
+            self.assertEqual(cur.fetchall(),[(first.json()['child']['id'],)])
+            cur.execute("SELECT count(*) FROM lele.audit_events WHERE child_id=%s AND action='child.create'",(first.json()['child']['id'],))
+            self.assertEqual(cur.fetchone()[0],1)
+        self.service.transaction(verify)
+
+    def test_child_creation_concurrent_replay_and_conflicting_payload(self):
+        body={'name':'并发儿童','gender':'girl','requestId':str(uuid.uuid4())}
+        with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+            results=list(executor.map(lambda _:self.call(self.a,'POST','/api/children',body),range(3)))
+        self.assertEqual([r.status_code for r in results],[200]*3,[r.text for r in results])
+        self.assertEqual(len({r.json()['child']['id'] for r in results}),1)
+        for changes in ({'name':'变更昵称'},{'gender':'boy'}):
+            conflict=self.call(self.a,'POST','/api/children',{**body,**changes})
+            self.assertEqual(conflict.status_code,409,conflict.text)
+            self.assertEqual(conflict.json()['kind'],'creation_conflict')
+
+    def test_child_creation_and_receipt_roll_back_together(self):
+        body={'name':'事务儿童','gender':'girl','requestId':str(uuid.uuid4())}
+        before=len(self.a.get('/api/children').json()['children'])
+        with patch.object(self.service.store.__class__,'replace',side_effect=ApiError(503,'模拟事务中断')):
+            failed=self.call(self.a,'POST','/api/children',body)
+        self.assertEqual(failed.status_code,503,failed.text)
+        self.assertEqual(len(self.a.get('/api/children').json()['children']),before)
+        self.assertEqual(self.service.transaction(lambda cur:cur.execute('SELECT count(*) FROM lele.idempotency_records WHERE creation_request_id=%s',(body['requestId'],)).fetchone()[0]),0)
+        retry=self.call(self.a,'POST','/api/children',body)
+        self.assertEqual(retry.status_code,200,retry.text)
+        self.assertEqual(len(self.a.get('/api/children').json()['children']),before+1)
+
+    def test_child_creation_replay_checks_access_and_never_recreates_deleted_children(self):
+        body={'name':'权限儿童','gender':'boy','requestId':str(uuid.uuid4())}
+        first=self.call(self.a,'POST','/api/children',body)
+        self.assertEqual(first.status_code,200,first.text)
+        child=first.json()['child']
+        self.join(child)
+        self.assertEqual(self.call(self.a,'POST','/api/children/'+child['id']+'/transfer',{'userId':self.bu['id']}).status_code,200)
+        self.assertEqual(self.call(self.b,'DELETE','/api/children/'+child['id']+'/members/'+self.au['id']).status_code,200)
+        self.assertEqual(self.call(self.a,'POST','/api/children',body).status_code,403)
+        self.assertEqual(self.call(self.b,'DELETE','/api/children/'+child['id']).status_code,200)
+        self.assertEqual(self.call(self.a,'POST','/api/children',body).status_code,403)
+        self.assertEqual(self.service.transaction(lambda cur:cur.execute('SELECT count(*) FROM lele.idempotency_records WHERE creation_request_id=%s',(body['requestId'],)).fetchone()[0]),1)
+
+    def test_child_creation_requires_valid_request_id(self):
+        for request_id in (None,'',7,{},'short','x'*101,'invalid/key'):
+            body={'name':'编号校验','gender':'boy','requestId':request_id}
+            self.assertEqual(self.call(self.a,'POST','/api/children',body).status_code,400)
+        self.assertEqual(self.call(self.a,'POST','/api/children',{'name':'缺少编号','gender':'boy'}).status_code,400)
 
     def archive_fixture(self,child,archived):
         # Compatibility fixture only: the public archive/restore API is removed.
@@ -113,6 +174,31 @@ class ChildBackendTests(unittest.TestCase):
         self.assertEqual(self.a.put('/api/data',json={}).status_code,403)
         unauth=TestClient(self.parent_app)
         self.assertEqual(unauth.get('/api/children').status_code,401)
+
+    def test_task_dates_use_native_ledger_column_and_leave_history_unknown(self):
+        from psycopg.types.json import Jsonb
+        child=self.child()
+        def command(kind,payload):
+            current=self.data(child)
+            request={**self.operation(child,current), 'kind':kind,'payload':payload}
+            result=self.call(self.a,'POST','/api/children/'+child['id']+'/operations',request)
+            self.assertEqual(result.status_code,200,result.text)
+            return result.json()
+        category=self.data(child)['data']['categories'][0]['id']
+        created=command('task.create',{'task':dict(title='日期持久化',startDate='2026-10-17',startTime='18:00',endTime='18:30',categoryId=category,points=7,note='',recurrence=None)})
+        key=created['data']['series'][-1]['id']+'@2026-10-17'
+        completed=command('completion.set',{'occurrenceKey':key,'completed':True})
+        ledger_id=completed['data']['ledger'][-1]['id']
+        native=self.service.transaction(lambda cur:cur.execute('SELECT task_date::text,record_json FROM lele.points_ledger WHERE child_id=%s AND id=%s',(child['id'],ledger_id)).fetchone())
+        self.assertEqual(native[0],'2026-10-17')
+        self.assertNotIn('taskDate',native[1])
+        # A JSON-only value from earlier development code must never become a task date.
+        self.service.transaction(lambda cur:cur.execute('UPDATE lele.points_ledger SET task_date=NULL,record_json=record_json || %s WHERE child_id=%s AND id=%s',(Jsonb({'taskDate':'2026-10-15'}),child['id'],ledger_id)))
+        self.assertNotIn('taskDate',self.data(child)['data']['ledger'][-1])
+        reversed_data=command('completion.set',{'occurrenceKey':key,'completed':False})
+        self.assertNotIn('taskDate',reversed_data['data']['ledger'][0])
+        self.assertEqual(reversed_data['data']['ledger'][-1]['taskDate'],'2026-10-17')
+        self.assertEqual(sum(row['amount'] for row in reversed_data['data']['ledger']),0)
 
     def test_admin_built_assets_are_surface_scoped(self):
         parent_page=self.a.get('/')
@@ -301,7 +387,130 @@ class ChildBackendTests(unittest.TestCase):
         self.archive_fixture(child,False)
         self.assertEqual(self.call(self.a,'POST','/api/children/'+child['id']+'/transfer',{'userId':self.bu['id']}).status_code,200)
         self.assertEqual(self.call(self.a,'PATCH','/api/children/'+child['id'],{'name':'No'}).status_code,403)
-        self.assertEqual(self.call(self.b,'PATCH','/api/children/'+child['id'],{'name':'New name'}).status_code,200)
+        self.assertEqual(self.call(self.b,'PATCH','/api/children/'+child['id'],{'name':'新昵称'}).status_code,200)
+
+    def test_admin_creates_family_role_with_matching_initial_avatar(self):
+        for family_role in ('father','mother','grandfather','grandmother'):
+            name='role'+uuid.uuid4().hex[:12]
+            r=self.call(self.admin,'POST','/api/admin/users',{'loginName':name,'nickname':'家庭角色','password':PASSWORD,'familyRole':family_role})
+            self.assertEqual(r.status_code,200,r.text)
+            user=r.json()['user']
+            self.assertEqual((user['familyRole'],user['avatarId'],user['role']),(family_role,family_role,'parent'))
+            listed=next(u for u in self.admin.get('/api/admin/users').json()['users'] if u['id']==user['id'])
+            self.assertEqual(listed['familyRole'],family_role)
+            client=TestClient(self.parent_app,base_url=self.service.config['parent_origin'])
+            self.assertEqual(self.login(client,name,PASSWORD).json()['user']['familyRole'],family_role)
+            self.call(client,'POST','/api/account/password',{'newPassword':NEW_PASSWORD})
+            self.login(client,name,NEW_PASSWORD)
+            self.assertEqual(self.call(client,'PATCH','/api/account/profile',{'avatarId':'mother'}).json()['user']['familyRole'],'mother')
+            self.assertEqual(self.call(client,'PATCH','/api/account/profile',{'familyRole':'father'}).status_code,400)
+        for invalid in ('admin','owner','son','',None,[],{}):
+            r=self.call(self.admin,'POST','/api/admin/users',{'loginName':'invalidrole','nickname':'测试','password':PASSWORD,'familyRole':invalid})
+            self.assertEqual(r.status_code,400,r.text)
+        self.assertEqual(self.call(self.a,'POST','/api/admin/users',{'loginName':'forgedrole','nickname':'测试','password':PASSWORD,'familyRole':'father'}).status_code,403)
+        with patch('lele_growth.child_avatars.account_avatar_catalog',return_value={'avatars':[]}):
+            self.assertEqual(self.admin.get('/api/admin/account-avatars').status_code,200)
+            self.assertEqual(self.a.get('/api/admin/account-avatars').status_code,403)
+
+    def test_account_avatar_is_persistent_private_and_independent_of_nickname(self):
+        before=self.a.get('/api/auth/me').json()['user']
+        self.assertEqual(before['avatarId'],'father')
+        for invalid in ('boy-04','unknown','https://example.com/a.png','../father',None,{},[]):
+            self.assertEqual(self.call(self.a,'PATCH','/api/account/profile',{'avatarId':invalid}).status_code,400)
+        self.assertEqual(self.call(self.a,'PATCH','/api/account/profile',{'avatarId':'mother','userId':self.bu['id']}).status_code,400)
+        for avatar in ('mother','grandfather','grandmother','father'):
+            response=self.call(self.a,'PATCH','/api/account/profile',{'avatarId':avatar})
+            self.assertEqual(response.status_code,200,response.text)
+            self.assertEqual(response.json()['user']['avatarId'],avatar)
+            self.assertEqual(response.json()['user']['familyRole'],avatar)
+            self.assertEqual(self.service.transaction(lambda c:c.execute('SELECT family_role FROM lele.users WHERE id=%s',(self.au['id'],)).fetchone())[0],avatar)
+            self.assertEqual(self.a.get('/api/auth/me').json()['user']['avatarId'],avatar)
+            self.assertEqual(self.b.get('/api/auth/me').json()['user']['avatarId'],'father')
+            self.assertEqual(response.json()['user']['loginName'],before['loginName'])
+            self.assertEqual(response.json()['user']['nickname'],before['nickname'])
+        self.call(self.a,'PATCH','/api/account/profile',{'avatarId':'mother'})
+        self.assertEqual(self.login(self.a,'parenta',NEW_PASSWORD).json()['user']['avatarId'],'mother')
+        self.call(self.a,'PATCH','/api/account/profile',{'nickname':before['nickname']})
+        self.assertEqual(self.a.get('/api/auth/me').json()['user']['avatarId'],'mother')
+        child=self.child(); self.join(child)
+        member=next(m for m in self.b.get('/api/children/'+child['id']+'/members').json()['members'] if m['userId']==self.au['id'])
+        self.assertEqual(member['avatarId'],'mother')
+        self.assertEqual(member['familyRole'],'mother')
+        self.call(self.a,'PATCH','/api/account/profile',{'avatarId':'father'})
+
+    def test_child_gender_is_required_persistent_and_bound_to_avatar(self):
+        before=len(self.a.get('/api/children').json()['children'])
+        for body in ({'name':'测试'}, {'name':'测试','gender':None}, {'name':'测试','gender':'other'}, {'name':'测试','gender':True}, {'name':'测试','gender':['girl']}, {'name':'测试','gender':'girl','avatarId':'boy-04'}):
+            self.assertEqual(self.call(self.a,'POST','/api/children',{**body,'requestId':str(uuid.uuid4())}).status_code,400)
+        self.assertEqual(len(self.a.get('/api/children').json()['children']),before)
+        for gender,avatar in (('boy','boy-04'),('girl','girl-10')):
+            result=self.call(self.a,'POST','/api/children',{'name':'性别测试','gender':gender,'requestId':str(uuid.uuid4())})
+            self.assertEqual(result.status_code,200,result.text)
+            child=result.json()['child']; root='/api/children/'+child['id']
+            self.assertEqual((child['gender'],child['avatarId']),(gender,avatar))
+            self.assertEqual(self.service.transaction(lambda cur:cur.execute('SELECT gender FROM lele.children WHERE id=%s',(child['id'],)).fetchone())[0],gender)
+            self.assertEqual(self.data(child)['data']['settings']['avatarId'],avatar)
+            self.assertEqual(self.a.get(root+'/context').json()['child']['gender'],gender)
+            self.assertEqual(next(c for c in self.a.get('/api/children').json()['children'] if c['id']==child['id'])['gender'],gender)
+        self.join(child)
+        before=self.data(child)
+        self.assertEqual(self.call(self.b,'PATCH',root,{'avatarId':'boy-09'}).status_code,403)
+        self.assertEqual(self.call(self.a,'PATCH',root,{'avatarId':'invalid'}).status_code,400)
+        self.assertEqual(self.data(child)['revision'],before['revision'])
+        self.assertEqual(self.a.get(root+'/context').json()['child']['gender'],'girl')
+        self.assertEqual(self.call(self.a,'PATCH',root,{'avatarId':'boy-09'}).status_code,200)
+        self.assertEqual(self.a.get(root+'/context').json()['child']['gender'],'boy')
+        self.assertEqual(self.b.get(root+'/context').json()['child']['gender'],'boy')
+        self.assertEqual(self.data(child)['data']['settings']['avatarId'],'boy-09')
+        self.archive_fixture(child,True)
+        self.assertEqual(self.call(self.a,'PATCH',root,{'avatarId':'girl-10'}).status_code,409)
+        self.assertEqual(self.a.get(root+'/context').json()['child']['gender'],'boy')
+
+    def test_historical_child_gender_stays_null_until_avatar_save(self):
+        child=self.child(); root='/api/children/'+child['id']
+        self.assertEqual(self.call(self.a,'PATCH',root,{'avatarId':'girl-02'}).status_code,200)
+        self.service.transaction(lambda cur:cur.execute('UPDATE lele.children SET gender=NULL WHERE id=%s',(child['id'],)))
+        context=self.a.get(root+'/context').json()['child']
+        self.assertEqual(context['avatarId'],'girl-02')
+        self.assertIsNone(context['gender'])
+        self.assertEqual(self.call(self.a,'PATCH',root,{'name':'保留性别'}).status_code,200)
+        self.assertIsNone(self.a.get(root+'/context').json()['child']['gender'])
+        self.assertEqual(self.call(self.a,'PATCH',root,{'avatarId':'girl-02'}).status_code,200)
+        self.assertEqual(self.a.get(root+'/context').json()['child']['gender'],'girl')
+        with self.assertRaises(ApiError):
+            self.service.transaction(lambda cur:cur.execute("UPDATE lele.children SET gender='other' WHERE id=%s",(child['id'],)))
+        self.assertEqual(self.a.get(root+'/context').json()['child']['gender'],'girl')
+
+    def test_child_name_limit_create_and_rename(self):
+        self.assertEqual(self.call(self.a,'POST','/api/children',{'name':'一二三四五六','gender':'boy','requestId':str(uuid.uuid4())}).status_code,400)
+        child=self.child(); root='/api/children/'+child['id']; before=self.data(child)
+        self.assertEqual(self.call(self.a,'PATCH',root,{'name':'一二三四五六'}).status_code,400)
+        self.assertEqual(self.data(child)['revision'],before['revision'])
+        self.assertEqual(self.call(self.a,'PATCH',root,{'name':'一二三四五'}).status_code,200)
+        self.assertEqual(self.a.get(root+'/context').json()['child']['name'],'一二三四五')
+
+    def test_child_avatar_persistence_and_permissions(self):
+        child=self.child(); self.join(child)
+        root='/api/children/'+child['id']
+        before=self.data(child)
+        self.assertEqual(child['avatarId'],'boy-04')
+        for invalid in ('boy-00','girl-11','https://example.com/avatar.png',None,{},[],'../boy-04'):
+            self.assertEqual(self.call(self.a,'PATCH',root,{'avatarId':invalid}).status_code,400)
+        self.assertEqual(self.call(self.b,'PATCH',root,{'avatarId':'girl-02'}).status_code,403)
+        self.assertEqual(self.call(self.outsider,'PATCH',root,{'avatarId':'girl-02'}).status_code,403)
+        self.assertEqual(self.data(child)['revision'],before['revision'])
+        self.assertEqual(self.call(self.a,'PATCH',root,{'avatarId':'girl-02'}).status_code,200)
+        after=self.data(child)
+        self.assertEqual(after['revision'],before['revision']+1)
+        expected=copy.deepcopy(before['data']); expected['settings']['avatarId']='girl-02'
+        self.assertEqual(after['data'],expected)
+        self.assertEqual(self.b.get(root+'/context').json()['child']['avatarId'],'girl-02')
+        self.assertEqual(next(c for c in self.a.get('/api/children').json()['children'] if c['id']==child['id'])['avatarId'],'girl-02')
+        self.assertEqual(self.call(self.a,'PATCH',root,{'name':'保留头像'}).status_code,200)
+        self.assertEqual(self.data(child)['data']['settings']['avatarId'],'girl-02')
+        self.archive_fixture(child,True)
+        self.assertEqual(self.call(self.a,'PATCH',root,{'avatarId':'boy-05'}).status_code,409)
+        self.archive_fixture(child,False)
 
     def test_delete_child_revokes_all_access_and_retains_business(self):
         child=self.child(); self.join(child); other=self.child()
@@ -393,6 +602,17 @@ class ChildBackendTests(unittest.TestCase):
             cur.execute('SELECT snapshot_json FROM lele.data_snapshots WHERE child_id=%s',(child['id'],));return cur.fetchall()
         self.assertEqual(self.service.transaction(snapshots)[0][0],{key:value for key,value in current.items() if key!='context'})
 
+    def test_received_invitation_shows_associated_child_current_avatar(self):
+        child=self.child(); invite=self.invite(child)
+        def received():
+            return next(i for i in self.b.get('/api/invitations').json()['invitations'] if i['id']==invite)
+        self.assertEqual(received()['childAvatarId'],'boy-04')
+        self.assertEqual(self.call(self.a,'PATCH','/api/children/'+child['id'],{'avatarId':'girl-07'}).status_code,200)
+        self.call(self.a,'PATCH','/api/account/profile',{'avatarId':'grandmother'})
+        self.assertEqual(received()['childAvatarId'],'girl-07')
+        self.assertEqual(self.b.get('/api/children/'+child['id']+'/data').status_code,403)
+        self.assertNotIn(invite,[i['id'] for i in self.outsider.get('/api/invitations').json()['invitations']])
+
     def test_invitation_target_expiry_reject_revoke(self):
         child=self.child(); invite=self.invite(child)
         sent=self.a.get('/api/children/'+child['id']+'/invitations').json()['invitations']
@@ -414,6 +634,25 @@ class ChildBackendTests(unittest.TestCase):
         invite=self.invite(child)
         self.service.transaction(lambda c:c.execute("UPDATE lele.invitations SET expires_at=now()-interval '1 second' WHERE id=%s",(invite,)),exclusive=True)
         self.assertEqual(self.call(self.b,'POST','/api/invitations/'+invite+'/accept',{}).status_code,409)
+
+    def test_members_can_read_invitations_but_only_owner_can_manage(self):
+        child=self.child(); root='/api/children/'+child['id']
+        self.join(child)
+        invitation=self.invite(child,target='outsider')
+        response=self.b.get(root+'/invitations')
+        self.assertEqual(response.status_code,200,response.text)
+        self.assertIn(invitation,[row['id'] for row in response.json()['invitations']])
+        self.assertEqual(self.outsider.get(root+'/invitations').status_code,403)
+        other=self.child()
+        self.assertEqual(self.b.get('/api/children/'+other['id']+'/invitations').status_code,403)
+        self.assertEqual(self.call(self.b,'POST',root+'/invitations',{'loginName':'outsider'}).status_code,403)
+        self.assertEqual(self.call(self.b,'DELETE',root+'/invitations/'+invitation).status_code,403)
+        self.archive_fixture(child,True)
+        self.assertEqual(self.b.get(root+'/invitations').status_code,200)
+        self.assertEqual(self.call(self.a,'POST',root+'/invitations',{'loginName':'outsider'}).status_code,409)
+        self.archive_fixture(child,False)
+        self.assertEqual(self.call(self.a,'DELETE',root+'/members/'+self.bu['id']).status_code,200)
+        self.assertEqual(self.b.get(root+'/invitations').status_code,403)
 
     def test_rejected_invitation_delete_and_accepted_visibility(self):
         child=self.child(); root='/api/children/'+child['id']
@@ -470,7 +709,7 @@ class ChildBackendTests(unittest.TestCase):
         read=self.raw(imported)
         self.assertEqual(canonical_bytes(read),canonical_bytes(raw))
         with self.assertRaises(ApiError):import_child(CONFIG,self.au['id'],raw)
-        self.assertEqual(initialize(CONFIG),{'initialized':False,'upgraded':False,'version':4})
+        self.assertEqual(initialize(CONFIG),{'initialized':False,'upgraded':False,'version':6})
 
     def test_backup_retention_and_actor_audit(self):
         child=self.child()

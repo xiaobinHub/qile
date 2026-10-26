@@ -21,7 +21,7 @@ async function call(page, url, method = "GET", body) {
 }
 async function exerciseParallelCompletions({ browser, dad, origin, out, axe, stage }) {
   stage(
-    "parallel complete/undo: independent spinners, conflicts, failures, recovery and exact ledger entries",
+    "parallel completion and confirmed undo: spinners, conflicts, failures, recovery and exact ledger entries",
   )
   for (const [width, height, touch] of [
     [1135, 789, false],
@@ -29,7 +29,7 @@ async function exerciseParallelCompletions({ browser, dad, origin, out, axe, sta
     [1180, 820, true],
     [390, 844, true],
   ]) {
-    const created = await call(dad, "/api/children", "POST", { name: `并发验收-${width}` })
+    const created = await call(dad, "/api/children", "POST", { name: `并${width}`, gender: "boy", requestId: require('node:crypto').randomUUID() })
     assert.equal(created.status, 200)
     const child = created.child,
       base = `/api/children/${child.id}`
@@ -99,7 +99,7 @@ async function exerciseParallelCompletions({ browser, dad, origin, out, axe, sta
         if (
           requests.filter(
             (r) => unknownGates.has(r.payload.occurrenceKey) && r.payload.completed === false,
-          ).length >= 2
+          ).length >= 1
         )
           unknownCaptured.resolve()
         await unknownGates.get(key).promise
@@ -150,6 +150,7 @@ async function exerciseParallelCompletions({ browser, dad, origin, out, axe, sta
       assert.equal(await button(keys[1]).isEnabled(), true)
       await button(keys[1]).click()
       await button(keys[2]).click()
+      await page.locator("#undoTaskCompletionDialog").getByRole("button",{name:"确认撤销",exact:true}).click()
       await allInitial.promise
       assert.equal(requests.length, 3, "All three requests are in flight before any response")
       for (const key of keys.slice(0, 3)) {
@@ -164,10 +165,13 @@ async function exerciseParallelCompletions({ browser, dad, origin, out, axe, sta
       assert.equal(after.height, before.height)
       await shot("month-pending")
       if (width === 1135 || width === 820) await axe(page, `parallel-month-pending-${width}`)
+      gates.get(keys[2]).resolve()
+      await page.locator("#undoTaskCompletionDialog").waitFor({state:"hidden"})
+      await idle(keys[2],false)
       await page.locator("[data-mode=week]").click()
       await page.locator("#todayBtn").click()
       await button(keys[0]).scrollIntoViewIfNeeded()
-      for (const key of keys.slice(0, 3))
+      for (const key of keys.slice(0, 2))
         assert.equal(await button(key).locator("svg.animate-spin").count(), 1)
       await shot("week-pending")
       await page.locator("[data-mode=month]").click()
@@ -205,18 +209,18 @@ async function exerciseParallelCompletions({ browser, dad, origin, out, axe, sta
       assert.equal(stored.data.ledger.length, 5)
       phase = "unknown"
       await button(keys[0]).click()
-      await button(keys[1]).click()
+      await page.locator("#undoTaskCompletionDialog").getByRole("button",{name:"确认撤销",exact:true}).click()
       await unknownCaptured.promise
       const original = requests.find(
         (r) => r.payload.occurrenceKey === keys[0] && r.payload.completed === false,
       )
       unknownGates.get(keys[0]).resolve()
-      await page.getByText("保存结果暂未确认，请刷新检查。", { exact: true }).waitFor()
-      unknownGates.get(keys[1]).resolve()
-      await idle(keys[1], false)
+      await page.getByText("保存结果暂未确认，请刷新检查。", { exact: true }).first().waitFor()
+      await page.locator("#undoTaskCompletionDialog").getByRole("button",{name:"取消",exact:true}).click()
+      await page.locator("#undoTaskCompletionDialog").waitFor({state:"hidden"})
       await page.getByRole("button", { name: "重试原操作", exact: true }).first().waitFor()
       const prior = requests.length
-      await page.locator("#refreshData").click()
+      await page.getByRole("button", { name: "刷新检查", exact: true }).first().click()
       await page
         .getByText("已读取最新数据，请核对保存结果。原操作编号仍保留，可安全重试原操作。", {
           exact: true,
@@ -235,6 +239,10 @@ async function exerciseParallelCompletions({ browser, dad, origin, out, axe, sta
         original,
         "Recovery sends the exact original request and operation ID",
       )
+      await button(keys[1]).click()
+      await page.locator("#undoTaskCompletionDialog").getByRole("button",{name:"确认撤销",exact:true}).click()
+      await page.locator("#undoTaskCompletionDialog").waitFor({state:"hidden"})
+      await idle(keys[1],false)
       assert.equal(
         await page.getByText("保存结果暂未确认，请刷新检查。", { exact: true }).count(),
         0,

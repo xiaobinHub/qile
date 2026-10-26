@@ -70,7 +70,7 @@ class ProductionMaintenanceTests(unittest.TestCase):
 
     def test_preview_confirm_initialize_idempotency_bootstrap_and_secret_absence(self):
         preview = execute(self.service, 'initialize')
-        self.assertEqual(preview['schema'], {'version': None, 'users': 0})
+        self.assertEqual(preview['schema'], {'version': None, 'users': 0, 'pendingTableChanges': []})
         with patch('psycopg.connect') as connect, self.assertRaises(ApiError):
             execute(self.service, 'initialize', apply=True, confirm='wrong-target')
         connect.assert_not_called()
@@ -112,7 +112,7 @@ class ProductionMaintenanceTests(unittest.TestCase):
         self.service.transaction(lambda cur: cur.execute('ALTER TABLE lele.children ADD COLUMN unknown text'))
         with self.assertRaises(ApiError): execute(self.service, 'upgrade')
         with self.assertRaises(ApiError): self.apply('upgrade')
-        self.assertEqual(self.service.transaction(lambda cur: cur.execute('SELECT version FROM lele.schema_versions').fetchone()), (4,))
+        self.assertEqual(self.service.transaction(lambda cur: cur.execute('SELECT version FROM lele.schema_versions').fetchone()), (6,))
 
     def test_v2_and_v3_upgrade_previews_and_audits(self):
         source, migration, _, hashes = schema_sources()

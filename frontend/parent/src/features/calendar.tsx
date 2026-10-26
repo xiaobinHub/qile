@@ -75,6 +75,7 @@ export function CalendarPage({
     [navigation, setNavigation] = useState(0),
     [visibleMonth, setVisibleMonth] = useState(prefs.cursor.slice(0, 7)),
     [completionError, setCompletionError] = useState("")
+  const [undoOccurrence, setUndoOccurrence] = useState<Occurrence | null>(null)
   const weekRef = useRef<HTMLDivElement>(null),
     visibleDate = useRef(prefs.cursor),
     weekNavigation = useRef(navigation),
@@ -133,7 +134,11 @@ export function CalendarPage({
   const toggleCompletion = (o: Occurrence) => {
     if (child.archived) return
     setCompletionError("")
-    void runtime.setCompletion(o, !isDone(data, o)).catch((error) => {
+    if (isDone(data, o)) {
+      setUndoOccurrence(o)
+      return
+    }
+    void runtime.setCompletion(o, true).catch((error) => {
       if (error.kind === "stale") return
       if (mounted.current) setCompletionError(error.message)
       else runtime.patch({ message: `${o.title}：${error.message}` })
@@ -331,6 +336,16 @@ export function CalendarPage({
             ))}
           </div>
         </div>
+      )}
+      {undoOccurrence && (
+        <Confirm
+          id="undoTaskCompletionDialog"
+          title="撤销完成任务？"
+          description={`${fmtFull(undoOccurrence.date)} ${undoOccurrence.startTime}「${undoOccurrence.title}」将恢复为未完成，并撤回完成时获得的 ${undoOccurrence.points} 积分。`}
+          label="确认撤销"
+          onClose={() => setUndoOccurrence(null)}
+          work={() => runtime.setCompletion(undoOccurrence, false)}
+        />
       )}
     </section>
   )
@@ -890,7 +905,25 @@ export function PresetEditor({
       points: p?.points ?? 5,
     }),
     action = useAsync()
-  const update = (next: Partial<typeof value>) => setValue((v) => ({ ...v, ...next }))
+  const durationMinutes = minutes(value.endTime) - minutes(value.startTime)
+  const durationError =
+    durationMinutes <= 0
+      ? "持续时长必须大于0分钟。"
+      : minutes(value.endTime) > 1439
+        ? "结束时间超出当天，请缩短持续时长或提前开始时间。"
+        : ""
+  const update = (next: Partial<typeof value>) =>
+    setValue((v) => ({
+      ...v,
+      ...next,
+      ...(next.startTime !== undefined && next.endTime === undefined
+        ? {
+            endTime: timeAt(
+              Math.min(1439, minutes(next.startTime) + minutes(v.endTime) - minutes(v.startTime)),
+            ),
+          }
+        : {}),
+    }))
   return (
     <Modal
       id="taskPresetEditorDialog"
@@ -912,7 +945,7 @@ export function PresetEditor({
         onSubmit={(e) => {
           e.preventDefault()
           void action.run(async () => {
-            if (value.endTime <= value.startTime) throw Error("结束时间必须晚于开始时间。")
+            if (durationError) throw Error(durationError)
             if (!data.categories.some((c) => c.id === value.categoryId && c.active))
               throw Error("请选择可用的任务类型。")
             await runtime.command("preset.save", { preset: { ...(id ? { id } : {}), ...value } })
@@ -930,19 +963,32 @@ export function PresetEditor({
               maxLength={80}
             />
           </Field>
-          <Field label="任务类型" id="presetCategory">
-            <Choice
-              id="presetCategory"
-              label="任务类型"
-              openDownwards
-              value={value.categoryId}
-              onChange={(categoryId) => update({ categoryId })}
-              options={data.categories
-                .filter((c) => c.active)
-                .map((c) => ({ value: c.id, label: c.name, color: c.color }))}
-            />
-          </Field>
-          <div className="form-grid">
+          <div className="form-grid preset-category-points-grid">
+            <Field label="任务类型" id="presetCategory">
+              <Choice
+                id="presetCategory"
+                label="任务类型"
+                openDownwards
+                value={value.categoryId}
+                onChange={(categoryId) => update({ categoryId })}
+                options={data.categories
+                  .filter((c) => c.active)
+                  .map((c) => ({ value: c.id, label: c.name, color: c.color }))}
+              />
+            </Field>
+            <Field label="奖励积分" id="presetPoints">
+              <Input
+                id="presetPoints"
+                type="number"
+                min={0}
+                max={9999}
+                value={value.points}
+                onChange={(e) => update({ points: Number(e.target.value) })}
+                required
+              />
+            </Field>
+          </div>
+          <div className="form-grid preset-time-grid">
             <Field label="开始时间" id="presetStart">
               <TimePicker
                 id="presetStart"
@@ -950,25 +996,18 @@ export function PresetEditor({
                 onChange={(startTime) => update({ startTime })}
               />
             </Field>
-            <Field label="结束时间" id="presetEnd">
+            <Field label="持续时长" id="presetDuration" error={durationError || undefined}>
               <TimePicker
-                id="presetEnd"
-                value={value.endTime}
-                onChange={(endTime) => update({ endTime })}
+                id="presetDuration"
+                kind="duration"
+                maxDurationMinutes={1439 - minutes(value.startTime)}
+                value={timeAt(Math.max(0, durationMinutes))}
+                onChange={(duration) =>
+                  update({ endTime: timeAt(minutes(value.startTime) + minutes(duration)) })
+                }
               />
             </Field>
           </div>
-          <Field label="奖励积分" id="presetPoints">
-            <Input
-              id="presetPoints"
-              type="number"
-              min={0}
-              max={9999}
-              value={value.points}
-              onChange={(e) => update({ points: Number(e.target.value) })}
-              required
-            />
-          </Field>
           <ErrorText message={action.error} id="taskPresetEditorError" />
         </fieldset>
       </form>

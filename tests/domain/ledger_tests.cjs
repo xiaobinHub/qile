@@ -10,6 +10,7 @@ require.extensions[".ts"] = (module, filename) =>
   )
 const {
   ledgerView,
+  ledgerTaskDate,
   ledgerAction,
   ledgerActionLabel,
   ledgerActionsForSource,
@@ -120,3 +121,9 @@ assert.deepEqual(retainLedgerActions(["task-reversal"], "all"), ["task-reversal"
 console.log(
   "Linked scene multi-selection, OR/AND intersections, ordering and compatible source transitions passed.",
 )
+
+assert.equal(ledgerTaskDate({ ...row("new", "task-complete", 5, 7, "task@2026-10-02"), taskDate: "2026-10-03" }), "2026-10-03")
+assert.equal(ledgerTaskDate(row("old", "task-reversal", -5, 7, "task@2026-10-02")), null)
+assert.equal(ledgerTaskDate(row("missing", "task-complete", 5, 7)), null)
+assert.equal(ledgerTaskDate(row("bad", "task-complete", 5, 7, "task@2026-02-30")), null)
+assert.equal(ledgerTaskDate({ ...row("manual", "manual", 5, 7), taskDate: "2026-10-03" }), null)

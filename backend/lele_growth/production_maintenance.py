@@ -49,7 +49,7 @@ def execute(service, action, *, apply=False, confirm=None, login_name=None, nick
         require((service.config['_object_storage'] or {}).get('provider') == 'oss', 409, '生产暂存清理需要有效的私有 OSS 配置。')
     status = inspect_schema(service)
     if action in ('bootstrap-admin', 'cleanup-staged'):
-        require(status['version'] == 4, 409, '请先初始化或升级数据库至 v4。')
+        require(status['version'] == 6, 409, '请先初始化或升级数据库至 v6。')
     if action == 'upgrade':
         require(status['version'] is not None, 409, '数据库尚未初始化，请先执行 initialize。')
     if action == 'bootstrap-admin':

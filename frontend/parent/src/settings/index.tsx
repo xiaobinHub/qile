@@ -1,17 +1,16 @@
 import { useEffect, useState } from "react"
-import { AccountPassword, AccountProfile } from "./account"
-import { ChildProfile, Family, Invitations } from "./children"
+import { AccountManagement } from "./account"
+import { ChildManagement, Invitations } from "./children"
 import { Categories, Presets } from "./tasks"
 import { Button, Card, CardContent, CardHeader, CardTitle, Icon } from "./primitives"
 import type { Context, Controller } from "./types"
 
 const groups = [
   {
-    title: "孩子管理",
+    title: "儿童管理",
     items: [
-      ["child/profile", "孩子昵称", "child", "openChildNicknameSettings"],
-      ["child/family", "邀请家人", "family", "openFamilySettings"],
-      ["child/invitations", "我的邀请", "mail", "openMyInvitationsSettings"],
+      ["child/manage", "儿童管理", "child", "openChildManagementSettings"],
+      ["child/invitations", "邀请我的", "mail", "openMyInvitationsSettings"],
     ],
   },
   {
@@ -24,8 +23,7 @@ const groups = [
   {
     title: "账号管理",
     items: [
-      ["account/profile", "修改账号昵称", "child", "openAccountManagement"],
-      ["account/password", "修改密码", "key", "openPasswordSettings"],
+      ["account/profile", "账号管理", "child", "openAccountManagement"],
       ["account/logout", "退出登录", "logout", "settingsLogout"],
     ],
   },
@@ -41,20 +39,16 @@ function Pane({
   controller: Controller
 }) {
   switch (selected) {
-    case "child/profile":
-      return <ChildProfile controller={controller} child={context.child!} />
-    case "child/family":
-      return <Family controller={controller} child={context.child!} />
+    case "child/manage":
+      return <ChildManagement controller={controller} child={context.child!} />
     case "child/invitations":
       return <Invitations controller={controller} />
     case "tasks/presets":
       return <Presets controller={controller} context={context} />
     case "tasks/categories":
       return <Categories controller={controller} context={context} />
-    case "account/password":
-      return <AccountPassword controller={controller} />
     default:
-      return <AccountProfile controller={controller} user={context.user} />
+      return <AccountManagement controller={controller} user={context.user} />
   }
 }
 
@@ -118,17 +112,19 @@ function Settings({
           </nav>
         </Card>
         <Card
-          className="settings-detail gap-0 py-0"
+          className={`settings-detail gap-0 py-0 ${selected === "child/manage" ? "settings-child-management" : selected === "account/profile" ? "settings-account-management" : ""}`}
           role="region"
           aria-labelledby="settingsDetailTitle"
         >
-          <CardHeader className="settings-detail-heading">
-            <CardTitle>
-              <h2 id="settingsDetailTitle" tabIndex={-1}>
-                {item[1]}
-              </h2>
-            </CardTitle>
-          </CardHeader>
+          {selected !== "child/manage" && selected !== "account/profile" && (
+            <CardHeader className="settings-detail-heading">
+              <CardTitle>
+                <h2 id="settingsDetailTitle" tabIndex={-1}>
+                  {item[1]}
+                </h2>
+              </CardTitle>
+            </CardHeader>
+          )}
           <CardContent id="settingsContent" className="settings-detail-body gap-0">
             <Pane
               key={`${selected}:${child?.id}:${version}`}
@@ -151,7 +147,13 @@ export function SettingsPage({
   initialPage?: string
 }) {
   const [selected, select] = useState(
-    controller.deps.context().child ? initialPage || "child/profile" : "account/profile",
+    controller.deps.context().child
+      ? initialPage === "child/profile" || initialPage === "child/family"
+        ? "child/manage"
+        : initialPage === "account/password"
+          ? "account/profile"
+          : initialPage || "child/manage"
+      : "account/profile",
   )
   const [version, update] = useState(0)
   controller.render = () => update((v) => v + 1)

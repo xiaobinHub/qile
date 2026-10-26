@@ -1371,3 +1371,690 @@
     line-height: var(--text-section--line-height);
   }
 }
+
+/* Unified child management follows the shared type scale and touch targets. */
+.child-management-profile {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding-block: 0;
+}
+.child-management-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 120px;
+  height: 120px;
+  border-radius: var(--radius-card);
+  background: color-mix(in srgb, var(--accent) 55%, var(--card));
+  color: var(--brand-ink);
+  font-size: var(--text-number);
+  line-height: var(--text-number--line-height);
+  font-weight: 600;
+}
+.child-management-profile-name > strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: var(--text-number);
+  line-height: var(--text-number--line-height);
+  font-weight: 600;
+}
+.child-management-profile > button {
+  margin-left: -8px;
+}
+.child-family-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 16px;
+}
+.child-family-heading h3 {
+  margin: 0;
+  font-size: var(--text-section);
+  line-height: var(--text-section--line-height);
+  font-weight: 600;
+}
+.child-family-heading p {
+  margin: 4px 0 0;
+  color: var(--text-secondary);
+  font-size: var(--text-caption);
+  line-height: var(--text-caption--line-height);
+}
+.child-family-heading > button {
+  padding-inline: 14px;
+}
+.child-family-section > .settings-feedback:empty {
+  display: none;
+}
+.child-family-section > .settings-feedback:not(:empty),
+.child-family-section > .settings-loading {
+  margin: 16px 20px;
+}
+.child-family-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 260px));
+  grid-auto-rows: 1fr;
+  align-items: stretch;
+  gap: 12px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.child-family-item {
+  min-width: 0;
+}
+.child-family-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 4px 8px;
+  min-width: 0;
+  max-width: 260px;
+  height: 100%;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  box-shadow: none;
+}
+.child-member-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.child-member-header > .settings-mini-avatar {
+  width: 64px;
+  height: 64px;
+  box-sizing: border-box;
+  padding: 2px;
+  overflow: hidden;
+}
+.child-member-actions {
+  width: 36px;
+  height: 28px;
+}
+.child-member-actions:empty {
+  display: none;
+}
+.child-member-actions > .settings-row-menu {
+  margin-top: -8px;
+  margin-right: -8px;
+}
+.child-member-validity {
+  grid-column: 1 / -1;
+  min-width: 0;
+  margin: 0 0 0 72px;
+  color: var(--text-secondary);
+  font-size: var(--text-meta);
+  line-height: var(--text-meta--line-height);
+  overflow-wrap: anywhere;
+}
+.child-family-identity {
+  min-width: 0;
+  flex: 1;
+}
+.child-family-name {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+}
+.child-family-name > strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: var(--text-body);
+  line-height: var(--text-body--line-height);
+  font-weight: 600;
+}
+.child-family-section {
+  --family-member-surface: #eff6ff;
+  --family-member-ink: #1d4ed8;
+  --family-member-border: #93c5fd;
+  --family-owner-surface: #fffbeb;
+  --family-owner-ink: #92400e;
+  --family-owner-border: #fcd34d;
+  --family-pending-surface: #f5f3ff;
+  --family-pending-ink: #6d28d9;
+  --family-pending-border: #c4b5fd;
+}
+.child-family-name .settings-status {
+  padding: 0 5px;
+  border: 1px solid var(--family-member-border);
+  border-radius: 5px;
+  background: var(--family-member-surface);
+  color: var(--family-member-ink);
+  font-weight: 600;
+}
+.child-family-name .settings-status.is-owner {
+  border-color: var(--family-owner-border);
+  background: var(--family-owner-surface);
+  color: var(--family-owner-ink);
+}
+.child-family-name .settings-status.is-pending {
+  border-color: var(--family-pending-border);
+  background: var(--family-pending-surface);
+  color: var(--family-pending-ink);
+}
+.child-family-identity > p {
+  margin: 2px 0 0;
+  color: var(--text-secondary);
+  font-size: var(--text-caption);
+  line-height: var(--text-caption--line-height);
+  overflow-wrap: anywhere;
+}
+.child-family-identity > small {
+  display: block;
+  margin-top: 2px;
+  color: var(--text-secondary);
+  font-size: var(--text-meta);
+  line-height: var(--text-meta--line-height);
+}
+.child-management-more {
+  margin-top: 24px;
+  padding-block: 8px;
+  border-bottom: 0;
+}
+.child-management-more > div > p {
+  margin: 10px 0 0;
+}
+.child-management-more > summary {
+  color: var(--foreground);
+  font-size: var(--text-body);
+  line-height: var(--text-body--line-height);
+  font-weight: 600;
+}
+.child-management-dialog {
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+}
+.child-management-dialog fieldset {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+.child-management-dialog [data-slot="input"],
+.child-management-dialog [data-slot="button"] {
+  min-height: 44px;
+}
+@media (max-width: 1199px) {
+  .child-family-list {
+    grid-template-columns: repeat(2, minmax(0, 260px));
+  }
+}
+@media (max-width: 680px) {
+  .child-family-heading {
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .child-family-list {
+    grid-template-columns: minmax(0, 260px);
+  }
+}
+
+.child-management-profile > .child-management-avatar {
+  margin-left: 0;
+  padding: 2px;
+  border: 1px solid var(--border);
+  background: var(--muted);
+  cursor: pointer;
+}
+.child-management-avatar:disabled {
+  cursor: default;
+}
+.child-management-avatar:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 3px;
+}
+.child-avatar-dialog {
+  width: min(580px, calc(100vw - 32px));
+  max-width: 580px;
+  max-height: min(760px, calc(100dvh - 32px));
+  grid-template-rows: auto minmax(0, 1fr) auto auto;
+  gap: 16px;
+}
+.child-avatar-options {
+  overflow-y: auto;
+  min-height: 0;
+  padding: 4px;
+}
+.child-avatar-options fieldset {
+  min-width: 0;
+  margin: 0 0 20px;
+  padding: 0;
+  border: 0;
+}
+.child-avatar-options fieldset:last-child {
+  margin-bottom: 0;
+}
+.child-avatar-options legend {
+  margin-bottom: 12px;
+  font-size: var(--text-label);
+  font-weight: 600;
+}
+.child-avatar-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+}
+.child-avatar-option {
+  position: relative;
+  display: grid;
+  aspect-ratio: 1;
+  border-radius: var(--radius-card);
+  background: var(--muted);
+  border: 2px solid transparent;
+  cursor: pointer;
+}
+.child-avatar-option:has(input:checked) {
+  border-color: var(--primary);
+  background: var(--accent);
+}
+.child-avatar-option:has(input:focus-visible) {
+  outline: 2px solid var(--ring);
+  outline-offset: 3px;
+}
+.child-avatar-option input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+.child-avatar-option img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  padding: 4px;
+}
+.child-avatar-check {
+  display: none;
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: var(--primary-foreground);
+  padding: 2px;
+}
+.child-avatar-check svg {
+  width: 14px;
+  height: 14px;
+}
+.child-avatar-option:has(input:checked) .child-avatar-check {
+  display: inline-flex;
+}
+.child-avatar-option:has(input:disabled) {
+  cursor: wait;
+}
+.child-gender-picker {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.child-gender-picker > legend {
+  margin-bottom: 10px;
+  font-size: var(--text-label);
+  font-weight: 600;
+}
+.child-gender-picker > legend > span[aria-hidden] {
+  color: var(--destructive);
+}
+.child-gender-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 88px));
+  gap: 16px;
+}
+.child-management-profile-copy .child-gender-tag {
+  align-self: flex-start;
+  min-width: 64px;
+  min-height: 26px;
+  justify-content: center;
+  margin-top: 8px;
+  padding: 2px 12px;
+  border: 1px solid #93c5fd;
+  background: #eff6ff;
+  color: #1d4ed8;
+  cursor: pointer;
+}
+.child-gender-tag:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 3px;
+}
+.child-management-profile-copy .child-gender-tag[data-gender="girl"] {
+  border-color: #fca5a5;
+  background: #fef2f2;
+  color: #b91c1c;
+}
+.child-gender-tag:disabled {
+  cursor: default;
+}
+@media (max-width: 480px) {
+  .child-avatar-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px;
+  }
+}
+
+#editChildNickname svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* Child management is composed of three separate module cards. */
+.settings-detail.settings-child-management {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.settings-child-management > .settings-detail-body {
+  padding: 0;
+}
+.child-management {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+.child-management > .child-management-profile-card,
+.child-management > .child-family-section,
+.child-management > .child-management-more {
+  margin: 0;
+  padding: 24px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--card);
+}
+.child-management-profile-name > #editChildNickname {
+  flex-shrink: 0;
+}
+.child-management-more > summary {
+  margin: 0;
+}
+.child-management-more[open] > div {
+  padding-top: 16px;
+}
+@media (max-width: 680px) {
+  .child-management > .child-management-profile-card,
+  .child-management > .child-family-section,
+  .child-management > .child-management-more {
+    padding: 16px;
+  }
+}
+
+.child-management-profile-card > h2 {
+  margin: 0 0 20px;
+  font-size: var(--text-detail);
+  line-height: var(--text-detail--line-height);
+  font-weight: 600;
+}
+.child-management-profile-card > h2:focus {
+  outline: none;
+}
+
+.child-management-profile {
+  flex-wrap: wrap;
+}
+.child-management-profile > .child-management-add {
+  margin-left: auto;
+}
+.child-management > .child-management-more {
+  padding-block: 8px;
+}
+@media (min-width: 681px) {
+  .app:has(.settings-workspace) {
+    display: flex;
+    flex-direction: column;
+    min-height: 100dvh;
+  }
+  .app:has(.settings-workspace) > #main {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+  }
+  .app:has(.settings-workspace) .settings-workspace {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 0;
+  }
+  .app:has(.settings-workspace) .settings-columns {
+    flex: 1;
+  }
+  .settings-columns > .settings-sidebar {
+    align-self: stretch;
+    position: static;
+  }
+  .settings-columns > .settings-child-management {
+    align-self: start;
+  }
+}
+
+/* Independent invitation and preset cards. */
+.settings-invitation-list {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 360px), 1fr));
+  align-items: start;
+  gap: 16px;
+}
+.settings-invitation-list > .settings-invitation-card {
+  min-width: 0;
+  max-width: 480px;
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+}
+.settings-invitation-footer {
+  flex-wrap: wrap;
+}
+.settings-invitation-footer > div {
+  margin-left: auto;
+}
+#settingsTaskPresetsList {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
+  gap: 12px;
+}
+.settings-detail-body #settingsTaskPresetsList > .task-preset-card {
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--card);
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: 1fr auto;
+  gap: 16px;
+}
+.settings-detail-body #settingsTaskPresetsList .task-preset-side {
+  justify-content: space-between;
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+#settingsTaskPresetsList > .settings-empty {
+  grid-column: 1 / -1;
+}
+@media (max-width: 680px) {
+  .settings-invitation-list > .settings-invitation-card {
+    padding: 16px;
+  }
+}
+
+.settings-detail.settings-account-management {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  align-self: start;
+}
+.settings-account-management > .settings-detail-body {
+  padding: 0;
+}
+.account-management {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.account-profile-card,
+.account-password-card {
+  min-width: 0;
+  padding: 24px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--card);
+}
+.account-profile-card > h2 {
+  margin: 0 0 20px;
+  font-size: var(--text-detail);
+  line-height: var(--text-detail--line-height);
+  font-weight: 600;
+}
+.account-profile-card > h2:focus {
+  outline: none;
+}
+.account-profile-row,
+.account-profile-name {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.account-profile-avatar {
+  display: grid;
+  place-items: center;
+  width: 96px;
+  height: 96px;
+  flex-shrink: 0;
+  border-radius: var(--radius-card);
+  background: var(--accent);
+  color: var(--brand-ink);
+}
+.account-profile-avatar svg {
+  width: 40px;
+  height: 40px;
+}
+.account-profile-copy {
+  min-width: 0;
+}
+.account-profile-name strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: var(--text-number);
+  line-height: var(--text-number--line-height);
+}
+.account-profile-name button {
+  flex-shrink: 0;
+}
+.account-profile-name svg {
+  width: 14px;
+  height: 14px;
+}
+.account-profile-copy p {
+  margin: 4px 0 0;
+  overflow-wrap: anywhere;
+  color: var(--text-secondary);
+  font-size: var(--text-caption);
+  line-height: var(--text-caption--line-height);
+}
+.account-password-card h3 {
+  margin: 0 0 20px;
+  font-size: var(--text-section);
+  line-height: var(--text-section--line-height);
+}
+.account-password-card .settings-form {
+  max-width: 560px;
+}
+#accountNicknameDialog .settings-form-footer {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  gap: 8px;
+}
+#accountNicknameDialog .settings-field {
+  margin-bottom: 0;
+}
+@media (max-width: 680px) {
+  .account-profile-card,
+  .account-password-card {
+    padding: 16px;
+  }
+}
+
+button.account-profile-avatar {
+  padding: 2px;
+  border: 1px solid var(--border);
+  background: var(--muted);
+  cursor: pointer;
+}
+button.account-profile-avatar:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 3px;
+}
+.account-avatar-dialog {
+  width: min(560px, calc(100vw - 32px));
+  max-width: 560px;
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+}
+.account-avatar-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  padding: 4px;
+  margin: 0;
+  border: 0;
+  min-width: 0;
+}
+.account-avatar-choice-name {
+  margin: 8px 0 0;
+  text-align: center;
+  font-size: var(--text-body);
+  line-height: var(--text-body--line-height);
+}
+@media (max-width: 480px) {
+  .account-avatar-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.child-management-profile-copy {
+  flex: 1;
+  min-width: min(180px, 100%);
+}
+.child-management-profile-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.child-management-profile-help {
+  margin: 6px 0 0;
+  color: var(--text-secondary);
+  font-size: var(--text-caption);
+  line-height: var(--text-caption--line-height);
+}
+.settings-invitation-list > .settings-empty {
+  grid-column: 1 / -1;
+}
+
+.account-family-role {
+  cursor: pointer;
+  min-width: 64px;
+  height: 26px;
+  justify-content: center;
+  margin-top: 6px;
+  padding-inline: 14px;
+  border: 1px solid #93c5fd;
+  border-radius: 6px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: var(--text-caption);
+  font-weight: 600;
+}
+.account-family-role:hover {
+  background: #dbeafe;
+  border-color: #60a5fa;
+}

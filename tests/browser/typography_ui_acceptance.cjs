@@ -127,8 +127,8 @@ async function exerciseTypography({
         await page.locator('[data-view="settings"]').click()
         await size(page, ".settings-nav-item", 14, "settings")
         await size(page, ".settings-nav-group h2", 13, "settings")
-        await size(page, ".settings-detail-heading h2", 20, "settings")
-        await page.locator("#openPasswordSettings").click()
+        await size(page, "#settingsDetailTitle", 20, "settings")
+        await page.locator("#openAccountManagement").click()
         await size(page, 'label[for="passwordNew"]', 14, "settings-password")
         await size(page, "#passwordNew", touch ? 16 : 14, "settings-password")
         await size(page, "#passwordNew-help", 13, "settings-password-help")
@@ -139,7 +139,7 @@ async function exerciseTypography({
             .evaluateAll((els) => els.map((el) => el.id))
           for (const id of ids) {
             await page.locator("#" + id).click()
-            await size(page, ".settings-detail-heading h2", 20, id)
+            await size(page, "#settingsDetailTitle", 20, id)
             await shot(page, tag + "-" + id)
             if (await page.locator(".settings-empty strong").count()) {
               await size(page, ".settings-empty strong", 14, id + "-empty-title")
@@ -148,7 +148,7 @@ async function exerciseTypography({
           }
         }
         if (width === 1440) {
-          await page.locator("#openPasswordSettings").click()
+          await page.locator("#openAccountManagement").click()
           await page.evaluate(() => (document.documentElement.style.fontSize = "200%"))
           await size(page, "#passwordNew", 28, "settings-text-200-percent")
           await shot(page, tag + "-text-200-percent")

@@ -59,6 +59,7 @@ export type Ledger = {
   date: string
   createdAt: string
   occurrenceKey?: string
+  taskDate?: string
   giftId?: string
   relatedLedgerId?: string
   giftSnapshot?: { name: string; points: number }
@@ -90,6 +91,8 @@ export type BusinessData = {
   [key: string]: unknown
 }
 export type User = {
+  familyRole?: string | null
+  avatarId?: string
   id: string
   nickname: string
   loginName: string
@@ -97,6 +100,8 @@ export type User = {
   mustChangePassword?: boolean
 }
 export type Child = {
+  gender?: "boy" | "girl" | null
+  avatarId?: string
   id: string
   name: string
   role: "owner" | "parent"

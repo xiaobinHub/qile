@@ -43,6 +43,7 @@ import { balance, today } from "../domain/calendar"
 import { compressGiftImage } from "../domain/images"
 import {
   ledgerView,
+  ledgerTaskDate,
   ledgerActionsForSource,
   retainLedgerActions,
   ledgerActionLabel,
@@ -465,7 +466,8 @@ function LedgerPanel({
         <Table tabIndex={0} aria-label="积分流水明细">
           <TableHeader>
             <TableRow>
-              <TableHead>日期</TableHead>
+              <TableHead>操作日期</TableHead>
+              <TableHead>任务日期</TableHead>
               <TableHead>来源</TableHead>
               <TableHead>说明</TableHead>
               <TableHead className="ledger-number">变动</TableHead>
@@ -474,8 +476,9 @@ function LedgerPanel({
           </TableHeader>
           <TableBody>
             {rows.map((l) => (
-              <TableRow key={l.id}>
+              <TableRow key={l.id} data-ledger-id={l.id}>
                 <TableCell>{l.date}</TableCell>
+                <TableCell data-ledger-task-date>{ledgerTaskDate(l) || "——"}</TableCell>
                 <TableCell>{ledgerActionLabel(l)}</TableCell>
                 <TableCell>
                   <strong>{l.source || ""}</strong>
@@ -502,8 +505,9 @@ function LedgerPanel({
               </span>
             </div>
             <p>
-              {l.date} · {ledgerActionLabel(l)}
+              操作日期：{l.date} · {ledgerActionLabel(l)}
             </p>
+            <p>任务日期：{ledgerTaskDate(l) || "——"}</p>
             <p>{l.reason}</p>
             <small>变动后积分 {l.balanceAfter}</small>
           </Card>

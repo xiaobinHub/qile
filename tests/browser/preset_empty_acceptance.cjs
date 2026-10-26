@@ -118,8 +118,8 @@ async function exerciseEmptyPresets({ browser, dad, origin, firstId, out, axe, s
       await page.locator('[data-view="settings"]').click()
       assert.equal(
         await page.locator("#settingsDetailTitle").innerText(),
-        "孩子昵称",
-        "Normal settings entry keeps its existing landing pane",
+        "儿童管理",
+        "Normal settings entry opens unified child management",
       )
       assert.equal(writes.length, 1)
       assert.deepEqual(errors, [])

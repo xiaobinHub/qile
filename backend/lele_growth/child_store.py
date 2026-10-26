@@ -24,6 +24,16 @@ class ChildStore:
             raise StoreError(HTTPStatus.SERVICE_UNAVAILABLE, UNAVAILABLE)
         data["settings"] = settings[0]
         for key, table in ARRAY_TABLES.items():
+            if key == "ledger":
+                cursor.execute("SELECT record_json,task_date FROM lele.points_ledger WHERE child_id=%s ORDER BY sort_order", (child_id,))
+                data[key] = []
+                for stored, task_date in cursor.fetchall():
+                    item = dict(stored)
+                    item.pop("taskDate", None)
+                    if task_date is not None:
+                        item["taskDate"] = task_date.isoformat()
+                    data[key].append(item)
+                continue
             cursor.execute(f"SELECT record_json FROM lele.{table} WHERE child_id=%s ORDER BY sort_order", (child_id,))
             data[key] = [item[0] for item in cursor.fetchall()]
         cursor.execute("SELECT series_id,record_json FROM lele.task_revisions WHERE child_id=%s ORDER BY series_id,sort_order", (child_id,))
@@ -56,7 +66,7 @@ class ChildStore:
         native = {
             "task_series": (("start_date", "startDate"), ("start_time", "startTime"), ("end_time", "endTime"), ("created_at", "createdAt"), ("updated_at", "updatedAt")),
             "task_exceptions": (("original_date", "originalDate"),),
-            "points_ledger": (("business_date", "date"), ("created_at", "createdAt")),
+            "points_ledger": (("business_date", "date"), ("created_at", "createdAt"), ("task_date", "taskDate")),
             "gifts": (("created_at", "createdAt"), ("updated_at", "updatedAt"), ("redeemed_at", "redeemedAt")),
             "task_presets": (("start_time", "startTime"), ("end_time", "endTime")),
             "business_operations": (("operated_at", "at"), ("effective_from", "effectiveFrom")),
@@ -72,6 +82,9 @@ class ChildStore:
             rows = []
             for order, item in enumerate(data.get(key, [])):
                 record_json = dict(item)
+                if key == "ledger":
+                    # This business value belongs to the native date column, not a JSON fallback.
+                    record_json.pop("taskDate", None)
                 values = []
                 if key == "series":
                     revisions = record_json.pop("revisions", None)

@@ -45,7 +45,7 @@ LELE_SURFACE=parent .venv/bin/python deploy/run.py
 
 ## 数据与切换边界
 
-运行入口不会初始化、升级、导入数据库或创建账号。当前应用使用 v4 结构；离线维护使用独立的 `manage.py`，不能把生产配置伪装成 development。
+运行入口不会初始化、修改表结构、导入数据库或创建账号。继续使用配置中的同一个 PostgreSQL 实例、数据库和现有业务表。离线表字段维护使用独立的 `manage.py`，不能把生产配置伪装成 development。应用的 v4/v5/v6 是结构变更记录编号，不是 PostgreSQL 软件版本，也不表示另建或切换数据库；业务数据映射标记保持 v4。
 
 ## 离线初始化、升级与管理员引导
 
@@ -64,7 +64,13 @@ LELE_SURFACE=parent .venv/bin/python deploy/run.py
   --apply --confirm TARGET_ID_FROM_PREVIEW
 ```
 
-空库创建 v4；已知 v2/v3 结构按事务升级至 v4；v4 重复执行不改变数据、不重复写升级审计。结构指纹或版本标记不匹配会停止；`upgrade` 子命令只允许已初始化的已知结构。目标确认在连接前检查，配置中的目标字段变化后须重新预览。升级保持业务内容与业务修订号，新增维护审计。
+对现有 v4 表，待执行的账号需求只增加 `users.avatar_id`、`users.family_role`；原有 v5/v6 变更记录用于核验这些字段是否已添加。流水需求通过独立的 `add_points_ledger_task_date.sql` 在原 `points_ledger` 表增加可空 `task_date date`，既有 v6 的编号保持为 6。预览中的 `pendingTableChanges` 会列出待添加的流水字段。
+
+儿童性别通过独立的 `add_children_gender.sql` 在原 `children` 表增加可空 `gender` 字段，仅允许 `boy`/`girl`，已有值为空，不根据历史头像回填。创建接口必填性别，分别设置 boy-04/girl-10 默认头像；之后由管理员保存头像时在同一事务中同步性别。预览会列出 `children.gender`，既有结构记录仍为 6。
+
+创建儿童重试通过 `add_child_creation_request.sql` 在原 `idempotency_records` 表增加可空 `creation_request_id` 及按账号和请求编号去重的唯一索引；历史记录保持为空，结构记录编号仍为 6。维护预览会列出 `idempotency_records.creation_request_id`，在切换包含新创建表单的版本前先执行该表字段增量。创建接口要求 `requestId`，同次请求在事务内保存儿童和幂等记录；并发或响应丢失后的重试返回同一个儿童，参数冲突返回 409。已失去儿童访问权限的原创建者重试会被拒绝，不会重新创建儿童。
+
+字段增量保持原库、原表、既有行及业务修订号。历史流水不回填日期，原列值和 JSON 内容不重写；`task_date IS NULL` 时接口不返回任务日期，页面显示“——”。新完成/撤销流水将日期写入此原生列，接口的 `taskDate` 是它的字段映射。更新结构指纹和维护审计用于记录表字段变更；重复执行无变更。未知结构会停止，`upgrade` 仅接受已初始化的已知结构；配置目标变化后须重新预览。
 
 首个管理员仅在账号表完全为空时允许引导；预览无需提供密码，执行时在交互终端两次输入，不支持命令行/环境变量/管道传密码：
 
@@ -94,7 +100,7 @@ LELE_SURFACE=parent .venv/bin/python deploy/run.py
 
 ## 旧版单孩子生产库迁移
 
-`deploy/migrate_legacy.py` 是独立离线工具，只接收私有的旧版当前业务记录，不导入旧快照、请求日志或本地测试账号；这些原始资料应保留在迁移外部备份中。目标必须是已经初始化的独立 v4 库、有效的正式家长账号且无孩子数据。默认预览，执行需要目标 `targetId`、来源规范化 SHA-256 及明确 `--apply`：
+`deploy/migrate_legacy.py` 是历史切换使用的独立离线工具，本次表字段需求不执行此工具。它只接收私有的旧版当前业务记录，不导入旧快照、请求日志或本地测试账号；这些原始资料应保留在迁移外部备份中。目标必须是已经初始化并完成当前字段维护的独立库、有效的正式家长账号且无孩子数据；业务映射仍为 v4。默认预览，执行需要目标 `targetId`、来源规范化 SHA-256 及明确 `--apply`：
 
 ```sh
 .venv/bin/python deploy/migrate_legacy.py --config /etc/lele-growth/production.json \

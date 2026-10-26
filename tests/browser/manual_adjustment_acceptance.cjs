@@ -31,7 +31,7 @@ async function exerciseManualAdjustment({ browser, dad, origin, out, axe, stage 
     [1180, 820, true],
     [390, 844, true],
   ]) {
-    const created = await call(dad, "/api/children", "POST", { name: `积分调整验收-${width}` })
+    const created = await call(dad, "/api/children", "POST", { name: `积${width}`, gender: "boy", requestId: require('node:crypto').randomUUID() })
     assert.equal(created.status, 200)
     const base = `/api/children/${created.child.id}`
     const context = await browser.newContext({
