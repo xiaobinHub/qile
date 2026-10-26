@@ -2,15 +2,23 @@ import { ChildAvatar } from "./child-avatar"
 import { ChildGenderPicker, type ChildGender } from "./child-gender-picker"
 import { useChildCreation } from "./use-child-creation"
 import { useEffect, useRef, useState } from "react"
-import { UserRound, ShieldCheck, Baby, Mail, ArrowRight } from "lucide-react"
+import {
+  UserRound,
+  ShieldCheck,
+  Baby,
+  Mail,
+  ArrowRight,
+  CircleCheck,
+  ChevronRight,
+} from "lucide-react"
 import { PasswordInput } from "@shared/components/password-input"
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from "@shared/components/ui/dialog"
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+} from "@shared/components/ui/sheet"
 import { Button, Input, Card, ErrorText, Field, useAsync } from "./ui"
 import { runtime } from "../lib/runtime"
 import type { Child, User } from "../domain/types"
@@ -198,15 +206,14 @@ export function ChildSwitcher({
     }
   }, [])
   return (
-    <Dialog
+    <Sheet
       open
       onOpenChange={(open) => {
         if (!open && !action.busy) onClose()
       }}
     >
-      <DialogContent
+      <SheetContent
         id="childrenDialog"
-        backdrop="immersive"
         className="child-switcher"
         onCloseAutoFocus={(event) => {
           event.preventDefault()
@@ -215,18 +222,26 @@ export function ChildSwitcher({
         onInteractOutside={(e) => {
           if (action.busy) e.preventDefault()
         }}
+        onEscapeKeyDown={(e) => {
+          if (action.busy) e.preventDefault()
+        }}
       >
-        <DialogHeader className="child-switcher-heading">
-          <DialogTitle>我的孩子</DialogTitle>
-          <DialogDescription>选择一张卡牌，进入孩子的成长计划。</DialogDescription>
-        </DialogHeader>
+        <SheetHeader className="child-switcher-heading">
+          <SheetTitle>选择儿童</SheetTitle>
+          <SheetDescription>在不同儿童之间切换，每个儿童数据相互独立。</SheetDescription>
+        </SheetHeader>
         <ErrorText message={action.error} />
         <div
           className="children-dialog-cards"
           role="group"
           aria-label="选择孩子"
           onKeyDown={(event) => {
-            if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return
+            if (
+              !["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Home", "End"].includes(
+                event.key,
+              )
+            )
+              return
             const buttons = Array.from(
                 event.currentTarget.querySelectorAll<HTMLButtonElement>(
                   "[data-child-card]:not(:disabled)",
@@ -242,25 +257,24 @@ export function ChildSwitcher({
                   ? buttons.length - 1
                   : Math.max(
                       0,
-                      Math.min(buttons.length - 1, index + (event.key === "ArrowRight" ? 1 : -1)),
+                      Math.min(
+                        buttons.length - 1,
+                        index + (["ArrowDown", "ArrowRight"].includes(event.key) ? 1 : -1),
+                      ),
                     )
             buttons[next]?.focus({ preventScroll: true })
             buttons[next]?.scrollIntoView({ block: "nearest", inline: "center" })
           }}
-          onWheel={(e) => {
-            if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) e.currentTarget.scrollLeft += e.deltaY
-          }}
         >
-          {list.map((c, i) => (
+          {list.map((c) => (
             <Button
               key={c.id}
               variant="ghost"
               className={`children-dialog-card ${child.id === c.id ? "is-current" : ""}`}
-              style={{ "--card-hue": String([125, 32, 203, 280][i % 4]) } as React.CSSProperties}
               disabled={action.busy}
               data-child-card={c.id}
               aria-current={child.id === c.id ? "true" : undefined}
-              aria-label={`${c.name}${child.id === c.id ? "，当前孩子" : ""}${c.archived ? "，只读" : ""}`}
+              aria-label={`${c.name}${child.id === c.id ? "，当前孩子" : ""}`}
               onClick={() => {
                 if (child.id === c.id) {
                   onClose()
@@ -272,20 +286,23 @@ export function ChildSwitcher({
                 })
               }}
             >
-              <span className="portrait-decoration" aria-hidden />
               <span className="child-portrait" aria-hidden>
                 <ChildAvatar id={c.avatarId} />
               </span>
-              <strong>{c.name}</strong>
-              <span>
-                {c.role === "owner" ? "管理员" : "成员"}
-                {c.archived ? " · 只读" : ""}
+              <span className="child-switcher-name">
+                <strong>{c.name}</strong>
               </span>
-              <small>{child.id === c.id ? "当前孩子 ✓" : "进入成长计划 →"}</small>
+              {child.id === c.id ? (
+                <span className="child-switcher-current">
+                  <CircleCheck aria-hidden />
+                </span>
+              ) : (
+                <ChevronRight className="child-switcher-arrow" aria-hidden />
+              )}
             </Button>
           ))}
         </div>
-      </DialogContent>
-    </Dialog>
+      </SheetContent>
+    </Sheet>
   )
 }

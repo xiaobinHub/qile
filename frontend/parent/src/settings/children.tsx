@@ -389,7 +389,9 @@ export function Invitations({ controller }: { controller: Controller }) {
   const { deps } = controller,
     action = useAction(controller),
     [reload, setReload] = useState(0)
-  const [notice, setNotice] = useState<{ answer: string; childId: string } | null>(null)
+  const [notice, setNotice] = useState("")
+  const [accepted, setAccepted] = useState<Invitation[]>([])
+  const [resolved, setResolved] = useState<string[]>([])
   const read = useRead(() => deps.api<{ invitations: Invitation[] }>("/api/invitations"), reload)
   if (!read.value)
     return (
@@ -399,77 +401,101 @@ export function Invitations({ controller }: { controller: Controller }) {
         retry={() => setReload((value) => value + 1)}
       />
     )
+  const invitations = [
+    ...accepted,
+    ...read.value.invitations.filter((inv) => !resolved.includes(inv.id)),
+  ]
+  const enter = (inv: Invitation) =>
+    action.run(inv.id, async () => {
+      await deps.sync(false)
+      if (action.active()) await deps.selectChild(inv.childId)
+    })
   const answer = (inv: Invitation, value: string) =>
     action.run(
       inv.id,
       () => deps.api<{ childId: string }>(`/api/invitations/${inv.id}/${value}`, "POST", {}),
       async (result) => {
-        await deps.sync(false)
-        if (!action.active()) return
-        setNotice({ answer: value, childId: result.childId })
+        setResolved((ids) => [...ids, inv.id])
+        if (value === "accept") setAccepted((items) => [...items, inv])
+        setNotice(value === "accept" ? "" : "已拒绝这份邀请。")
         setReload((value) => value + 1)
+        await deps.sync(false)
+        if (!action.active() || value !== "accept") return
+        const childIds = new Set([
+          ...deps.context().children.map((child) => child.id),
+          ...invitations.map((item) => item.childId),
+        ])
+        if (childIds.size === 1) await deps.selectChild(result.childId)
       },
     )
   return (
     <>
       {notice && (
         <div className="settings-success-banner" role="status">
-          <span>
-            {notice.answer === "accept" ? "已接受邀请，可以一起记录成长了。" : "已拒绝这份邀请。"}
-          </span>
-          {notice.answer === "accept" && (
-            <Button
-              type="button"
-              variant="outline"
-              data-enter-invited-child
-              onClick={() => deps.selectChild(notice.childId)}
-            >
-              进入孩子
-            </Button>
-          )}
+          {notice}
         </div>
       )}
       <Feedback id="invitationError" message={action.error || read.error} />
       <div className="settings-invitation-list">
-        {read.value.invitations.length ? (
-          read.value.invitations.map((inv) => (
-            <Card className="settings-invitation-card" key={inv.id}>
-              <div className="settings-person-row">
-                <span className="settings-large-avatar" aria-hidden="true">
-                  <ChildAvatar id={inv.childAvatarId} />
-                </span>
-                <div className="settings-person-copy">
-                  <strong>{inv.childName}</strong>
-                  <p>邀请你成为成员</p>
+        {invitations.length ? (
+          invitations.map((inv) => {
+            const joined = accepted.some((item) => item.id === inv.id)
+            return (
+              <Card className="settings-invitation-card" key={inv.id} data-invitation-card={inv.id}>
+                <div className="settings-person-row">
+                  <span className="settings-large-avatar" aria-hidden="true">
+                    <ChildAvatar id={inv.childAvatarId} />
+                  </span>
+                  <div className="settings-person-copy">
+                    <strong>{inv.childName}</strong>
+                    <p>{joined ? "已成为家庭成员" : "邀请你成为成员"}</p>
+                  </div>
+                  <Badge className="settings-status is-owner">{joined ? "已接受" : "待处理"}</Badge>
                 </div>
-                <Badge className="settings-status is-owner">待处理</Badge>
-              </div>
-              <p className="settings-help">接受后，可以查看和管理这个孩子的任务、积分与礼品。</p>
-              <div className="settings-invitation-footer">
-                <span>{date(inv.expiresAt)} 前有效</span>
-                <div>
-                  <Button
-                    variant="outline"
-                    type="button"
-                    data-reject-invite={inv.id}
-                    disabled={!!action.busy}
-                    onClick={() => answer(inv, "reject")}
-                  >
-                    {action.busy === inv.id ? "正在处理…" : "拒绝邀请"}
-                  </Button>
-                  <Button
-                    variant="default"
-                    type="button"
-                    data-accept-invite={inv.id}
-                    disabled={!!action.busy}
-                    onClick={() => answer(inv, "accept")}
-                  >
-                    接受邀请
-                  </Button>
+                <p className="settings-help">
+                  {joined
+                    ? "可以查看和管理这个孩子的任务、积分与礼品。"
+                    : "接受后，可以查看和管理这个孩子的任务、积分与礼品。"}
+                </p>
+                <div className="settings-invitation-footer">
+                  <span>{joined ? "已加入家庭" : `${date(inv.expiresAt)} 前有效`}</span>
+                  <div>
+                    {joined ? (
+                      <Button
+                        type="button"
+                        data-enter-invited-child={inv.childId}
+                        disabled={!!action.busy}
+                        onClick={() => enter(inv)}
+                      >
+                        进入
+                      </Button>
+                    ) : (
+                      <>
+                        <Button
+                          variant="outline"
+                          type="button"
+                          data-reject-invite={inv.id}
+                          disabled={!!action.busy}
+                          onClick={() => answer(inv, "reject")}
+                        >
+                          {action.busy === inv.id ? "正在处理…" : "拒绝邀请"}
+                        </Button>
+                        <Button
+                          variant="default"
+                          type="button"
+                          data-accept-invite={inv.id}
+                          disabled={!!action.busy}
+                          onClick={() => answer(inv, "accept")}
+                        >
+                          接受邀请
+                        </Button>
+                      </>
+                    )}
+                  </div>
                 </div>
-              </div>
-            </Card>
-          ))
+              </Card>
+            )
+          })
         ) : (
           <Empty title="暂无待处理邀请" copy="收到家人的邀请后，会在这里显示。" />
         )}

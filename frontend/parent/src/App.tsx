@@ -72,7 +72,13 @@ function Application() {
       deps: {
         context: () => {
           const s = runtime.getSnapshot()
-          return { child: s.child, user: s.user!, data: s.data, updatedAt: s.updatedAt }
+          return {
+            child: s.child,
+            children: s.children,
+            user: s.user!,
+            data: s.data,
+            updatedAt: s.updatedAt,
+          }
         },
         api: runtime.api,
         show: () => runtime.setView("settings"),

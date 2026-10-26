@@ -582,127 +582,89 @@ a {
   border-left-color: hsl(from var(--task-color) h calc(s * 0.35) l);
 }
 /* Child portrait cards retain their special presentation inside accessible Dialog. */
-.child-switcher {
-  width: min(1050px, calc(100vw - 28px));
-  max-width: 1050px;
-  background: transparent;
-  border: 0;
-  box-shadow: none;
-  padding: 0;
-  color: #fff;
+.child-switcher[data-slot="sheet-content"] {
+  width: min(400px, 100%);
+  max-width: 400px;
+  height: 100dvh;
   gap: 0;
+  padding: 32px 20px 20px;
+  padding-bottom: max(20px, env(safe-area-inset-bottom));
 }
 .child-switcher-heading {
-  text-align: center;
-  padding: 0 50px 12px;
+  flex-shrink: 0;
+  padding: 0 40px 24px 4px;
+  text-align: left;
 }
-.child-switcher-heading [data-slot="dialog-title"] {
-  font-size: var(--text-detail);
-  line-height: var(--text-detail--line-height);
-}
-.child-switcher-heading [data-slot="dialog-description"] {
-  color: #fff;
+.child-switcher-heading [data-slot="sheet-description"] {
   font-size: var(--text-caption);
   line-height: var(--text-caption--line-height);
 }
-.child-switcher > [data-slot="dialog-close"] {
-  color: #fff;
-  top: 0;
-  right: 8px;
-}
-.child-switcher [data-slot="dialog-close"]:hover {
-  color: #fff;
-  background: #ffffff20;
+.child-switcher > [data-slot="sheet-close"] {
+  min-width: 44px;
+  min-height: 44px;
+  top: 22px;
+  right: 16px;
 }
 .children-dialog-cards {
   display: flex;
-  gap: 25px;
-  overflow-x: auto;
-  scroll-snap-type: x mandatory;
-  padding: 32px 32px 26px;
-  scroll-padding: 32px;
+  flex-direction: column;
+  min-height: 0;
+  gap: 12px;
+  overflow-y: auto;
   overscroll-behavior: contain;
+  padding: 4px;
   scrollbar-width: thin;
 }
 .children-dialog-card {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-  align-items: center;
-  flex: 0 0 270px;
-  height: 350px;
-  padding: 26px 24px;
-  border: 2px solid color-mix(in srgb, var(--card) 65%, transparent);
-  border-radius: var(--radius-xl);
-  background: linear-gradient(
-    155deg,
-    var(--card),
-    color-mix(in srgb, var(--primary) 20%, var(--muted))
-  );
-  color: var(--foreground);
-  box-shadow: 0 18px 40px color-mix(in srgb, var(--foreground) 20%, transparent);
-  scroll-snap-align: center;
+  width: 100%;
+  min-height: 112px;
+  height: auto;
+  flex-shrink: 0;
+  justify-content: flex-start;
+  gap: 16px;
+  padding: 16px 12px;
+  border-radius: var(--radius-card);
   white-space: normal;
-  transition: transform 0.2s;
-  overflow: hidden;
+  text-align: left;
 }
-.children-dialog-card:hover {
-  transform: translateY(-7px);
-  background: linear-gradient(
-    155deg,
-    var(--card),
-    color-mix(in srgb, var(--primary) 28%, var(--muted))
-  );
+.children-dialog-card.is-current,
+.children-dialog-card.is-current:hover {
+  background: var(--accent);
+  color: var(--accent-foreground);
 }
-.children-dialog-card.is-current {
-  border: 3px solid var(--primary);
-  box-shadow:
-    0 0 0 5px color-mix(in srgb, var(--primary) 25%, transparent),
-    0 18px 40px color-mix(in srgb, var(--foreground) 20%, transparent);
-}
-.child-portrait {
-  position: absolute;
-  top: 55px;
-  width: 130px;
-  height: 130px;
-  border-radius: 45% 45% 40% 40%;
-  background: color-mix(in srgb, var(--card) 75%, transparent);
-  box-shadow: 0 10px 30px color-mix(in srgb, var(--foreground) 8%, transparent);
+.child-switcher .child-portrait {
+  width: 80px;
+  height: 80px;
+  flex-shrink: 0;
   display: grid;
   place-items: center;
-  font-size: 4.375rem;
-  font-weight: 600;
-  color: var(--brand-ink);
 }
-.portrait-decoration {
-  position: absolute;
-  inset: -60px -40px auto auto;
-  width: 220px;
-  height: 220px;
-  border: 24px solid color-mix(in srgb, var(--card) 30%, transparent);
-  border-radius: 50%;
+.child-switcher-name {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
 }
-.children-dialog-card strong {
-  font-size: var(--text-card);
-  max-width: 100%;
-  overflow-wrap: anywhere;
-  line-height: var(--text-card--line-height);
-}
-.children-dialog-card > span:last-of-type {
+.child-switcher-name strong {
   font-size: var(--text-body);
-  margin-top: 12px;
   line-height: var(--text-body--line-height);
+  overflow-wrap: anywhere;
 }
-.children-dialog-card small {
+.child-switcher-current {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
   font-size: var(--text-caption);
-  margin-top: 8px;
-  color: var(--text-secondary);
   line-height: var(--text-caption--line-height);
 }
+.child-switcher-arrow {
+  color: var(--text-secondary);
+}
 .children-dialog-card:focus-visible {
-  outline: 3px solid var(--ring);
-  outline-offset: 6px;
+  outline: 2px solid var(--ring);
+  outline-offset: 1px;
 }
 /* Settings keep approved split navigation, with shared controls handling appearance. */
 .settings-workspace {
@@ -1677,14 +1639,6 @@ a {
   .gift-manager-actions {
     grid-column: 2;
     justify-self: end;
-  }
-  .children-dialog-card {
-    flex-basis: 245px;
-    height: 335px;
-  }
-  .children-dialog-cards {
-    gap: 22px;
-    padding: 28px 26px 22px;
   }
   .onboarding {
     margin-top: 24px;

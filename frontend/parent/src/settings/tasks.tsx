@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef, useState, type CSSProperties } from "react"
-import { Button, Empty, Feedback, Icon, Input, Notice, RowMenu, useAction } from "./primitives"
-import { ArrowDown, ArrowUp, Clock3, GripVertical, Plus } from "lucide-react"
+import { Button, Empty, Feedback, Input, Notice, RowMenu, useAction } from "./primitives"
+import { ArrowDown, ArrowUp, GripVertical, Plus } from "lucide-react"
 import type { Context, Controller } from "./types"
 
 export function Presets({ controller, context }: { controller: Controller; context: Context }) {
@@ -34,23 +34,18 @@ export function Presets({ controller, context }: { controller: Controller; conte
                 : `${category.name}（已停用）`
               : "未配置类型"
             return (
-              <div className="task-preset-card settings-config-row" key={preset.id}>
+              <div
+                className="task-preset-card settings-config-row"
+                key={preset.id}
+                style={
+                  { "--preset-cat": category?.active ? category.color : "#9ba59e" } as CSSProperties
+                }
+              >
                 <div className="task-preset-card-main">
                   <strong>{preset.title}</strong>
                   <div className="task-preset-card-meta">
-                    <span
-                      className="task-preset-category"
-                      style={
-                        {
-                          "--preset-cat": category?.active ? category.color : "#9ba59e",
-                        } as CSSProperties
-                      }
-                    >
-                      <i aria-hidden="true" />
-                      {categoryName}
-                    </span>
+                    <span className="task-preset-category">{categoryName}</span>
                     <span className="task-preset-time">
-                      <Clock3 aria-hidden="true" />
                       {preset.startTime}–{preset.endTime}
                     </span>
                   </div>
@@ -62,7 +57,7 @@ export function Presets({ controller, context }: { controller: Controller; conte
                   </span>
                   <div className="task-preset-actions">
                     <Button
-                      variant="outline"
+                      variant="ghost"
                       type="button"
                       data-preset-edit={preset.id}
                       disabled={archived || !!action.busy}

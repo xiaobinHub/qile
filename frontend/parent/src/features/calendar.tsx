@@ -977,13 +977,15 @@ export function PresetEditor({
               />
             </Field>
             <Field label="奖励积分" id="presetPoints">
-              <Input
+              <NumberPicker
                 id="presetPoints"
-                type="number"
+                label="奖励积分"
                 min={0}
-                max={9999}
+                max={100}
+                step={5}
+                loop
                 value={value.points}
-                onChange={(e) => update({ points: Number(e.target.value) })}
+                onChange={(points) => update({ points })}
                 required
               />
             </Field>
