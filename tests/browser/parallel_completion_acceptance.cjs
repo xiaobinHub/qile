@@ -29,7 +29,7 @@ async function exerciseParallelCompletions({ browser, dad, origin, out, axe, sta
     [1180, 820, true],
     [390, 844, true],
   ]) {
-    const created = await call(dad, "/api/children", "POST", { name: `并${width}`, gender: "boy" })
+    const created = await call(dad, "/api/children", "POST", { name: `并${width}`, gender: "boy", requestId: require('node:crypto').randomUUID() })
     assert.equal(created.status, 200)
     const child = created.child,
       base = `/api/children/${child.id}`

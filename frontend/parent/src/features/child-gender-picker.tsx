@@ -15,13 +15,15 @@ export function childGenderLabel(value?: ChildGender | null) {
 export function ChildGenderPicker({
   value,
   onChange,
+  disabled = false,
 }: {
   value: ChildGender | ""
   onChange: (value: ChildGender) => void
+  disabled?: boolean
 }) {
   const { avatars } = useChildAvatars()
   return (
-    <fieldset className="child-gender-picker">
+    <fieldset className="child-gender-picker" disabled={disabled}>
       <legend>
         性别 <span aria-hidden="true">*</span>
         <span className="sr-only">（必填）</span>

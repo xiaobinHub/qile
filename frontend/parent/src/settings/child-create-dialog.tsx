@@ -1,5 +1,6 @@
 import { useRef, useState, type FormEvent } from "react"
 import { ChildGenderPicker, type ChildGender } from "../features/child-gender-picker"
+import { useChildCreation } from "../features/use-child-creation"
 import {
   Dialog,
   DialogContent,
@@ -23,6 +24,7 @@ export function ChildCreateDialog({
   const input = useRef<HTMLInputElement>(null)
   const returnFocus = useRef<HTMLElement | null>(null)
   const { deps } = controller
+  const creation = useChildCreation(deps)
   function submit(event: FormEvent) {
     event.preventDefault()
     const name = input.current!.value.trim()
@@ -37,12 +39,15 @@ export function ChildCreateDialog({
     }
     void action.run(
       "create-child",
-      () => deps.api<{ child: { id: string } }>("/api/children", "POST", { name, gender }),
-      async (result) => {
-        await deps.sync(false)
+      async () => {
+        const child = await creation.save(name, gender)
+        await creation.refresh()
+        return child
+      },
+      async (child) => {
         if (!action.active()) return
         onClose()
-        await deps.selectChild(result.child.id)
+        await deps.selectChild(child.id)
         deps.toast("儿童已添加")
       },
     )
@@ -77,18 +82,27 @@ export function ChildCreateDialog({
                 ref={input}
                 id="addChildName"
                 required
+                disabled={creation.locked}
                 maxLength={5}
                 autoComplete="off"
                 placeholder="请输入儿童昵称"
               />
             </FormField>
-            <ChildGenderPicker value={gender} onChange={setGender} />
+            <ChildGenderPicker value={gender} onChange={setGender} disabled={creation.locked} />
             <Feedback id="addChildError" message={action.error} />
             <DialogFooter>
               <Button type="button" variant="outline" onClick={onClose}>
                 取消
               </Button>
-              <Button type="submit">{action.busy ? "正在添加…" : "添加儿童"}</Button>
+              <Button type="submit">
+                {creation.created
+                  ? action.busy
+                    ? "正在刷新…"
+                    : "重试刷新"
+                  : action.busy
+                    ? "正在添加…"
+                    : "添加儿童"}
+              </Button>
             </DialogFooter>
           </fieldset>
         </form>

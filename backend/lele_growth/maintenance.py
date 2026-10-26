@@ -13,7 +13,7 @@ from lele_growth.child_service import (
 from lele_growth.postgres_store import PostgresStore
 
 
-def schema_sources(*, include_ledger_date=True, include_child_gender=True):
+def schema_sources(*, include_ledger_date=True, include_child_gender=True, include_child_creation=True):
     directory = Path(__file__).with_name('db')
     source = (directory / 'schema_v2.sql').read_text()
     migration = (directory / 'migrate_v2_to_v3.sql').read_text()
@@ -26,6 +26,8 @@ def schema_sources(*, include_ledger_date=True, include_child_gender=True):
         texts[6] += '\n' + (directory / 'add_points_ledger_task_date.sql').read_text()
     if include_child_gender:
         texts[6] += '\n' + (directory / 'add_children_gender.sql').read_text()
+    if include_child_creation:
+        texts[6] += '\n' + (directory / 'add_child_creation_request.sql').read_text()
     return source, migration, media, {version: hashlib.sha256(text.encode()).hexdigest() for version, text in texts.items()}
 
 
@@ -40,8 +42,9 @@ def schema_version(cur):
     matches = [v for v, h in hashes.items() if namespace[0] == f'lele-schema-v{v}:{h}:{catalog}']
     # Accept the known development v6 schema so the table-only addition can be applied.
     legacy_hashes = {
-        schema_sources(include_ledger_date=False, include_child_gender=False)[3][6],
-        schema_sources(include_child_gender=False)[3][6],
+        schema_sources(include_ledger_date=False, include_child_gender=False, include_child_creation=False)[3][6],
+        schema_sources(include_child_gender=False, include_child_creation=False)[3][6],
+        schema_sources(include_child_creation=False)[3][6],
     }
     if any(namespace[0] == f'lele-schema-v6:{h}:{catalog}' for h in legacy_hashes):
         matches.append(6)
@@ -61,7 +64,7 @@ def inspect_schema(service):
             users = cur.fetchone()[0]
         pending = []
         if version == 6:
-            for table, column in (('points_ledger','task_date'),('children','gender')):
+            for table, column in (('points_ledger','task_date'),('children','gender'),('idempotency_records','creation_request_id')):
                 cur.execute("SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema='lele' AND table_name=%s AND column_name=%s)",(table,column))
                 if not cur.fetchone()[0]:
                     pending.append(f'{table}.{column}')
@@ -91,6 +94,7 @@ def initialize_service(service, *, upgrade_only=False, audit_detail=None):
         for table, column, script in (
             ('points_ledger','task_date','add_points_ledger_task_date.sql'),
             ('children','gender','add_children_gender.sql'),
+            ('idempotency_records','creation_request_id','add_child_creation_request.sql'),
         ):
             cur.execute("SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema='lele' AND table_name=%s AND column_name=%s)",(table,column))
             if not cur.fetchone()[0]:

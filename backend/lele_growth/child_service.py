@@ -400,6 +400,29 @@ class ChildService:
         self.audit(cur,user_id,'child.create',child)
         return dict(id=child,name=name,ownerId=user_id,role='owner',archived=False,membershipVersion=member,avatarId=record['data']['settings'].get('avatarId',DEFAULT_AVATAR),gender=gender)
 
+    def create_child_request(self,cur,user,body):
+        require(set(body)=={'name','gender','requestId'},400,'请填写儿童昵称、性别和创建请求编号。')
+        require(isinstance(body['gender'],str) and body['gender'] in CHILD_GENDER_AVATARS,400,'请选择儿童性别。')
+        request_id=body['requestId']
+        require(isinstance(request_id,str) and bool(re.fullmatch(r'[A-Za-z0-9._:-]{8,100}',request_id)),400,'创建请求编号无效。')
+        name=child_name_value(body['name'])
+        request_hash=canonical_sha256({'name':name,'gender':body['gender']})
+        cur.execute("SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema='lele' AND table_name='idempotency_records' AND column_name='creation_request_id')")
+        require(cur.fetchone()[0],503,'创建请求表尚未添加幂等字段。')
+        # Serialize the absent-row case as well as retries, including across processes.
+        lock_key=canonical_bytes(['child.create',user[0],request_id])
+        cur.execute('SELECT pg_advisory_xact_lock(%s)',(int.from_bytes(hashlib.sha256(lock_key).digest()[:8],'big',signed=True),))
+        cur.execute('SELECT child_id,payload_sha256 FROM lele.idempotency_records WHERE actor_id=%s AND creation_request_id=%s',(user[0],request_id))
+        previous=cur.fetchone()
+        if previous:
+            require(previous[1]==request_hash,409,'创建请求编号已被其他内容使用。','creation_conflict')
+            # A receipt never bypasses a later removal, transfer or deletion.
+            return {'child':self.child_public(self.access(cur,user,previous[0]),user[0])}
+        child=self.create_child(cur,user[0],name,gender=body['gender'])
+        cur.execute('INSERT INTO lele.idempotency_records(child_id,operation_id,actor_id,membership_version,payload_sha256,result_revision,creation_request_id) VALUES(%s,%s,%s,%s,%s,0,%s)',
+                    (child['id'],'child.create/'+request_id,user[0],child['membershipVersion'],request_hash,request_id))
+        return {'child':child}
+
     def parent(self,cur,user,method,path,body):
         if path=='account-avatars' and method=='GET':
             from lele_growth.child_avatars import account_avatar_catalog
@@ -411,9 +434,7 @@ class ChildService:
             cur.execute("SELECT c.id,c.name,c.owner_id,c.archived,m.membership_version,(SELECT record_json->>'avatarId' FROM lele.app_settings WHERE child_id=c.id AND id=1),c.gender FROM lele.children c JOIN lele.memberships m ON m.child_id=c.id WHERE m.user_id=%s AND c.deleted_at IS NULL ORDER BY c.created_at,c.id",(user[0],))
             return {'children':[self.child_public(r,user[0]) for r in cur.fetchall()]}
         if path=='children' and method=='POST':
-            require(set(body)=={'name','gender'},400,'请填写儿童昵称并选择性别。')
-            require(isinstance(body['gender'],str) and body['gender'] in CHILD_GENDER_AVATARS,400,'请选择儿童性别。')
-            return {'child':self.create_child(cur,user[0],child_name_value(body['name']),gender=body['gender'])}
+            return self.create_child_request(cur,user,body)
         if path=='invitations' and method=='GET':
             cur.execute("SELECT i.id,i.child_id,c.name,i.created_by,i.expires_at,(SELECT record_json->>'avatarId' FROM lele.app_settings WHERE child_id=c.id AND id=1) FROM lele.invitations i JOIN lele.children c ON c.id=i.child_id WHERE i.target_id=%s AND i.status='pending' AND i.expires_at>now() AND c.deleted_at IS NULL ORDER BY i.created_at",(user[0],))
             return {'invitations':[dict(id=r[0],childId=r[1],childName=r[2],createdBy=r[3],expiresAt=r[4].isoformat(),childAvatarId=r[5] or DEFAULT_AVATAR) for r in cur.fetchall()]}

@@ -68,6 +68,8 @@ LELE_SURFACE=parent .venv/bin/python deploy/run.py
 
 儿童性别通过独立的 `add_children_gender.sql` 在原 `children` 表增加可空 `gender` 字段，仅允许 `boy`/`girl`，已有值为空，不根据历史头像回填。创建接口必填性别，分别设置 boy-04/girl-10 默认头像；之后由管理员保存头像时在同一事务中同步性别。预览会列出 `children.gender`，既有结构记录仍为 6。
 
+创建儿童重试通过 `add_child_creation_request.sql` 在原 `idempotency_records` 表增加可空 `creation_request_id` 及按账号和请求编号去重的唯一索引；历史记录保持为空，结构记录编号仍为 6。维护预览会列出 `idempotency_records.creation_request_id`，在切换包含新创建表单的版本前先执行该表字段增量。创建接口要求 `requestId`，同次请求在事务内保存儿童和幂等记录；并发或响应丢失后的重试返回同一个儿童，参数冲突返回 409。已失去儿童访问权限的原创建者重试会被拒绝，不会重新创建儿童。
+
 字段增量保持原库、原表、既有行及业务修订号。历史流水不回填日期，原列值和 JSON 内容不重写；`task_date IS NULL` 时接口不返回任务日期，页面显示“——”。新完成/撤销流水将日期写入此原生列，接口的 `taskDate` 是它的字段映射。更新结构指纹和维护审计用于记录表字段变更；重复执行无变更。未知结构会停止，`upgrade` 仅接受已初始化的已知结构；配置目标变化后须重新预览。
 
 首个管理员仅在账号表完全为空时允许引导；预览无需提供密码，执行时在交互终端两次输入，不支持命令行/环境变量/管道传密码：

@@ -74,9 +74,70 @@ class ChildBackendTests(unittest.TestCase):
         return client,user
 
     def child(self):
-        r=self.call(self.a,'POST','/api/children',{'name':'测试孩子','gender':'boy'})
+        r=self.call(self.a,'POST','/api/children',{'name':'测试孩子','gender':'boy','requestId':str(uuid.uuid4())})
         self.assertEqual(r.status_code,200,r.text)
         return r.json()['child']
+
+    def test_child_creation_retry_is_durable_actor_scoped_and_allows_same_names(self):
+        body={'name':'重试儿童','gender':'boy','requestId':str(uuid.uuid4())}
+        first=self.call(self.a,'POST','/api/children',body)
+        self.assertEqual(first.status_code,200,first.text)
+        replay=self.call(self.a,'POST','/api/children',body)
+        self.assertEqual(replay.status_code,200,replay.text)
+        self.assertEqual(replay.json()['child']['id'],first.json()['child']['id'])
+        other_actor=self.call(self.b,'POST','/api/children',body)
+        separate=self.call(self.a,'POST','/api/children',{**body,'requestId':str(uuid.uuid4())})
+        self.assertEqual(other_actor.status_code,200,other_actor.text)
+        self.assertEqual(separate.status_code,200,separate.text)
+        self.assertEqual(len({first.json()['child']['id'],other_actor.json()['child']['id'],separate.json()['child']['id']}),3)
+        def verify(cur):
+            cur.execute('SELECT child_id FROM lele.idempotency_records WHERE actor_id=%s AND creation_request_id=%s',(self.au['id'],body['requestId']))
+            self.assertEqual(cur.fetchall(),[(first.json()['child']['id'],)])
+            cur.execute("SELECT count(*) FROM lele.audit_events WHERE child_id=%s AND action='child.create'",(first.json()['child']['id'],))
+            self.assertEqual(cur.fetchone()[0],1)
+        self.service.transaction(verify)
+
+    def test_child_creation_concurrent_replay_and_conflicting_payload(self):
+        body={'name':'并发儿童','gender':'girl','requestId':str(uuid.uuid4())}
+        with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+            results=list(executor.map(lambda _:self.call(self.a,'POST','/api/children',body),range(3)))
+        self.assertEqual([r.status_code for r in results],[200]*3,[r.text for r in results])
+        self.assertEqual(len({r.json()['child']['id'] for r in results}),1)
+        for changes in ({'name':'变更昵称'},{'gender':'boy'}):
+            conflict=self.call(self.a,'POST','/api/children',{**body,**changes})
+            self.assertEqual(conflict.status_code,409,conflict.text)
+            self.assertEqual(conflict.json()['kind'],'creation_conflict')
+
+    def test_child_creation_and_receipt_roll_back_together(self):
+        body={'name':'事务儿童','gender':'girl','requestId':str(uuid.uuid4())}
+        before=len(self.a.get('/api/children').json()['children'])
+        with patch.object(self.service.store.__class__,'replace',side_effect=ApiError(503,'模拟事务中断')):
+            failed=self.call(self.a,'POST','/api/children',body)
+        self.assertEqual(failed.status_code,503,failed.text)
+        self.assertEqual(len(self.a.get('/api/children').json()['children']),before)
+        self.assertEqual(self.service.transaction(lambda cur:cur.execute('SELECT count(*) FROM lele.idempotency_records WHERE creation_request_id=%s',(body['requestId'],)).fetchone()[0]),0)
+        retry=self.call(self.a,'POST','/api/children',body)
+        self.assertEqual(retry.status_code,200,retry.text)
+        self.assertEqual(len(self.a.get('/api/children').json()['children']),before+1)
+
+    def test_child_creation_replay_checks_access_and_never_recreates_deleted_children(self):
+        body={'name':'权限儿童','gender':'boy','requestId':str(uuid.uuid4())}
+        first=self.call(self.a,'POST','/api/children',body)
+        self.assertEqual(first.status_code,200,first.text)
+        child=first.json()['child']
+        self.join(child)
+        self.assertEqual(self.call(self.a,'POST','/api/children/'+child['id']+'/transfer',{'userId':self.bu['id']}).status_code,200)
+        self.assertEqual(self.call(self.b,'DELETE','/api/children/'+child['id']+'/members/'+self.au['id']).status_code,200)
+        self.assertEqual(self.call(self.a,'POST','/api/children',body).status_code,403)
+        self.assertEqual(self.call(self.b,'DELETE','/api/children/'+child['id']).status_code,200)
+        self.assertEqual(self.call(self.a,'POST','/api/children',body).status_code,403)
+        self.assertEqual(self.service.transaction(lambda cur:cur.execute('SELECT count(*) FROM lele.idempotency_records WHERE creation_request_id=%s',(body['requestId'],)).fetchone()[0]),1)
+
+    def test_child_creation_requires_valid_request_id(self):
+        for request_id in (None,'',7,{},'short','x'*101,'invalid/key'):
+            body={'name':'编号校验','gender':'boy','requestId':request_id}
+            self.assertEqual(self.call(self.a,'POST','/api/children',body).status_code,400)
+        self.assertEqual(self.call(self.a,'POST','/api/children',{'name':'缺少编号','gender':'boy'}).status_code,400)
 
     def archive_fixture(self,child,archived):
         # Compatibility fixture only: the public archive/restore API is removed.
@@ -380,10 +441,10 @@ class ChildBackendTests(unittest.TestCase):
     def test_child_gender_is_required_persistent_and_bound_to_avatar(self):
         before=len(self.a.get('/api/children').json()['children'])
         for body in ({'name':'测试'}, {'name':'测试','gender':None}, {'name':'测试','gender':'other'}, {'name':'测试','gender':True}, {'name':'测试','gender':['girl']}, {'name':'测试','gender':'girl','avatarId':'boy-04'}):
-            self.assertEqual(self.call(self.a,'POST','/api/children',body).status_code,400)
+            self.assertEqual(self.call(self.a,'POST','/api/children',{**body,'requestId':str(uuid.uuid4())}).status_code,400)
         self.assertEqual(len(self.a.get('/api/children').json()['children']),before)
         for gender,avatar in (('boy','boy-04'),('girl','girl-10')):
-            result=self.call(self.a,'POST','/api/children',{'name':'性别测试','gender':gender})
+            result=self.call(self.a,'POST','/api/children',{'name':'性别测试','gender':gender,'requestId':str(uuid.uuid4())})
             self.assertEqual(result.status_code,200,result.text)
             child=result.json()['child']; root='/api/children/'+child['id']
             self.assertEqual((child['gender'],child['avatarId']),(gender,avatar))
@@ -421,7 +482,7 @@ class ChildBackendTests(unittest.TestCase):
         self.assertEqual(self.a.get(root+'/context').json()['child']['gender'],'girl')
 
     def test_child_name_limit_create_and_rename(self):
-        self.assertEqual(self.call(self.a,'POST','/api/children',{'name':'一二三四五六','gender':'boy'}).status_code,400)
+        self.assertEqual(self.call(self.a,'POST','/api/children',{'name':'一二三四五六','gender':'boy','requestId':str(uuid.uuid4())}).status_code,400)
         child=self.child(); root='/api/children/'+child['id']; before=self.data(child)
         self.assertEqual(self.call(self.a,'PATCH',root,{'name':'一二三四五六'}).status_code,400)
         self.assertEqual(self.data(child)['revision'],before['revision'])
