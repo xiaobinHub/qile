@@ -37,6 +37,7 @@
 | `backend/lele_growth/plugins/supervisor.py` | 工作进程生命周期、隔离及健康检查 |
 | `backend/lele_growth/plugins/scheduler.py`、`events.py` | 调度、租约、事件投递与重试 |
 | `backend/lele_growth/plugins/deployment.py` | 单插件更新状态机、切换与恢复 |
+| `backend/lele_growth/plugins/removal.py` | 平台级删除预览、分阶段清理、幂等重试与退役标记 |
 | `backend/lele_growth/db/add_plugin_platform.sql` | 插件平台增量表、索引及约束 |
 | `frontend/parent/src/plugins/` | 类型、状态客户端、按需加载器、插件页面容器 |
 | `frontend/parent/src/settings/applications.tsx` | 家长应用目录与已安装管理 |
@@ -183,9 +184,9 @@ npm run plugin:build -- growth-notes
 
 期望输出：`output/plugin-releases/growth-notes/1.0.0/` 下的包及 SHA-256 文件；主系统构建文件和另一个插件制品摘要保持不变。
 
-### Task 10：单插件更新、回退与崩溃恢复
+### Task 10：单插件更新、回退、删除与崩溃恢复
 
-**新增：** `backend/lele_growth/plugins/deployment.py`、`deploy/plugins.py`、`tests/backend/test_plugin_deployment.py`。
+**新增：** `backend/lele_growth/plugins/deployment.py`、`removal.py`、`deploy/plugins.py`、`tests/backend/test_plugin_deployment.py`、`tests/backend/test_plugin_removal.py`。
 
 - [ ] 部署入口显式接受目标配置、包路径和插件 ID；默认预览，不从 Web 请求执行包脚本。
 - [ ] 完整实现设计第 10 节 prepare → updating → drain → activate → ready，并记录阶段、锁租约、旧/新活动版本。
@@ -194,6 +195,12 @@ npm run plugin:build -- growth-notes
 - [ ] 更新中允许撤销行为；恢复按数据库最新资格，不用部署前 enabled 快照覆盖家长的后续选择。
 - [ ] 注入每阶段进程中断，验证可恢复；模拟新进程无法启动、回退失败和并发部署，确保状态确定。
 - [ ] 对主系统 parent/admin 进程 ID、连续健康/业务请求及另一插件进行观测，证明单插件更新不触发主系统重启。
+- [ ] 依据设计第 10.6 节增加 retired_at/removed_at 和 plugin_removals；与 Task 2 的增量建表一并交付，effective_enabled 和普通部署登记都检查退役标记。
+- [ ] 实现删除预览及 keep_data/purge_data 清理；绑定目标、范围、修订和 operationId；彻底删除校验明确输入的插件 ID。
+- [ ] 删除流程复用部署维护锁，先持久化禁用标记，再排空并停止进程，按命名空间清数据和可信清单删文件，最后核验；不调用插件自己的卸载脚本。
+- [ ] 保留数据的显式恢复要求重新部署兼容包、重新安装/启用；purge_data ID 禁止复用。受理后的删除失败不能自动恢复上架；已删除包不能由扫描或主系统回退自动复活。
+- [ ] 注入数据清理/文件删除中断、残留运行进程、权限失败和更新竞争；验证幂等重试、核心任务积分保留、共享 outbox/附件引用不被误删。
+- [ ] 将最小删除凭证同步到独立于业务恢复点的受管记录，写入备份恢复后的删除清单重放流程；记录在线数据与备份的实际清理边界。
 
 拟新增运维命令合同（实施前不可运行）：
 
@@ -203,9 +210,12 @@ deploy/plugins.py deploy   --config <目标配置> --package <插件包>
 deploy/plugins.py deploy   --config <目标配置> --package <插件包> --apply --confirm <预览目标ID>
 deploy/plugins.py rollback --config <目标配置> --plugin <插件ID> --version <目标版本>
 deploy/plugins.py recover  --config <目标配置> --plugin <插件ID>
+deploy/plugins.py remove   --config <目标配置> --plugin <插件ID> --mode keep_data
+deploy/plugins.py remove   --config <目标配置> --plugin <插件ID> --mode purge_data
+deploy/plugins.py restore  --config <目标配置> --plugin <插件ID> --package <兼容包>
 ```
 
-deploy/rollback/recover 默认预览；写操作均要求 apply 和匹配目标 ID。展示插件自身影响范围、当前/候选版本和数据兼容结果，生产操作沿用受限维护模式。
+deploy/rollback/recover/remove/restore 默认预览；写操作均要求 apply 和匹配目标 ID。删除还需匹配最新影响预览及模式，purge_data 额外确认插件 ID；recover 可恢复未完成清理，不能把清理失败的插件重新启用。restore 仅适用于 keep_data，恢复登记为待发布且实例未安装/停用。展示插件自身影响范围、当前/候选版本和数据兼容结果，生产操作沿用受限维护模式。
 
 ### Task 11：管理端页面及两类参考插件
 
@@ -214,6 +224,7 @@ deploy/rollback/recover 默认预览；写操作均要求 apply 和匹配目标 
 **测试：** `tests/browser/plugin_admin_acceptance.cjs`、`tests/browser/plugin_update_acceptance.cjs`。
 
 - [ ] 实现插件列表、三状态筛选、详情资料、指定儿童选择、上下架影响提示、运行状态与部署记录。
+- [ ] 增加管理员删除预览、保留数据/彻底删除范围选择、输入 ID 确认、清理进度和失败重试；已删除记录单独查看，保持三个发布状态不变。家长端按是否保留数据展示历史移除条目或移除记录。
 - [ ] 页面型成长随记提供最小记录列表/新增功能，使用平台命名空间 API，验证两家长共享和不同儿童隔离。
 - [ ] 后台型提醒示例提供共享时间配置和执行记录，使用隔离测试接收器；代码中不植入真实收件人和发送凭据。
 - [ ] 为两插件各构建 1.0.0 与兼容的 1.0.1，实际演练一次单独更新及回退，并检查记录不丢失。
@@ -240,6 +251,7 @@ npm run check:layout
 
 - [ ] 记录设计第 12 节每条验收对应的用例、结果和证据；浏览器覆盖 1280×900、820×1180、390×844，不将模拟结果写成真机通过。
 - [ ] 编写插件创建、配置 schema、任务能力、独立构建、单独发布、回退和故障恢复说明；示例命令必须在本机隔离环境实际走通。
+- [ ] 文档补齐平台删除、源码及 CI 退役、备份恢复重放删除凭证；在测试环境演练删除中断重试和恢复旧备份后不复活插件。
 - [ ] 首次上线准备包含平台增量建表、运行服务配置、固定代码版本与回退兼容核验；不自动给所有儿童安装示例插件。
 - [ ] 评审通过后提交阶段成果；生产部署、公开上架及真实通知接入分别按具体任务执行。
 
@@ -275,6 +287,11 @@ Task 5/6 与 Task 7/8 可在合同固定后并行；Task 9 可独立推进。Tas
 | P13 | 爸爸妈妈同时保存共享配置 | 一方成功另一方收到冲突，不静默覆盖 |
 | P14 | 缺文件、越界路径、协议不兼容制品 | 在进入更新中之前拒绝，当前可用版本不受影响 |
 | P15 | 最后一个有效儿童实例停用 | 不再执行插件业务，并停止无用途的工作进程 |
+| P16 | 管理员删除插件，选择保留数据 | 全站停止使用、清理制品，配置/业务历史保留；普通部署不自动复活 |
+| P17 | 确认彻底删除所有儿童插件数据 | 插件私有在线数据清空，核心任务/积分及其他插件不变；保留最小删除凭证 |
+| P18 | 清理进行一半时终止工具或删除文件失败 | 显示清理未完成，禁止运行，可幂等重试；不自动恢复上架 |
+| P19 | 插件更新中尝试删除，或删除后旧包再次登记 | 更新与删除互斥；退役标记阻止旧包、旧进程及普通部署复活 |
+| P20 | 从删除前备份恢复隔离测试库 | 开放服务前重放独立删除清单，已彻底删除插件及其私有数据不重新可用 |
 
 ## 6. 本次方案交付状态
 
