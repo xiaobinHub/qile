@@ -8,7 +8,7 @@ const {exerciseAdminUI}=require('./admin_ui_smoke.cjs');
 const {exercisePCIPad}=require('./pc_ipad_ui_acceptance.cjs');
 const {exerciseTypography}=require('./typography_ui_acceptance.cjs');
 const {exerciseMedia}=require('./media_browser_acceptance.cjs');
-const root=path.resolve(__dirname,'../..'),python=path.join(root,'.venv/bin/python'),runtime=path.join(root,'data/testing/browser'),out=path.join(root,process.argv.includes('--child-management-only')?'output/playwright/child-management':process.argv.includes('--typography-only')?'output/playwright/typography-focused':'output/playwright/shadcn-unified');
+const root=path.resolve(__dirname,'../..'),python=path.join(root,'.venv/bin/python'),runtime=path.join(root,'data/testing/browser'),out=path.join(root,process.argv.includes('--quick-edit-only')?'output/playwright/quick-edit':process.argv.includes('--child-management-only')?'output/playwright/child-management':process.argv.includes('--typography-only')?'output/playwright/typography-focused':'output/playwright/shadcn-unified');
 const ports={parent:18887,admin:18888},origin=`http://127.0.0.1:${ports.parent}`,configPath=path.join(runtime,'config.json');
 const passwords=Object.fromEntries(['admin','adminNew','initial','dad','mom','reject'].map((key,index)=>[key,String.fromCharCode(65+index)+'7'+crypto.randomBytes(2).toString('hex')]));
 const setup=`
@@ -74,6 +74,12 @@ async function deleteChild(page,id,{failure=false}={}){await settings(page,'open
  await require('./account_avatar_acceptance.cjs').exerciseAccountAvatar({dad,api,axe,stage,out});
  await dad.locator('#editAccountNickname').click();await dad.locator('#profileNickname').fill('取消昵称');await dad.locator('#accountNicknameDialog').getByRole('button',{name:'取消',exact:true}).click();await dad.locator('#accountNicknameDialog').waitFor({state:'hidden'});assert.equal((await api(dad,'/api/auth/me')).user.nickname,'测试爸爸');
  await dad.locator('#editAccountNickname').click();await dad.locator('#profileNickname').fill('测试爸爸更新');await dad.route('**/api/account/profile',route=>route.fulfill({status:503,json:{error:'昵称暂时无法保存'}}),{times:1});await dad.locator('#profileForm button[type="submit"]').click();await dad.locator('#profileError').getByText('昵称暂时无法保存',{exact:true}).waitFor();assert.equal(await dad.locator('#profileNickname').inputValue(),'测试爸爸更新');await axe(dad,'account-nickname-error');await dad.locator('#profileForm button[type="submit"]').click();assert.equal((await api(dad,'/api/auth/me')).user.nickname,'测试爸爸更新');await dad.locator('#accountNicknameDialog').waitFor({state:'hidden'});await dad.waitForFunction(()=>document.activeElement?.id==='editAccountNickname');assert.equal(await dad.locator('.account-profile-name strong').innerText(),'测试爸爸更新');await dad.locator('#backToOnboarding').click();await dad.locator('#newChildName').fill('测试哥哥');await dad.locator('#createChildForm').getByRole('radio',{name:'男孩',exact:true}).check();await dad.locator('#createChildForm button[type="submit"]').click();await dad.locator('#calendarTitle').waitFor();const firstId=new URL(dad.url()).pathname.split('/').at(-1);assert.ok(firstId);await axe(dad,'calendar');
+ if(process.argv.includes('--quick-edit-only')){
+   await require('./calendar_quick_edit_acceptance.cjs').exerciseQuickEdit({browser,dad,origin,firstId,out,api,data,axe,stage});
+   assert.deepEqual(errors,[]);assert.deepEqual(a11y.flatMap(a=>a.violations),[]);
+   fs.writeFileSync(path.join(out,'result.json'),JSON.stringify({passed:true,scenarios,pageErrors:errors,accessibility:a11y.map(a=>({name:a.name,violations:a.violations.length}))},null,2));
+   console.log('Quick edit checks passed');return;
+ }
  if(process.argv.includes('--switcher-only')){
    await require('./child_switcher_acceptance.cjs').exerciseChildSwitcher({dad,firstId,out,api,axe,stage});
    assert.deepEqual(errors,[]);assert.deepEqual(a11y.flatMap(a=>a.violations),[]);
@@ -110,6 +116,7 @@ async function deleteChild(page,id,{failure=false}={}){await settings(page,'open
  await require('./recurrence_regression.cjs').exerciseRecurrence({dad,origin,firstId,api,data,choose,persisted,out,axe,stage});
  await require('./parallel_completion_acceptance.cjs').exerciseParallelCompletions({browser,dad,origin,out,axe,stage});
  await require('./calendar_direct_actions.cjs').exerciseDirectCalendar({browser,dad,origin,firstId,out,axe,stage});
+ await require('./calendar_quick_edit_acceptance.cjs').exerciseQuickEdit({browser,dad,origin,firstId,out,api,data,axe,stage});
  await require('./preset_empty_acceptance.cjs').exerciseEmptyPresets({browser,dad,origin,firstId,out,axe,stage});
  await require('./task_picker_acceptance.cjs').exerciseTaskPickers({browser,dad,origin,firstId,out,axe,stage});
  await require('./print_week_acceptance.cjs').exercisePrintWeek({browser,dad,origin,firstId,out,axe,stage});

@@ -33,7 +33,12 @@ async function exerciseUndoDate({browser,dad,origin,api,axe,stage,out}) {
    const afterCancel=await api(dad,base+'/data');assert.equal(afterCancel.revision,before.revision)
    await page.waitForFunction(key=>document.activeElement?.getAttribute('data-task-complete')===key,key)
    await page.locator('[data-mode="week"]').click()
-   if(!await button.count())await page.locator('#prevPeriod').click()
+   await page.locator('#weekCalendar').waitFor()
+   // A continuous month may anchor the week before or after the task's date.
+   for(let attempt=0;attempt<4&&!await button.count();attempt++) {
+    const first=await page.locator('[data-week-day]').first().getAttribute('data-week-day')
+    await page.locator(day<first?'#prevPeriod':'#nextPeriod').click()
+   }
    await button.press('Enter');await dialog.waitFor()
    await axe(page,`undo-confirm-week-${width}`)
    await page.route('**/operations',route=>route.fulfill({status:400,json:{error:'测试：撤销暂时失败'}}),{times:1})

@@ -163,6 +163,203 @@ class BusinessCommandsTest(unittest.TestCase):
         self.run_op('gift.save',gift={'name':'图片测试','points':1,'imageData':image})
         self.assertEqual(self.data['gifts'][0]['imageData'],image)
 
+    def test_batch_mixed_success_leaves_inputs_unchanged_and_audits_once(self):
+        edit_key = self.create()
+        delete_key = self.create()
+        operations = [
+            dict(kind='task.create', payload={'task': {**self.task, 'title': '新任务'}}),
+            dict(kind='task.edit', payload=dict(occurrenceKey=edit_key, scope='only',
+                                               task={**self.task, 'title': '已修改', 'startDate': '2026-10-16'})),
+            dict(kind='task.delete', payload=dict(occurrenceKey=delete_key, scope='only')),
+        ]
+        original, request = copy.deepcopy(self.data), copy.deepcopy(operations)
+        result = apply_operation(self.data, 'task.batch', {'operations': operations},
+                                 actor_id='batch-parent', revision=42, now=NOW)
+        self.assertEqual(self.data, original)
+        self.assertEqual(operations, request)
+        self.assertEqual(len(result['series']), 2)
+        moved_key = edit_key.replace('2026-10-15', '2026-10-16')
+        self.assertEqual(occurrence(result, moved_key)['title'], '已修改')
+        self.assertEqual(occurrence(result, moved_key)['date'], '2026-10-16')
+        with self.assertRaises(StoreError):
+            occurrence(result, edit_key)
+        self.assertEqual(result['series'][-1]['title'], '新任务')
+        with self.assertRaises(StoreError):
+            occurrence(result, delete_key)
+        self.assertEqual(result['ledger'], original['ledger'])
+        self.assertEqual(result['completions'], original['completions'])
+        self.assertEqual(result['operationLog'][:-1], original['operationLog'])
+        event = result['operationLog'][-1]
+        self.assertEqual((event['action'], event['actorUserId'], event['revision']),
+                         ('task.batch', 'batch-parent', 42))
+
+    def test_batch_later_conflict_rolls_back_prior_create_edit_and_delete(self):
+        edit_key = self.create()
+        delete_key = self.create()
+        before = copy.deepcopy(self.data)
+        operations = [
+            dict(kind='task.create', payload={'task': self.task}),
+            dict(kind='task.edit', payload=dict(occurrenceKey=edit_key, scope='only',
+                                               task={**self.task, 'title': '不应保存'})),
+            dict(kind='task.delete', payload=dict(occurrenceKey=delete_key, scope='only')),
+            dict(kind='task.delete', payload=dict(occurrenceKey='missing@2026-10-15', scope='only')),
+        ]
+        request = copy.deepcopy(operations)
+        with self.assertRaises(StoreError) as error:
+            self.run_op('task.batch', operations=operations)
+        self.assertEqual(error.exception.status, 409)
+        self.assertEqual(self.data, before)
+        self.assertEqual(operations, request)
+
+    def test_batch_final_validation_failure_is_atomic(self):
+        before = copy.deepcopy(self.data)
+        with self.assertRaises(StoreError):
+            self.run_op('task.batch', operations=[
+                dict(kind='task.create', payload={'task': self.task}),
+                dict(kind='task.create', payload={'task': {**self.task, 'categoryId': 'missing'}}),
+            ])
+        self.assertEqual(self.data, before)
+
+    def test_batch_recurring_only_edit_and_delete_preserve_other_dates(self):
+        key = self.create(dict(freq='daily', interval=1, endType='count', count=5))
+        keys = [key.replace('2026-10-15', f'2026-10-{day}') for day in range(15, 20)]
+        self.run_op('completion.set', occurrenceKey=keys[0], completed=True)
+        before = copy.deepcopy(self.data)
+        self.run_op('task.batch', operations=[
+            dict(kind='task.edit', payload=dict(occurrenceKey=keys[1], scope='only',
+                                               task={**self.task, 'title': '改期', 'startDate': '2026-10-20', 'recurrence': None})),
+            dict(kind='task.delete', payload=dict(occurrenceKey=keys[2], scope='only')),
+        ])
+        self.assertEqual(self.data['series'], before['series'])
+        self.assertEqual(self.data['completions'], before['completions'])
+        self.assertEqual(self.data['ledger'], before['ledger'])
+        for unchanged in (keys[0], keys[3], keys[4]):
+            self.assertEqual(occurrence(self.data, unchanged), occurrence(before, unchanged))
+        edited = occurrence(self.data, keys[1])
+        self.assertEqual((edited['title'], edited['date'], edited['originalDate']),
+                         ('改期', '2026-10-20', '2026-10-16'))
+        with self.assertRaises(StoreError):
+            occurrence(self.data, keys[2])
+        self.assertEqual([e['action'] for e in self.data['exceptions']], ['override', 'cancel'])
+
+    def test_batch_completed_occurrences_remain_frozen(self):
+        for recurring in (False, True):
+            key = self.create(dict(freq='daily', interval=1, endType='never') if recurring else None)
+            self.run_op('completion.set', occurrenceKey=key, completed=True)
+            before = copy.deepcopy(self.data)
+            for kind in ('task.edit', 'task.delete'):
+                with self.subTest(recurring=recurring, kind=kind):
+                    payload = dict(occurrenceKey=key, scope='only')
+                    if kind == 'task.edit':
+                        payload['task'] = {**self.task, 'title': '冻结', 'recurrence': None}
+                    with self.assertRaises(StoreError) as error:
+                        self.run_op('task.batch', operations=[
+                            dict(kind='task.create', payload={'task': {**self.task, 'recurrence': None}}),
+                            dict(kind=kind, payload=payload),
+                        ])
+                    self.assertEqual(error.exception.status, 409)
+                    self.assertEqual(self.data, before)
+
+    def test_batch_rejects_duplicate_occurrence_mutations(self):
+        key = self.create()
+        before = copy.deepcopy(self.data)
+        for first in ('task.edit', 'task.delete'):
+            for second in ('task.edit', 'task.delete'):
+                with self.subTest(first=first, second=second):
+                    operations = []
+                    for kind in (first, second):
+                        payload = dict(occurrenceKey=key, scope='only')
+                        if kind == 'task.edit':
+                            payload['task'] = self.task
+                        operations.append(dict(kind=kind, payload=payload))
+                    with self.assertRaises(StoreError) as error:
+                        self.run_op('task.batch', operations=operations)
+                    self.assertEqual(error.exception.status, 400)
+                    self.assertEqual(self.data, before)
+
+    def test_batch_requires_exact_envelope_and_list_of_one_to_200(self):
+        before = copy.deepcopy(self.data)
+        item = dict(kind='task.create', payload={'task': self.task})
+        invalid = [{}, {'operations': [], 'extra': 1}]
+        invalid.extend({'operations': value} for value in (None, False, 1, 'bad', {}, (), [], [item] * 201))
+        for payload in invalid:
+            with self.subTest(payload=payload):
+                with self.assertRaises(StoreError) as error:
+                    self.run_op('task.batch', **payload)
+                self.assertEqual(error.exception.status, 400)
+                self.assertEqual(self.data, before)
+
+    def test_batch_accepts_both_size_boundaries(self):
+        for count in (1, 200):
+            with self.subTest(count=count):
+                before = copy.deepcopy(self.data)
+                self.run_op('task.batch', operations=[dict(kind='task.create', payload={'task': self.task})] * count)
+                self.assertEqual(len(self.data['series']), len(before['series']) + count)
+                self.assertEqual(len({s['id'] for s in self.data['series']}), len(self.data['series']))
+                self.assertEqual(len(self.data['operationLog']), len(before['operationLog']) + 1)
+
+    def test_batch_rejects_malformed_items_and_disallowed_commands(self):
+        before = copy.deepcopy(self.data)
+        invalid = [None, False, 1, 'task.create', [], {}, {'kind': 'task.create'}, {'payload': {}},
+                   dict(kind='task.create', payload={'task': self.task}, extra=True)]
+        invalid.extend(dict(kind=value, payload={}) for value in
+                       (None, False, 1, [], {}, 'task.batch', 'completion.set', 'ledger.manual', 'gift.save', 'data.replace', ''))
+        invalid.append(dict(kind='task.batch', payload={'operations': [dict(kind='task.create', payload={'task': self.task})]}))
+        invalid.extend(dict(kind=kind, payload=value) for kind in ('task.create', 'task.edit', 'task.delete')
+                       for value in (None, False, 1, '', [], {}))
+        invalid.append(dict(kind='task.create', payload={'task': self.task, 'extra': True}))
+        for item in invalid:
+            with self.subTest(item=item):
+                with self.assertRaises(StoreError) as error:
+                    self.run_op('task.batch', operations=[item])
+                self.assertEqual(error.exception.status, 400)
+                self.assertEqual(self.data, before)
+
+    def test_batch_rejects_invalid_scopes_keys_and_payload_fields(self):
+        key = self.create()
+        before = copy.deepcopy(self.data)
+        for kind in ('task.edit', 'task.delete'):
+            valid = dict(occurrenceKey=key, scope='only')
+            if kind == 'task.edit':
+                valid['task'] = self.task
+            invalid = [{**valid, 'scope': scope} for scope in (None, False, 1, [], {}, 'series', 'future', 'all', '')]
+            invalid.extend({**valid, 'occurrenceKey': value} for value in
+                           (None, False, 1, [], {}, '', 'missing', 'id@bad-date', 'id@2026-02-30'))
+            invalid.append({**valid, 'extra': True})
+            for field in valid:
+                invalid.append({k: v for k, v in valid.items() if k != field})
+            if kind == 'task.delete':
+                invalid.append({**valid, 'task': self.task})
+            for payload in invalid:
+                with self.subTest(kind=kind, payload=payload):
+                    with self.assertRaises(StoreError) as error:
+                        self.run_op('task.batch', operations=[dict(kind=kind, payload=payload)])
+                    self.assertEqual(error.exception.status, 400)
+                    self.assertEqual(self.data, before)
+
+    def test_batch_rejects_invalid_task_values_and_recurring_tasks(self):
+        key = self.create()
+        before = copy.deepcopy(self.data)
+        invalid = [None, False, 1, '', [], {}, {k: v for k, v in self.task.items() if k != 'recurrence'}]
+        invalid.extend({**self.task, 'recurrence': value} for value in
+                       (False, 0, '', [], {}, dict(freq='daily', interval=1, endType='never')))
+        invalid.extend({**self.task, field: value} for field, value in
+                       [('title', None), ('note', []), ('startDate', []), ('startDate', '2026-02-30'),
+                        ('startTime', 12), ('endTime', '17:00'), ('categoryId', []), ('points', True),
+                        ('points', -1), ('points', '10'), ('extra', 'injected')])
+        for field in ('title', 'startDate', 'startTime', 'endTime', 'categoryId', 'points'):
+            invalid.append({k: v for k, v in self.task.items() if k != field})
+        for kind in ('task.create', 'task.edit'):
+            for task in invalid:
+                with self.subTest(kind=kind, task=task):
+                    payload = {'task': task}
+                    if kind == 'task.edit':
+                        payload.update(occurrenceKey=key, scope='only')
+                    with self.assertRaises(StoreError) as error:
+                        self.run_op('task.batch', operations=[dict(kind=kind, payload=payload)])
+                    self.assertEqual(error.exception.status, 400)
+                    self.assertEqual(self.data, before)
+
 if __name__=='__main__': unittest.main()
 
 class MonthlyCountRegressionTests(unittest.TestCase):

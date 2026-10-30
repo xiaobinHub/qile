@@ -213,6 +213,15 @@ class ChildBackendTests(unittest.TestCase):
         for path in ('/static/parent.js','/static/parent-ui.js','/parent-assets/index.html','/parent-assets/%2e%2e%2fchild_service.py','/parent-assets/index.js.map','/parent-ui/src/App.tsx','/shared-ui/src/theme.css'):
             self.assertEqual(self.a.get(path).status_code,404)
         from pathlib import Path
+        png_files=list((Path(__file__).resolve().parents[2]/'web/parent-dist').glob('*.png'))
+        self.assertTrue(png_files,'Trash artwork must be bundled locally')
+        for image_file in png_files:
+            image_path='/parent-assets/'+image_file.name
+            image=self.a.get(image_path)
+            self.assertEqual(image.status_code,200)
+            self.assertEqual(image.content,image_file.read_bytes())
+            self.assertIn('image/png',image.headers['content-type'])
+            self.assertEqual(self.admin.get(image_path).status_code,404)
         for surface,client,other in [('parent',self.a,self.admin),('admin',self.admin,self.a)]:
             font_files=list((Path(__file__).resolve().parents[2]/'web'/(surface+'-dist')).glob('*.woff2'))
             self.assertTrue(font_files,'Inter must be bundled locally')

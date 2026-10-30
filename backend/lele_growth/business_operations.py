@@ -206,7 +206,39 @@ def gift_image(value):
 
 
 def _apply(data, kind, p, stamp, today):
-    if kind == "task.create":
+    if kind == "task.batch":
+        fields(p, ("operations",), ("operations",))
+        operations = p["operations"]
+        if not isinstance(operations, list) or not 1 <= len(operations) <= 200:
+            fail("批量任务操作数量必须为 1 至 200 条。")
+        seen = set()
+        for item in operations:
+            fields(item, ("kind", "payload"), ("kind", "payload"))
+            command, payload = item["kind"], item["payload"]
+            if not isinstance(command, str) or command not in ("task.create", "task.edit", "task.delete"):
+                fail("批量操作仅支持创建、修改或删除任务。")
+            if command == "task.create":
+                fields(payload, ("task",), ("task",))
+            else:
+                required = ("occurrenceKey", "scope", "task") if command == "task.edit" else ("occurrenceKey", "scope")
+                fields(payload, required, required)
+                if payload["scope"] != "only":
+                    fail("批量修改或删除仅支持本次任务。")
+                key = payload["occurrenceKey"]
+                if not isinstance(key, str) or "@" not in key:
+                    fail("任务发生标识不正确。")
+                if key in seen:
+                    fail("同一次批量操作不能重复修改或删除同一任务。")
+                seen.add(key)
+            if command != "task.delete":
+                fields(payload["task"], TASK_FIELDS, ("recurrence",))
+                if payload["task"]["recurrence"] is not None:
+                    fail("批量创建或修改任务不能设置重复规则。")
+        # Reuse task semantics on the outer operation's private copy. Validation,
+        # audit and persistence remain one operation, including on later failure.
+        for item in operations:
+            _apply(data, item["kind"], item["payload"], stamp, today)
+    elif kind == "task.create":
         fields(p, ("task",), ("task",))
         task = task_input(p["task"])
         data["series"].append({"id": uid(), **task, "revisions": [revision(task, task["startDate"])], "createdAt": stamp, "updatedAt": stamp})

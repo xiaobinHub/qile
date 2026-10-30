@@ -21,6 +21,19 @@ const setup=()=>{const r=new Runtime();r.patch({child,user,children:[child,other
  await assert.rejects(()=>uncertain.command('ledger.manual',{amount:5}));assert.equal(uncertain.getSnapshot().unconfirmed,true);await uncertain.refresh();assert.equal(uncertain.getSnapshot().unconfirmed,true);await uncertain.retryPending();assert.equal(written[0],written[1]);assert.equal(entries,1);assert.equal(uncertain.getSnapshot().unconfirmed,false);
  // Confirmed deletion/revocation must override the pending-save navigation guard.
  const removed=setup();global.fetch=async()=>{throw Error('connection')};await assert.rejects(()=>removed.command('ledger.manual',{amount:7}));removed.forgetChild(child.id);assert.equal(removed.getSnapshot().child,null);assert.equal(removed.getSnapshot().data,null);assert.equal(removed.getSnapshot().unconfirmed,false);assert.equal(removed.getSnapshot().user.id,user.id);assert.deepEqual(removed.getSnapshot().children.map(c=>c.id),[other.id]);
+ // A draft keeps its entry revision even after a newer read; retry preserves the same body.
+ const batch=setup(),batchBodies=[];batch.patch({revision:9});
+ global.fetch=async(path,options)=>{batchBodies.push(JSON.parse(options.body));throw Error('lost')};
+ await assert.rejects(()=>batch.command('task.batch',{operations:[{kind:'task.create',payload:{task:{title:'草稿'}}}]},2));
+ assert.equal(batchBodies[0].expectedRevision,2);
+ global.fetch=async(path,options)=>{batchBodies.push(JSON.parse(options.body));return Response.json(pkg('child1',10))};
+ await batch.retryPending();assert.deepEqual(batchBodies[1],batchBodies[0]);
+ const guarded=setup();let guards=0;const unguard=guarded.guardNavigation(()=>{guards++;return false});
+ guarded.setView('settings');assert.equal(guarded.getSnapshot().view,'calendar');
+ await guarded.selectChild(other.id);assert.equal(guarded.getSnapshot().child.id,child.id);
+ await guarded.enter();assert.equal(guarded.getSnapshot().child.id,child.id);assert.equal(guards,3);
+ unguard();guarded.setView('settings');assert.equal(guarded.getSnapshot().view,'settings');
+ guarded.patch({quickEditing:true});guarded.reset();assert.equal(guarded.getSnapshot().quickEditing,false);
  // Legacy HTTP LAN browsers lack randomUUID; getRandomValues still supplies an id.
  const original=Object.getOwnPropertyDescriptor(global,'crypto');Object.defineProperty(global,'crypto',{configurable:true,value:{getRandomValues:b=>{for(let i=0;i<b.length;i++)b[i]=i;return b}}});assert.equal(operationId().length,32);if(original)Object.defineProperty(global,'crypto',original);
  console.log(JSON.stringify({passed:true,checks:['uncertain operation id reuse','different operation blocked','pending child switch blocked','pending history blocked','monotonic reads','cross-context stale response discarded','refresh keeps uncertain id and retry commits once','deleted context clears uncertain save','HTTP LAN id fallback']}));

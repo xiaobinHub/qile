@@ -59,6 +59,7 @@ type Snapshot = {
   message: string
   busy: boolean
   unconfirmed: boolean
+  quickEditing: boolean
   completionPending: string[]
   epoch: number
 }
@@ -76,6 +77,7 @@ export class Runtime {
     message: "",
     busy: false,
     unconfirmed: false,
+    quickEditing: false,
     completionPending: [],
     epoch: 0,
   }
@@ -85,6 +87,7 @@ export class Runtime {
   private csrf = ""
   private checking = false
   private editing = 0
+  private navigationGuard: (() => boolean) | null = null
   private pending: { signature: string; path: string; body: unknown } | null = null
   private writing = false
   private normalUnconfirmed = false
@@ -117,6 +120,7 @@ export class Runtime {
     this.completionJobs.clear()
     this.completionRetryTail = Promise.resolve()
     this.editing = 0
+    this.navigationGuard = null
     this.patch({
       child: null,
       data: null,
@@ -124,6 +128,7 @@ export class Runtime {
       updatedAt: null,
       busy: false,
       unconfirmed: false,
+      quickEditing: false,
       completionPending: [],
       loading: true,
       error: "",
@@ -258,6 +263,10 @@ export class Runtime {
     this.patch({ children })
   }
   enter = async () => {
+    if (this.navigationGuard && !this.navigationGuard()) {
+      if (this.state.child) history.replaceState(null, "", `/children/${this.state.child.id}`)
+      return
+    }
     if (this.state.busy || this.pending || this.completionJobs.size) {
       if (this.state.child) history.replaceState(null, "", `/children/${this.state.child.id}`)
       this.patch({ message: "请先刷新核对上一项保存结果，再切换孩子。" })
@@ -294,6 +303,7 @@ export class Runtime {
     await this.enter()
   }
   selectChild = async (id: string, replace: boolean | "replace" = true) => {
+    if (this.navigationGuard && !this.navigationGuard()) return
     if (this.state.busy || this.pending || this.completionJobs.size)
       throw new ApiError("请先完成保存，或刷新核对上一项保存结果。", "busy")
     const child = this.state.children.find((c) => c.id === id)
@@ -358,12 +368,22 @@ export class Runtime {
     if (child && reload) this.load(await this.api<DataPackage>(`/api/children/${child.id}/data`))
     return true
   }
-  command = async (kind: string, payload: unknown) => {
+  command = async (kind: string, payload: unknown, expectedRevision?: number) => {
     const child = this.state.child
     if (!child || child.archived) throw new ApiError("该孩子仅可查看。", "forbidden")
-    return this.write(`/api/children/${child.id}/operations`, { kind, payload }, "POST")
+    return this.write(
+      `/api/children/${child.id}/operations`,
+      { kind, payload },
+      "POST",
+      expectedRevision,
+    )
   }
-  private async write(path: string, values: Record<string, unknown>, method: string) {
+  private async write(
+    path: string,
+    values: Record<string, unknown>,
+    method: string,
+    expectedRevision?: number,
+  ) {
     if (this.state.busy) throw new ApiError("上一项操作正在保存，请稍候。", "busy")
     if (this.completionJobs.size)
       throw new ApiError("任务完成结果尚未确认，请先刷新核对并重试原操作。")
@@ -371,7 +391,7 @@ export class Runtime {
     if (this.pending && this.pending.signature !== signature)
       throw new ApiError("上一项保存结果尚未确认，请先刷新核对。")
     const body = this.pending?.body || {
-      expectedRevision: this.state.revision,
+      expectedRevision: expectedRevision ?? this.state.revision,
       membershipVersion: this.state.child!.membershipVersion,
       operationId: operationId(),
       ...values,
@@ -549,12 +569,19 @@ export class Runtime {
     }
   }
   setView = (view: View) => {
+    if (view !== this.state.view && this.navigationGuard && !this.navigationGuard()) return
     this.patch({ view })
     window.scrollTo(0, 0)
   }
   setEditing = (editing: boolean) => {
     this.editing += editing ? 1 : -1
     this.editing = Math.max(0, this.editing)
+  }
+  guardNavigation = (guard: () => boolean) => {
+    this.navigationGuard = guard
+    return () => {
+      if (this.navigationGuard === guard) this.navigationGuard = null
+    }
   }
   checkContext = async () => {
     if (
