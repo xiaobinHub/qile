@@ -2083,3 +2083,148 @@ button.account-profile-avatar:focus-visible {
   background: #dbeafe;
   border-color: #60a5fa;
 }
+.applications-workspace,
+.applications-content,
+.plugin-config-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+.applications-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.applications-search {
+  position: relative;
+  flex: 1 1 180px;
+  min-width: 0;
+}
+.applications-search > svg {
+  position: absolute;
+  top: 50%;
+  left: 12px;
+  width: 16px;
+  height: 16px;
+  transform: translateY(-50%);
+  color: var(--muted-foreground);
+  pointer-events: none;
+}
+.applications-search input {
+  padding-left: 36px;
+}
+.applications-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+  gap: 16px;
+}
+.application-card {
+  min-width: 0;
+}
+.application-card-heading,
+.application-card-status,
+.application-card-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.application-card-heading [data-slot="card-title"] {
+  flex: 1;
+  overflow-wrap: anywhere;
+}
+.application-card-status {
+  color: var(--muted-foreground);
+  font-size: var(--text-meta);
+}
+.application-card-actions {
+  margin-top: auto;
+}
+.plugin-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 36px;
+  height: 36px;
+  overflow: hidden;
+  border-radius: var(--radius);
+  background: var(--muted);
+  color: var(--muted-foreground);
+}
+.plugin-icon svg {
+  width: 20px;
+  height: 20px;
+}
+.plugin-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.plugin-instructions {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--muted-foreground);
+}
+.plugin-config-dialog {
+  width: min(560px, calc(100vw - 32px));
+  max-height: min(760px, calc(var(--app-visible-height, 100dvh) - 32px));
+  overflow: hidden;
+}
+.plugin-config-form {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  gap: 0;
+  overflow: hidden;
+}
+.plugin-config-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 24px;
+}
+.plugin-config-fields [data-slot="select-trigger"] {
+  width: 100%;
+}
+.plugin-config-form [data-slot="dialog-footer"] {
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+.plugin-config-group,
+.plugin-config-ungrouped,
+.plugin-config-multiselect {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 16px;
+}
+.plugin-config-group {
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+}
+.plugin-config-group > legend {
+  padding-inline: 6px;
+  font-weight: 600;
+}
+.plugin-config-multiselect > legend {
+  margin-bottom: 8px;
+  font-weight: 500;
+}
+.plugin-config-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+}
+.plugin-config-option {
+  display: flex;
+  align-items: center;
+  min-height: 40px;
+  gap: 10px;
+  cursor: pointer;
+}

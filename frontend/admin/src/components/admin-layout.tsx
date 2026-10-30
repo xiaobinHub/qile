@@ -4,6 +4,7 @@ import {
   LayoutGrid,
   LogOut,
   Menu,
+  Puzzle,
   ShieldCheck,
   UserRound,
   UsersRound,
@@ -21,7 +22,7 @@ import {
 import { useSession } from "@/lib/session"
 import { cn } from "@shared/lib/utils"
 
-export type Page = "users" | "profile"
+export type Page = "users" | "plugins" | "profile"
 export function AdminLayout({
   page,
   onNavigate,
@@ -71,6 +72,26 @@ export function AdminLayout({
             )}
           </Button>
           <Button
+            id={mobile ? "mobilePluginsNav" : "pluginsNav"}
+            type="button"
+            variant="ghost"
+            disabled={locked}
+            aria-current={page === "plugins" && !locked ? "page" : undefined}
+            className={cn(
+              "h-11 w-full justify-start gap-3 rounded-lg px-3 text-sm font-normal text-muted-foreground [&_svg]:size-[18px]",
+              page === "plugins" &&
+                !locked &&
+                "bg-accent font-medium text-brand-ink hover:bg-accent",
+            )}
+            onClick={() => navigate("plugins")}
+          >
+            <Puzzle data-icon="inline-start" />
+            <span>插件管理</span>
+            {page === "plugins" && !locked && (
+              <span className="ml-auto size-1.5 rounded-full bg-primary" />
+            )}
+          </Button>
+          <Button
             id={mobile ? "mobileProfileNav" : "profileNav"}
             type="button"
             variant="ghost"
@@ -115,7 +136,13 @@ export function AdminLayout({
       </div>
     )
   }
-  const title = locked ? "密码设置" : page === "users" ? "账号管理" : "我的账号"
+  const title = locked
+    ? "密码设置"
+    : page === "users"
+      ? "账号管理"
+      : page === "plugins"
+        ? "插件管理"
+        : "我的账号"
   return (
     <div className="min-h-svh bg-background">
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-[200px] border-r bg-card md:block">
@@ -138,7 +165,9 @@ export function AdminLayout({
               </SheetTrigger>
               <SheetContent side="left" className="w-[264px] gap-0 p-0">
                 <SheetTitle className="sr-only">后台导航</SheetTitle>
-                <SheetDescription className="sr-only">账号管理和个人账号设置</SheetDescription>
+                <SheetDescription className="sr-only">
+                  账号管理、插件管理和个人账号设置
+                </SheetDescription>
                 {sidebar(true)}
               </SheetContent>
             </Sheet>

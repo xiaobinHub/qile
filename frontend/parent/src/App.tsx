@@ -8,7 +8,9 @@ import { Login, Onboarding, ChildSwitcher } from "./features/account"
 import { PasswordSetup } from "./password-setup"
 import { SettingsPage } from "./settings"
 import type { Controller, User as SettingsUser } from "./settings/types"
-import { runtime } from "./lib/runtime"
+import { runtime, type View } from "./lib/runtime"
+import { hasPageTab, pluginStore, usePlugins } from "./plugins/store"
+import { PluginBoundary, PluginPage } from "./plugins/plugin-page"
 import type { BusinessData, Occurrence } from "./domain/types"
 import { CalendarPage, TaskEditor, PresetEditor, CategoryEditor } from "./features/calendar"
 const StorePage = lazy(() => import("./features/store").then((m) => ({ default: m.StorePage })))
@@ -24,6 +26,27 @@ function Application() {
   const snapshot = useSyncExternalStore(runtime.subscribe, runtime.getSnapshot),
     { user, child, data } = snapshot
   const { toast } = useToast()
+  const plugins = usePlugins()
+  const pluginTabs =
+    child && !child.archived && plugins.childId === child.id && plugins.epoch === snapshot.epoch
+      ? plugins.plugins
+          .filter((plugin) => hasPageTab(plugin, child.id))
+          .sort((a, b) => a.sortOrder - b.sortOrder || a.id.localeCompare(b.id))
+      : []
+  const navigation: { key: string; label: string; view: View }[] = child
+    ? [
+        { key: "calendar", label: "日历", view: "calendar" },
+        { key: "store", label: "积分商城", view: "store" },
+        ...pluginTabs.map((plugin) => ({
+          key: `plugin:${plugin.id}`,
+          label: plugin.name,
+          view: { kind: "plugin" as const, pluginId: plugin.id },
+        })),
+        { key: "settings", label: "设置", view: "settings" },
+      ]
+    : [{ key: "settings", label: "设置", view: "settings" }]
+  const activeViewKey =
+    typeof snapshot.view === "object" ? `plugin:${snapshot.view.pluginId}` : snapshot.view
   const [editor, setEditor] = useState<Editor | null>(null),
     [switcher, setSwitcher] = useState(false),
     [logout, setLogout] = useState(false),
@@ -36,6 +59,7 @@ function Application() {
   const printReturnFocus = useRef<HTMLElement | null>(null)
   const settingsInitialPage = useRef<string | undefined>(undefined)
   const notify = (message: string) => toast({ title: message })
+  useEffect(() => pluginStore.start(), [])
   useEffect(() => {
     void runtime.bootstrap()
     const focus = () => {
@@ -158,26 +182,20 @@ function Application() {
               </div>
             </div>
             <nav className="nav" aria-label="主导航">
-              {(child ? ["calendar", "store", "settings"] : ["settings"]).map((view) => (
+              {navigation.map(({ key, view, label }) => (
                 <Button
-                  key={view}
-                  data-view={view}
+                  key={key}
+                  data-view={key}
                   variant="navigation"
                   size="navigation"
-                  aria-current={snapshot.view === view ? "page" : undefined}
+                  aria-current={activeViewKey === key ? "page" : undefined}
+                  disabled={typeof view === "object" && !plugins.confirmed}
                   onClick={() => {
                     settingsInitialPage.current = undefined
-                    runtime.setView(view as "calendar" | "store" | "settings")
+                    runtime.setView(view)
                   }}
                 >
-                  {
-                    (
-                      { calendar: "日历", store: "积分商城", settings: "设置" } as Record<
-                        string,
-                        string
-                      >
-                    )[view]
-                  }
+                  {label}
                 </Button>
               ))}
             </nav>
@@ -206,6 +224,14 @@ function Application() {
             )}
           </header>
           <main id="main">
+            {child && !plugins.confirmed && plugins.error && (
+              <div className="plugin-status-notice" role="status">
+                <p>应用状态暂未确认，插件操作已暂停。</p>
+                <Button variant="outline" onClick={() => void pluginStore.refresh()}>
+                  刷新应用状态
+                </Button>
+              </div>
+            )}
             {snapshot.unconfirmed && !snapshot.quickEditing && <SaveResolution />}
             {snapshot.error ? (
               <div className="empty-state">
@@ -221,6 +247,19 @@ function Application() {
               />
             ) : !child ? (
               <Onboarding user={user} controller={controller} />
+            ) : typeof snapshot.view === "object" ? (
+              <PluginBoundary key={`${child.id}:${snapshot.epoch}:${snapshot.view.pluginId}`}>
+                <PluginPage
+                  child={child}
+                  epoch={snapshot.epoch}
+                  pluginId={snapshot.view.pluginId}
+                  notify={notify}
+                  openSettings={() => {
+                    settingsInitialPage.current = "applications"
+                    runtime.setView("settings")
+                  }}
+                />
+              </PluginBoundary>
             ) : (
               data && (
                 <>

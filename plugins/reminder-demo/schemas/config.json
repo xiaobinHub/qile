@@ -1,0 +1,20 @@
+{
+  "type": "object",
+  "properties": {
+    "time": { "type": "string", "title": "每天提醒时间", "format": "time", "default": "20:00" },
+    "timezone": {
+      "type": "string",
+      "title": "时区",
+      "enum": ["Asia/Shanghai"],
+      "default": "Asia/Shanghai"
+    },
+    "message": {
+      "type": "string",
+      "title": "提醒内容",
+      "default": "和孩子一起回顾今天的小进步。",
+      "maxLength": 200
+    }
+  },
+  "required": ["time", "timezone", "message"],
+  "additionalProperties": false
+}

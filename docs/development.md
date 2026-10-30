@@ -88,3 +88,9 @@ npm run test:browser
 SQL 基线及版本升级位于 `backend/lele_growth/db/`。不要因文件名带旧版本就删除仍用于升级或共享存储回归的 SQL。未知数据库结构会停止初始化。
 
 云端运行采用 [部署入口](../deploy/README.md) 和服务器独立配置，不自动建库、升级或初始化账号。生产迁移和图片核验需单独实施。OSS 配置与受限维护见 [存储说明](oss-storage.md)。
+
+## 插件开发与隔离验收
+
+插件独立构建与协议见 [开发约定](plugins/development.md)，服务启动和显式建表见 [运行与部署](plugins/deployment.md)。`npm run test:plugins:ui` 验证通用前端交互；`npm run test:plugins:browser` 使用独立 `lele_test_plugin_browser` 验证真实两端、后台进程及更新回退。浏览器专项之前先构建主系统及两个参考插件，并打包开发制品。完整 `test:browser` 顺序运行现有核心回归和插件专项。测试不会自动发布生产或上架参考插件。
+
+修改 Python 后端代码后，已运行的开发进程不会自动重新加载；执行 `.venv/bin/python scripts/dev.py restart` 使其生效。插件前端已更新而后端未重启时，应用管理可能提示“接口不存在”及“应用状态暂未确认”。首次接入先执行 `.venv/bin/python scripts/dev.py plugins-setup` 显式完成本机开发插件表初始化，再重启；生产环境继续使用单独的受限维护入口。

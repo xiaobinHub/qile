@@ -1,0 +1,3 @@
+# Keep compiler output byte-for-byte reproducible, including bundled license text.
+web/*-dist/*.js -whitespace linguist-generated
+web/*-dist/*.css -whitespace linguist-generated

@@ -1,0 +1,23 @@
+{
+  "manifestVersion": 1,
+  "id": "reminder-demo",
+  "version": "1.0.0",
+  "type": "service",
+  "platformApi": { "major": 1, "minMinor": 0 },
+  "frontendApi": { "major": 1, "minMinor": 0 },
+  "frontend": null,
+  "backend": { "entryModule": "reminder_demo" },
+  "configSchema": "schemas/config.json",
+  "dataSchemaVersion": 1,
+  "capabilities": ["plugin.state.read", "plugin.state.write"],
+  "tasks": [
+    {
+      "id": "daily-reminder",
+      "schedule": { "configTime": "time", "configTimezone": "timezone" },
+      "misfirePolicy": "skip",
+      "timeoutSeconds": 15
+    }
+  ],
+  "events": [],
+  "icons": []
+}

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react"
 import { AccountManagement } from "./account"
 import { ChildManagement, Invitations } from "./children"
 import { Categories, Presets } from "./tasks"
+import { Applications } from "./applications"
 import { Button, Card, CardContent, CardHeader, CardTitle, Icon } from "./primitives"
 import type { Context, Controller } from "./types"
 
@@ -19,6 +20,10 @@ const groups = [
       ["tasks/presets", "常用任务配置", "task", "openTaskPresetsSettings"],
       ["tasks/categories", "任务类型配置", "category", "openCategorySettings"],
     ],
+  },
+  {
+    title: "应用",
+    items: [["applications", "应用管理", "category", "openApplicationSettings"]],
   },
   {
     title: "账号管理",
@@ -39,6 +44,8 @@ function Pane({
   controller: Controller
 }) {
   switch (selected) {
+    case "applications":
+      return <Applications controller={controller} child={context.child!} />
     case "child/manage":
       return <ChildManagement controller={controller} child={context.child!} />
     case "child/invitations":
