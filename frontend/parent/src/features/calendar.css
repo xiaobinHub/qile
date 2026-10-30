@@ -369,6 +369,11 @@
 .calendar-panel .done .calendar-task-edit {
   color: var(--text-secondary);
 }
+.calendar-panel .done .calendar-task-edit > span,
+.calendar-panel .done .calendar-task-edit > strong,
+.calendar-panel .done .calendar-task-edit > small {
+  text-decoration: line-through;
+}
 .calendar-panel .calendar-task-toggle:focus-visible,
 .calendar-panel .calendar-task-edit:focus-visible {
   box-shadow: inset 0 0 0 2px var(--ring);

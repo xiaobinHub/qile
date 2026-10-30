@@ -206,7 +206,7 @@ function Application() {
             )}
           </header>
           <main id="main">
-            {snapshot.unconfirmed && <SaveResolution />}
+            {snapshot.unconfirmed && !snapshot.quickEditing && <SaveResolution />}
             {snapshot.error ? (
               <div className="empty-state">
                 <h1>暂时无法读取成长记录</h1>

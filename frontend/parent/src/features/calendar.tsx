@@ -1,5 +1,13 @@
 import "./calendar.css"
 import { TaskTitle } from "./task-title"
+import {
+  useCalendarQuickEdit,
+  QuickEditShelf,
+  QuickEditTask,
+  QuickEditFooter,
+} from "./calendar-quick-edit"
+import type { CalendarQuickEdit } from "./calendar-quick-edit"
+import { draftOccurrences } from "../domain/calendar-draft"
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import {
   ChevronLeft,
@@ -11,6 +19,7 @@ import {
   LoaderCircle,
   ArrowUp,
   ArrowDown,
+  Pencil,
 } from "lucide-react"
 import { Checkbox } from "@shared/components/ui/checkbox"
 import { Switch } from "@shared/components/ui/switch"
@@ -76,6 +85,8 @@ export function CalendarPage({
     [visibleMonth, setVisibleMonth] = useState(prefs.cursor.slice(0, 7)),
     [completionError, setCompletionError] = useState("")
   const [undoOccurrence, setUndoOccurrence] = useState<Occurrence | null>(null)
+  const quickEdit = useCalendarQuickEdit(data)
+  const [quickPreset, setQuickPreset] = useState(false)
   const weekRef = useRef<HTMLDivElement>(null),
     visibleDate = useRef(prefs.cursor),
     weekNavigation = useRef(navigation),
@@ -148,7 +159,11 @@ export function CalendarPage({
     if (!busy) openTask({ occurrence: o })
   }
   return (
-    <section className="calendar-panel" data-calendar-mode={mode}>
+    <section
+      className="calendar-panel"
+      data-calendar-mode={mode}
+      data-quick-edit={quickEdit.active || undefined}
+    >
       <div className="calendar-toolbar">
         <h1 id="calendarTitle">
           {mode === "month"
@@ -191,6 +206,10 @@ export function CalendarPage({
           value={mode}
           onValueChange={(value) => {
             if (value) {
+              if (quickEdit.active && value !== "month") {
+                runtime.patch({ message: "请先保存或取消快捷编辑，再切换周视图。" })
+                return
+              }
               if (value === "week") setCursor(visibleDate.current)
               else setVisibleMonth(cursor.slice(0, 7))
               setMode(value)
@@ -206,16 +225,34 @@ export function CalendarPage({
           </ToggleGroupItem>
         </ToggleGroup>
         <div className="calendar-toolbar-actions">
+          {mode === "month" && !child.archived && (
+            <Button
+              id="quickEditBtn"
+              variant={quickEdit.active ? "secondary" : "outline"}
+              className={quickEdit.active ? "quick-edit-active-button" : undefined}
+              aria-pressed={quickEdit.active}
+              disabled={quickEdit.active || busy || snapshot.unconfirmed}
+              onClick={quickEdit.begin}
+            >
+              <Pencil />
+              {quickEdit.active ? "快捷编辑中" : "快捷编辑"}
+            </Button>
+          )}
           <Button
             id="printBtn"
             variant="outline"
+            disabled={quickEdit.active}
             onClick={(event) => openPrint(event.currentTarget)}
           >
             <Printer />
             打印
           </Button>
           {!child.archived && (
-            <Button id="newTaskBtn" onClick={() => openTask({ date: today() })}>
+            <Button
+              id="newTaskBtn"
+              disabled={quickEdit.active}
+              onClick={() => openTask({ date: today() })}
+            >
               <Plus />
               新建任务
             </Button>
@@ -224,6 +261,9 @@ export function CalendarPage({
       </div>
       {child.archived && <p className="notice">孩子已归档，当前仅可查看。</p>}
       <ErrorText message={completionError} />
+      {quickEdit.active && (
+        <QuickEditShelf edit={quickEdit} onAddPreset={() => setQuickPreset(true)} />
+      )}
       {mode === "month" ? (
         <MonthCalendar
           data={data}
@@ -239,6 +279,7 @@ export function CalendarPage({
           onPosition={(position) => {
             prefs.monthPosition = position
           }}
+          quickEdit={quickEdit}
           onMonth={(month, date) => {
             setVisibleMonth(month)
             visibleDate.current = date
@@ -337,6 +378,29 @@ export function CalendarPage({
           </div>
         </div>
       )}
+      {quickEdit.active && <QuickEditFooter edit={quickEdit} />}
+      {quickEdit.active && quickEdit.editingOccurrence && (
+        <TaskEditor
+          key={quickEdit.editingOccurrence.occurrenceKey}
+          data={quickEdit.baseData}
+          child={child}
+          occurrence={quickEdit.editingOccurrence}
+          onClose={quickEdit.closeEditor}
+          onCreatePreset={() => setQuickPreset(true)}
+          onDraftSave={quickEdit.saveTask}
+          onDraftDelete={quickEdit.deleteEditingTask}
+          getOccurrences={quickEdit.occurrencesForDate}
+        />
+      )}
+      {quickEdit.active && quickPreset && (
+        <PresetEditor
+          data={quickEdit.baseData}
+          expectedRevision={quickEdit.revision}
+          quickEdit
+          onSaved={quickEdit.presetSaved}
+          onClose={() => setQuickPreset(false)}
+        />
+      )}
       {undoOccurrence && (
         <Confirm
           id="undoTaskCompletionDialog"
@@ -403,7 +467,7 @@ function CalendarTaskActions({
       >
         {week ? (
           <>
-            <strong>{o.title}</strong>
+            <strong className="calendar-task-title">{o.title}</strong>
             {showTime && (
               <small>
                 {o.startTime}–{o.endTime}
@@ -412,7 +476,7 @@ function CalendarTaskActions({
           </>
         ) : (
           <span>
-            {o.startTime} {o.title}
+            {o.startTime} <span className="calendar-task-title">{o.title}</span>
           </span>
         )}
       </Button>
@@ -439,14 +503,23 @@ export function TaskEditor({
   child,
   onClose,
   onCreatePreset,
+  onDraftSave,
+  onDraftDelete,
+  getOccurrences,
   ...options
 }: {
   data: BusinessData
   child: Child
   onClose: () => void
   onCreatePreset: () => void
+  onDraftSave?: (task: Task) => void
+  onDraftDelete?: () => void
+  getOccurrences?: (date: string) => Occurrence[]
 } & Options) {
-  const [task, setTask] = useState<Task>(() => initialTask(data, options)),
+  const [task, setTask] = useState<Task>(() => ({
+      ...initialTask(data, options),
+      ...(onDraftSave ? { recurrence: null } : {}),
+    })),
     [scope, setScope] = useState(""),
     [deleting, setDeleting] = useState(false),
     [overlap, setOverlap] = useState(false),
@@ -483,10 +556,13 @@ export function TaskEditor({
     if (!o && !data.categories.some((c) => c.id === task.categoryId && c.active))
       throw Error("请选择可用的任务类型，配置中的类型可能已停用。")
     if (durationError) throw Error(durationError)
-    if (o?.recurring && !scope) throw Error("请选择修改范围。")
+    if (o?.recurring && !onDraftSave && !scope) throw Error("请选择修改范围。")
     if (
       !overlap &&
-      occurrences(data, task.startDate, task.startDate).some(
+      (getOccurrences
+        ? getOccurrences(task.startDate)
+        : occurrences(data, task.startDate, task.startDate)
+      ).some(
         (x) =>
           x.occurrenceKey !== o?.occurrenceKey &&
           x.startTime < task.endTime &&
@@ -494,6 +570,11 @@ export function TaskEditor({
       )
     ) {
       setOverlap(true)
+      return
+    }
+    if (onDraftSave) {
+      onDraftSave({ ...task, recurrence: null })
+      onClose()
       return
     }
     await runtime.command(
@@ -520,7 +601,12 @@ export function TaskEditor({
               variant="destructive"
               className="task-delete-action"
               disabled={action.busy || readOnly || deleting}
-              onClick={() => setDeleting(true)}
+              onClick={() => {
+                if (onDraftDelete) {
+                  onDraftDelete()
+                  onClose()
+                } else setDeleting(true)
+              }}
             >
               删除任务
             </Button>
@@ -665,160 +751,162 @@ export function TaskEditor({
               </Field>
             </div>
           </div>
-          <section
-            className="recurrence-section"
-            aria-labelledby="recurrenceTitle"
-            data-expanded={!!rule}
-          >
-            <div className="switch-field">
-              <div>
-                <label id="recurrenceTitle" htmlFor="taskRepeat">
-                  重复任务
-                </label>
-                <p>按固定规则自动安排后续任务</p>
-              </div>
-              <Switch
-                id="taskRepeat"
-                checked={!!rule}
-                onCheckedChange={(checked) =>
-                  update({
-                    recurrence: checked
-                      ? {
-                          freq: "daily",
-                          interval: 1,
-                          endType: "never",
-                          weekdays: [(parseDate(task.startDate).getDay() + 6) % 7],
-                          monthDay: Number(task.startDate.slice(8)),
-                        }
-                      : null,
-                  })
-                }
-              />
-            </div>
-            {rule && (
-              <div className="recurrence-fields">
-                <div className="form-grid">
-                  <Field label="重复频率" id="repeatFreq">
-                    <Choice
-                      id="repeatFreq"
-                      label="重复频率"
-                      value={rule.freq}
-                      onChange={(freq) => setRule({ freq: freq as typeof rule.freq })}
-                      options={[
-                        { value: "daily", label: "每天" },
-                        { value: "weekly", label: "每周" },
-                        { value: "monthly", label: "每月" },
-                      ]}
-                    />
-                  </Field>
-                  <Field label="间隔" id="repeatInterval">
-                    <NumberPicker
-                      id="repeatInterval"
-                      label="间隔"
-                      min={1}
-                      max={15}
-                      loop
-                      value={rule.interval}
-                      onChange={(interval) => setRule({ interval })}
-                      required
-                    />
-                  </Field>
+          {!onDraftSave && (
+            <section
+              className="recurrence-section"
+              aria-labelledby="recurrenceTitle"
+              data-expanded={!!rule}
+            >
+              <div className="switch-field">
+                <div>
+                  <label id="recurrenceTitle" htmlFor="taskRepeat">
+                    重复任务
+                  </label>
+                  <p>按固定规则自动安排后续任务</p>
                 </div>
-                {rule.freq === "weekly" && (
-                  <fieldset className="weekday-picks">
-                    <legend>重复星期</legend>
-                    {["一", "二", "三", "四", "五", "六", "日"].map((day, index) => (
-                      <label key={day}>
-                        <Checkbox
-                          name="repeatWeekday"
-                          value={index}
-                          checked={rule.weekdays?.includes(index)}
-                          onCheckedChange={(checked) =>
-                            setRule({
-                              weekdays: checked
-                                ? [...(rule.weekdays || []), index]
-                                : (rule.weekdays || []).filter((i) => i !== index),
-                            })
+                <Switch
+                  id="taskRepeat"
+                  checked={!!rule}
+                  onCheckedChange={(checked) =>
+                    update({
+                      recurrence: checked
+                        ? {
+                            freq: "daily",
+                            interval: 1,
+                            endType: "never",
+                            weekdays: [(parseDate(task.startDate).getDay() + 6) % 7],
+                            monthDay: Number(task.startDate.slice(8)),
                           }
-                        />
-                        周{day}
-                      </label>
-                    ))}
-                  </fieldset>
-                )}
-                {rule.freq === "monthly" && (
+                        : null,
+                    })
+                  }
+                />
+              </div>
+              {rule && (
+                <div className="recurrence-fields">
                   <div className="form-grid">
-                    <Field label="每月日期" id="repeatMonthDay">
-                      <MonthDayPicker
-                        id="repeatMonthDay"
-                        value={rule.monthDay || Number(task.startDate.slice(8))}
-                        onChange={(monthDay) => setRule({ monthDay })}
+                    <Field label="重复频率" id="repeatFreq">
+                      <Choice
+                        id="repeatFreq"
+                        label="重复频率"
+                        value={rule.freq}
+                        onChange={(freq) => setRule({ freq: freq as typeof rule.freq })}
+                        options={[
+                          { value: "daily", label: "每天" },
+                          { value: "weekly", label: "每周" },
+                          { value: "monthly", label: "每月" },
+                        ]}
+                      />
+                    </Field>
+                    <Field label="间隔" id="repeatInterval">
+                      <NumberPicker
+                        id="repeatInterval"
+                        label="间隔"
+                        min={1}
+                        max={15}
+                        loop
+                        value={rule.interval}
+                        onChange={(interval) => setRule({ interval })}
+                        required
                       />
                     </Field>
                   </div>
-                )}
-                <div className="form-grid recurrence-end-grid">
-                  <Field label="结束方式" id="repeatEndType">
-                    <Choice
-                      id="repeatEndType"
-                      label="结束方式"
-                      value={rule.endType}
-                      onChange={(endType) =>
-                        setRule({
-                          endType: endType as typeof rule.endType,
-                          until: rule.until || addDays(task.startDate, 30),
-                          count: rule.count || 10,
-                        })
-                      }
-                      options={[
-                        { value: "never", label: "永不结束" },
-                        { value: "until", label: "截止日期" },
-                        { value: "count", label: "重复次数" },
-                      ]}
-                    />
-                  </Field>
-                  {rule.endType === "until" && (
-                    <Field label="截止日期" id="repeatUntil">
-                      <DatePicker
-                        id="repeatUntil"
-                        value={rule.until || addDays(task.startDate, 30)}
-                        onChange={(until) => setRule({ until })}
-                      />
-                    </Field>
+                  {rule.freq === "weekly" && (
+                    <fieldset className="weekday-picks">
+                      <legend>重复星期</legend>
+                      {["一", "二", "三", "四", "五", "六", "日"].map((day, index) => (
+                        <label key={day}>
+                          <Checkbox
+                            name="repeatWeekday"
+                            value={index}
+                            checked={rule.weekdays?.includes(index)}
+                            onCheckedChange={(checked) =>
+                              setRule({
+                                weekdays: checked
+                                  ? [...(rule.weekdays || []), index]
+                                  : (rule.weekdays || []).filter((i) => i !== index),
+                              })
+                            }
+                          />
+                          周{day}
+                        </label>
+                      ))}
+                    </fieldset>
                   )}
-                  {rule.endType === "count" && (
-                    <Field
-                      label="重复次数"
-                      id="repeatCount"
-                      help={
-                        o
-                          ? "选择“本次及以后”时：未修改则保留原剩余次数；修改后从本次起按新次数安排。"
-                          : undefined
-                      }
-                    >
-                      <NumberPicker
-                        id="repeatCount"
-                        label="重复次数"
-                        min={1}
-                        max={60}
-                        loop
-                        value={rule.count || 10}
-                        required
-                        onChange={(count) => setRule({ count })}
-                      />
-                    </Field>
-                  )}
-                  {rule.endType === "never" && (
-                    <div className="form-field recurrence-summary">
-                      <span>结束条件</span>
-                      <p>持续安排</p>
+                  {rule.freq === "monthly" && (
+                    <div className="form-grid">
+                      <Field label="每月日期" id="repeatMonthDay">
+                        <MonthDayPicker
+                          id="repeatMonthDay"
+                          value={rule.monthDay || Number(task.startDate.slice(8))}
+                          onChange={(monthDay) => setRule({ monthDay })}
+                        />
+                      </Field>
                     </div>
                   )}
+                  <div className="form-grid recurrence-end-grid">
+                    <Field label="结束方式" id="repeatEndType">
+                      <Choice
+                        id="repeatEndType"
+                        label="结束方式"
+                        value={rule.endType}
+                        onChange={(endType) =>
+                          setRule({
+                            endType: endType as typeof rule.endType,
+                            until: rule.until || addDays(task.startDate, 30),
+                            count: rule.count || 10,
+                          })
+                        }
+                        options={[
+                          { value: "never", label: "永不结束" },
+                          { value: "until", label: "截止日期" },
+                          { value: "count", label: "重复次数" },
+                        ]}
+                      />
+                    </Field>
+                    {rule.endType === "until" && (
+                      <Field label="截止日期" id="repeatUntil">
+                        <DatePicker
+                          id="repeatUntil"
+                          value={rule.until || addDays(task.startDate, 30)}
+                          onChange={(until) => setRule({ until })}
+                        />
+                      </Field>
+                    )}
+                    {rule.endType === "count" && (
+                      <Field
+                        label="重复次数"
+                        id="repeatCount"
+                        help={
+                          o
+                            ? "选择“本次及以后”时：未修改则保留原剩余次数；修改后从本次起按新次数安排。"
+                            : undefined
+                        }
+                      >
+                        <NumberPicker
+                          id="repeatCount"
+                          label="重复次数"
+                          min={1}
+                          max={60}
+                          loop
+                          value={rule.count || 10}
+                          required
+                          onChange={(count) => setRule({ count })}
+                        />
+                      </Field>
+                    )}
+                    {rule.endType === "never" && (
+                      <div className="form-field recurrence-summary">
+                        <span>结束条件</span>
+                        <p>持续安排</p>
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
-            )}
-          </section>
-          {o?.recurring && (
+              )}
+            </section>
+          )}
+          {o?.recurring && !onDraftSave && (
             <Field label="修改范围" id="taskScope">
               <Choice
                 id="taskScope"
@@ -891,10 +979,16 @@ export function PresetEditor({
   id,
   data,
   onClose,
+  expectedRevision,
+  onSaved,
+  quickEdit = false,
 }: {
   id?: string
   data: BusinessData
   onClose: () => void
+  expectedRevision?: number
+  onSaved?: () => void
+  quickEdit?: boolean
 }) {
   const p = data.taskPresets.find((p) => p.id === id),
     [value, setValue] = useState({
@@ -928,10 +1022,17 @@ export function PresetEditor({
     <Modal
       id="taskPresetEditorDialog"
       title={p ? "编辑常用任务" : "添加常用任务"}
-      onClose={onClose}
+      onClose={() => {
+        if (!quickEdit || !runtime.getSnapshot().unconfirmed) onClose()
+      }}
       footer={
         <>
-          <Button variant="outline" type="button" disabled={action.busy} onClick={onClose}>
+          <Button
+            variant="outline"
+            type="button"
+            disabled={action.busy || (quickEdit && runtime.getSnapshot().unconfirmed)}
+            onClick={onClose}
+          >
             取消
           </Button>
           <Button type="submit" form="taskPresetForm" disabled={action.busy}>
@@ -948,12 +1049,17 @@ export function PresetEditor({
             if (durationError) throw Error(durationError)
             if (!data.categories.some((c) => c.id === value.categoryId && c.active))
               throw Error("请选择可用的任务类型。")
-            await runtime.command("preset.save", { preset: { ...(id ? { id } : {}), ...value } })
+            await runtime.command(
+              "preset.save",
+              { preset: { ...(id ? { id } : {}), ...value } },
+              expectedRevision,
+            )
+            onSaved?.()
             onClose()
           })
         }}
       >
-        <fieldset disabled={action.busy}>
+        <fieldset disabled={action.busy || (quickEdit && runtime.getSnapshot().unconfirmed)}>
           <Field label="任务名称" id="presetTitle">
             <Input
               id="presetTitle"
@@ -1010,7 +1116,16 @@ export function PresetEditor({
               />
             </Field>
           </div>
-          <ErrorText message={action.error} id="taskPresetEditorError" />
+          {quickEdit ? (
+            action.error && (
+              <p id="taskPresetEditorError" className="form-error" role="alert">
+                {action.error}
+                {runtime.getSnapshot().unconfirmed ? " 请重试保存配置以确认原操作。" : ""}
+              </p>
+            )
+          ) : (
+            <ErrorText message={action.error} id="taskPresetEditorError" />
+          )}
         </fieldset>
       </form>
     </Modal>
@@ -1085,6 +1200,7 @@ function MonthCalendar({
   onMonth,
   savedPosition,
   onPosition,
+  quickEdit,
 }: {
   data: BusinessData
   target: string
@@ -1098,6 +1214,7 @@ function MonthCalendar({
   onMonth: (m: string, date: string) => void
   savedPosition?: { date: string; offset: number }
   onPosition: (position: { date: string; offset: number }) => void
+  quickEdit: CalendarQuickEdit
 }) {
   const windowFor = (date: string) => ({ start: shiftMonth(date, -2), end: shiftMonth(date, 3) })
   const [windowRange, setWindowRange] = useState(() => windowFor(target)),
@@ -1114,7 +1231,13 @@ function MonthCalendar({
   }, [])
   const from = startWeek(windowRange.start + "-01"),
     to = addDays(startWeek(addDays(shiftMonth(windowRange.end, 1) + "-01", -1)), 6),
-    items = useMemo(() => occurrences(data, from, to), [data, from, to]),
+    items = useMemo(
+      () =>
+        quickEdit.active
+          ? draftOccurrences(quickEdit.baseData, from, to, quickEdit.draft)
+          : occurrences(data, from, to),
+      [data, from, to, quickEdit.active, quickEdit.baseData, quickEdit.draft],
+    ),
     byDay = new Map<string, Occurrence[]>()
   for (const o of items) byDay.set(o.date, [...(byDay.get(o.date) || []), o])
   useLayoutEffect(() => {
@@ -1188,7 +1311,7 @@ function MonthCalendar({
             first = date.endsWith("-01")
           return (
             <div
-              className={`month-cell month-band-${Number(date.slice(5, 7)) % 2} ${parseDate(date).getDay() % 6 === 0 ? "weekend" : ""} ${date === today() ? "today" : ""} ${first ? "month-start" : ""}`}
+              className={`month-cell month-band-${Number(date.slice(5, 7)) % 2} ${parseDate(date).getDay() % 6 === 0 ? "weekend" : ""} ${date === today() ? "today" : ""} ${first ? "month-start" : ""} ${quickEdit.active && quickEdit.drag.hover === date ? "quick-edit-drop-target" : ""}`}
               key={date}
               data-cell-day={date}
             >
@@ -1196,10 +1319,11 @@ function MonthCalendar({
                 variant="ghost"
                 className="day-open"
                 data-day={date}
-                aria-label={`${date === today() ? "今天，" : ""}${fmtFull(date)}，${tasks.length}项任务，新建任务`}
-                disabled={readOnly}
+                aria-label={`${date === today() ? "今天，" : ""}${fmtFull(date)}，${tasks.length}项任务，${quickEdit.active ? "放置选中的任务" : "新建任务"}`}
+                disabled={readOnly || (quickEdit.active && quickEdit.frozen)}
                 onClick={() => {
-                  if (!busy) openTask({ date })
+                  if (quickEdit.active) quickEdit.placeSelected(date)
+                  else if (!busy) openTask({ date })
                 }}
               >
                 <span>{first ? `${Number(date.slice(5, 7))}月1日` : Number(date.slice(8))}</span>
@@ -1218,14 +1342,18 @@ function MonthCalendar({
                       } as React.CSSProperties
                     }
                   >
-                    <CalendarTaskActions
-                      occurrence={o}
-                      completed={isDone(data, o)}
-                      readOnly={readOnly}
-                      busy={pendingOccurrences.has(o.occurrenceKey)}
-                      onToggle={onToggle}
-                      onEdit={onEdit}
-                    />
+                    {quickEdit.active ? (
+                      <QuickEditTask edit={quickEdit} occurrence={o} />
+                    ) : (
+                      <CalendarTaskActions
+                        occurrence={o}
+                        completed={isDone(data, o)}
+                        readOnly={readOnly}
+                        busy={pendingOccurrences.has(o.occurrenceKey)}
+                        onToggle={onToggle}
+                        onEdit={onEdit}
+                      />
+                    )}
                   </div>
                 ))}
               </div>

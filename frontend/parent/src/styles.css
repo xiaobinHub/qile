@@ -1887,7 +1887,8 @@ a {
 }
 
 /* Reference layout: controls scale with PC/iPad density, not business geometry. */
-.calendar-toolbar [data-slot="button"] {
+.calendar-toolbar [data-slot="button"],
+#quickAddPresetBtn {
   font-size: var(--text-body);
   line-height: var(--text-body--line-height);
   height: 36px;
@@ -2139,6 +2140,7 @@ a {
   .nav [data-size="navigation"],
   .child-profile,
   .calendar-toolbar [data-slot="button"],
+  #quickAddPresetBtn,
   .calendar-toolbar [data-slot="toggle-group-item"],
   .store-section-heading [data-slot="button"],
   .gift-card-actions [data-slot="button"] {

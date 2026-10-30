@@ -29,7 +29,8 @@ async function exerciseChildManagement({
     await page.reload()
     await page.locator("[data-accept-invite]").click()
     await page.waitForFunction(() =>
-      document.querySelector("#calendarTitle,[data-enter-invited-child]"),
+      document.querySelector("#calendarTitle") ||
+      Array.from(document.querySelectorAll("[data-enter-invited-child]")).some(button => !button.disabled),
     )
     if (await page.locator("[data-enter-invited-child]").isVisible())
       await page.locator("[data-enter-invited-child]").click()

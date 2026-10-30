@@ -7,7 +7,7 @@ from html.parser import HTMLParser
 from pathlib import Path
 from urllib.parse import urlsplit
 
-ASSET = re.compile(r'[A-Za-z0-9][A-Za-z0-9_.-]*\.(?:js|css|woff2)')
+ASSET = re.compile(r'[A-Za-z0-9][A-Za-z0-9_.-]*\.(?:js|css|woff2|png)')
 
 
 class PageResources(HTMLParser):
@@ -89,7 +89,7 @@ def validate_assets(root: Path, surface: str) -> set[Path]:
                 if name and name not in declared:
                     raise ValueError(f'{surface}: CSS 引用未列入构建清单：{name}')
         elif path.suffix == '.js':
-            urls = re.findall(r'[\'"`]([^\'"`\s]+\.(?:js|css|woff2))[\'"`]', path.read_text())
+            urls = re.findall(r'[\'"`]([^\'"`\s]+\.(?:js|css|woff2|png))[\'"`]', path.read_text())
             for url in urls:
                 name = resource(url)
                 if name not in declared:
