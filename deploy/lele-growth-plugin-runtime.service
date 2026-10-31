@@ -1,0 +1,34 @@
+[Unit]
+Description=Lele Growth independent plugin runtime
+After=network.target
+
+[Service]
+Type=simple
+User=lele
+Group=lele
+WorkingDirectory=/opt/lele-growth/current
+EnvironmentFile=/etc/lele-growth/plugin-runtime.env
+Environment=LELE_PLUGIN_ROOT=/opt/lele-growth/plugins
+Environment=LELE_PLUGIN_SOCKET_ROOT=/run/lele-growth-plugins
+RuntimeDirectory=lele-growth-plugins
+RuntimeDirectoryMode=0700
+ExecStart=/opt/lele-growth/current/.venv/bin/python deploy/plugin_runtime.py --config ${LELE_ACCOUNTS_CONFIG}
+Restart=on-failure
+RestartSec=5
+KillMode=control-group
+TimeoutStopSec=40
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/lele-growth/plugins /run/lele-growth-plugins
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+TasksMax=96
+MemoryMax=512M
+CPUQuota=150%
+LimitNOFILE=1024
+LimitCORE=0
+
+[Install]
+WantedBy=multi-user.target

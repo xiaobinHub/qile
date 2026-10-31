@@ -1,0 +1,111 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Lele plugin manifest protocol 1.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "manifestVersion",
+    "id",
+    "version",
+    "type",
+    "platformApi",
+    "frontend",
+    "backend",
+    "configSchema",
+    "dataSchemaVersion",
+    "capabilities",
+    "tasks",
+    "events",
+    "icons"
+  ],
+  "properties": {
+    "manifestVersion": {
+      "const": 1
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$"
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+    "type": {
+      "enum": ["page", "service"]
+    },
+    "platformApi": {
+      "$ref": "#/$defs/protocol"
+    },
+    "frontendApi": {
+      "$ref": "#/$defs/protocol"
+    },
+    "frontend": {
+      "type": ["object", "null"]
+    },
+    "backend": {
+      "type": ["object", "null"]
+    },
+    "configSchema": {
+      "type": ["string", "object"]
+    },
+    "dataSchemaVersion": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "capabilities": {
+      "type": "array",
+      "items": {
+        "enum": [
+          "plugin.state.read",
+          "plugin.state.write",
+          "plugin.jobs.schedule",
+          "plugin.events.subscribe"
+        ]
+      },
+      "uniqueItems": true
+    },
+    "tasks": {
+      "type": "array"
+    },
+    "events": {
+      "type": "array",
+      "items": {
+        "enum": ["task.completed"]
+      },
+      "uniqueItems": true
+    },
+    "icons": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "name": {
+      "type": "string",
+      "maxLength": 4000
+    },
+    "description": {
+      "type": "string",
+      "maxLength": 4000
+    },
+    "instructions": {
+      "type": "string",
+      "maxLength": 4000
+    }
+  },
+  "$defs": {
+    "protocol": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["major", "minMinor"],
+      "properties": {
+        "major": {
+          "const": 1
+        },
+        "minMinor": {
+          "const": 0
+        }
+      }
+    }
+  }
+}

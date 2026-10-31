@@ -102,6 +102,27 @@
 .calendar-panel[data-quick-edit] .month-task {
   position: relative;
 }
+.calendar-panel[data-quick-edit] .month-task.quick-task-blocked-shake {
+  animation: quick-task-blocked-shake 240ms ease-in-out;
+}
+@keyframes quick-task-blocked-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  20% {
+    transform: translateX(-3px);
+  }
+  40% {
+    transform: translateX(3px);
+  }
+  60% {
+    transform: translateX(-2px);
+  }
+  80% {
+    transform: translateX(2px);
+  }
+}
 .quick-task-marker {
   position: absolute;
   inset: 0 auto 0 0;
@@ -221,5 +242,12 @@
   }
   .quick-edit-footer .quick-trash-stage {
     left: 4px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .calendar-panel[data-quick-edit] .month-task.quick-task-blocked-shake {
+    animation: none;
+    outline: 2px solid var(--destructive);
+    outline-offset: 1px;
   }
 }

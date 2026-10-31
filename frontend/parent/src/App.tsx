@@ -1,6 +1,6 @@
 import { ChildAvatar } from "./features/child-avatar"
 import { Suspense, lazy, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react"
-import { Sprout } from "lucide-react"
+import { Menu, Sprout } from "lucide-react"
 import { ToastProvider, useToast } from "@shared/components/ui/toast"
 import { Button, Confirm, ErrorText, SaveResolution, Modal } from "./features/ui"
 import { Skeleton } from "@shared/components/ui/skeleton"
@@ -8,7 +8,9 @@ import { Login, Onboarding, ChildSwitcher } from "./features/account"
 import { PasswordSetup } from "./password-setup"
 import { SettingsPage } from "./settings"
 import type { Controller, User as SettingsUser } from "./settings/types"
-import { runtime } from "./lib/runtime"
+import { runtime, type View } from "./lib/runtime"
+import { hasPageTab, pluginStore, usePlugins } from "./plugins/store"
+import { PluginBoundary, PluginPage } from "./plugins/plugin-page"
 import type { BusinessData, Occurrence } from "./domain/types"
 import { CalendarPage, TaskEditor, PresetEditor, CategoryEditor } from "./features/calendar"
 const StorePage = lazy(() => import("./features/store").then((m) => ({ default: m.StorePage })))
@@ -24,9 +26,33 @@ function Application() {
   const snapshot = useSyncExternalStore(runtime.subscribe, runtime.getSnapshot),
     { user, child, data } = snapshot
   const { toast } = useToast()
+  const plugins = usePlugins()
+  const pluginTabs =
+    child && !child.archived && plugins.childId === child.id && plugins.epoch === snapshot.epoch
+      ? plugins.plugins
+          .filter((plugin) => hasPageTab(plugin, child.id))
+          .sort((a, b) => b.sortOrder - a.sortOrder || a.id.localeCompare(b.id))
+      : []
+  const navigation: { key: string; label: string; view: View }[] = child
+    ? [
+        { key: "calendar", label: "日历", view: "calendar" },
+        { key: "store", label: "积分商城", view: "store" },
+        ...pluginTabs.map((plugin) => ({
+          key: `plugin:${plugin.id}`,
+          label: plugin.name,
+          view: { kind: "plugin" as const, pluginId: plugin.id },
+        })),
+        { key: "settings", label: "设置", view: "settings" },
+      ]
+    : [{ key: "settings", label: "设置", view: "settings" }]
+  const activeViewKey =
+    typeof snapshot.view === "object" ? `plugin:${snapshot.view.pluginId}` : snapshot.view
+  const [settingsMenuOpen, setSettingsMenuOpen] = useState(false)
+  useEffect(() => setSettingsMenuOpen(false), [activeViewKey, child?.id])
   const [editor, setEditor] = useState<Editor | null>(null),
     [switcher, setSwitcher] = useState(false),
     [logout, setLogout] = useState(false),
+    [quickEditNotice, setQuickEditNotice] = useState(false),
     [confirmation, setConfirmation] = useState<{
       title: string
       description: string
@@ -36,6 +62,7 @@ function Application() {
   const printReturnFocus = useRef<HTMLElement | null>(null)
   const settingsInitialPage = useRef<string | undefined>(undefined)
   const notify = (message: string) => toast({ title: message })
+  useEffect(() => pluginStore.start(), [])
   useEffect(() => {
     void runtime.bootstrap()
     const focus = () => {
@@ -60,6 +87,7 @@ function Application() {
     setSwitcher(false)
     setConfirmation(null)
     setLogout(false)
+    setQuickEditNotice(false)
     settingsInitialPage.current = undefined
     calendarPrefs.current = { mode: "month", cursor: today() }
   }, [snapshot.epoch])
@@ -148,6 +176,22 @@ function Application() {
       ) : (
         <div className="app">
           <header className="topbar">
+            {snapshot.view === "settings" && (
+              <Button
+                id="openSettingsMenu"
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="settings-menu-trigger"
+                aria-label="打开设置菜单"
+                aria-haspopup="dialog"
+                aria-controls="settingsMobileNavigation"
+                aria-expanded={settingsMenuOpen}
+                onClick={() => setSettingsMenuOpen(true)}
+              >
+                <Menu aria-hidden />
+              </Button>
+            )}
             <div className="brand">
               <span className="brand-mark">
                 <Sprout aria-hidden />
@@ -158,26 +202,24 @@ function Application() {
               </div>
             </div>
             <nav className="nav" aria-label="主导航">
-              {(child ? ["calendar", "store", "settings"] : ["settings"]).map((view) => (
+              {navigation.map(({ key, view, label }) => (
                 <Button
-                  key={view}
-                  data-view={view}
+                  key={key}
+                  data-view={key}
                   variant="navigation"
                   size="navigation"
-                  aria-current={snapshot.view === view ? "page" : undefined}
+                  aria-current={activeViewKey === key ? "page" : undefined}
+                  disabled={typeof view === "object" && !plugins.confirmed}
                   onClick={() => {
+                    if (snapshot.quickEditing) {
+                      setQuickEditNotice(true)
+                      return
+                    }
                     settingsInitialPage.current = undefined
-                    runtime.setView(view as "calendar" | "store" | "settings")
+                    runtime.setView(view)
                   }}
                 >
-                  {
-                    (
-                      { calendar: "日历", store: "积分商城", settings: "设置" } as Record<
-                        string,
-                        string
-                      >
-                    )[view]
-                  }
+                  {label}
                 </Button>
               ))}
             </nav>
@@ -192,7 +234,13 @@ function Application() {
                   aria-expanded={switcher}
                   aria-controls="childrenDialog"
                   aria-label={`${child.name}，打开我的孩子`}
-                  onClick={() => setSwitcher(true)}
+                  onClick={() => {
+                    if (snapshot.quickEditing) {
+                      setQuickEditNotice(true)
+                      return
+                    }
+                    setSwitcher(true)
+                  }}
                 >
                   <span className="child-avatar" aria-hidden>
                     <ChildAvatar id={child.avatarId} />
@@ -206,6 +254,14 @@ function Application() {
             )}
           </header>
           <main id="main">
+            {child && !plugins.confirmed && plugins.error && (
+              <div className="plugin-status-notice" role="status">
+                <p>应用状态暂未确认，插件操作已暂停。</p>
+                <Button variant="outline" onClick={() => void pluginStore.refresh()}>
+                  刷新应用状态
+                </Button>
+              </div>
+            )}
             {snapshot.unconfirmed && !snapshot.quickEditing && <SaveResolution />}
             {snapshot.error ? (
               <div className="empty-state">
@@ -215,12 +271,27 @@ function Application() {
               </div>
             ) : snapshot.view === "settings" ? (
               <SettingsPage
+                menuOpen={settingsMenuOpen}
+                onMenuOpenChange={setSettingsMenuOpen}
                 key={`${child?.id || "account"}:${snapshot.epoch}`}
                 controller={controller}
                 initialPage={settingsInitialPage.current}
               />
             ) : !child ? (
               <Onboarding user={user} controller={controller} />
+            ) : typeof snapshot.view === "object" ? (
+              <PluginBoundary key={`${child.id}:${snapshot.epoch}:${snapshot.view.pluginId}`}>
+                <PluginPage
+                  child={child}
+                  epoch={snapshot.epoch}
+                  pluginId={snapshot.view.pluginId}
+                  notify={notify}
+                  openSettings={() => {
+                    settingsInitialPage.current = "applications"
+                    runtime.setView("settings")
+                  }}
+                />
+              </PluginBoundary>
             ) : (
               data && (
                 <>
@@ -266,6 +337,24 @@ function Application() {
             )}
           </main>
         </div>
+      )}
+      {quickEditNotice && (
+        <Modal
+          id="quickEditNoticeDialog"
+          title="快捷编辑中"
+          description="请先退出快捷编辑模式，点击底部的保存或取消按钮。"
+          size="small"
+          showCloseButton={false}
+          bareHeader
+          bareFooter
+          onClose={() => setQuickEditNotice(false)}
+          footer={
+            <Button type="button" onClick={() => setQuickEditNotice(false)}>
+              知道了
+            </Button>
+          }
+        >
+        </Modal>
       )}
       {editor && data && child && (
         <>

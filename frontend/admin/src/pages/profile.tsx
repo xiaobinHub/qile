@@ -95,7 +95,7 @@ function BasicProfile() {
           </div>
           <FormFeedback id="profileError" message={message} success={success} />
           <div className="-mx-5 flex justify-end border-t bg-muted/15 px-5 py-4 sm:-mx-6 sm:px-6">
-            <Button type="submit" disabled={busy} className="h-11 gap-2">
+            <Button type="submit" disabled={busy} className="h-10 gap-2">
               {busy ? (
                 <>
                   <LoaderCircle className="animate-spin" />
@@ -214,7 +214,7 @@ function ChangePassword({ required }: { required: boolean }) {
               <LockKeyhole className="size-3" />
               保存后需重新登录
             </span>
-            <Button type="submit" disabled={busy} className="h-11">
+            <Button type="submit" disabled={busy} className="h-10">
               {busy ? (
                 <>
                   <LoaderCircle className="animate-spin" />

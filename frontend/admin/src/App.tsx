@@ -5,6 +5,7 @@ import { AdminLayout, type Page } from "@/components/admin-layout"
 import { LoginPage } from "@/pages/login"
 import { UsersPage } from "@/pages/users"
 import { ProfilePage } from "@/pages/profile"
+import { PluginsPage } from "@/pages/plugins"
 import { SessionProvider, useSession } from "@/lib/session"
 
 function Workspace() {
@@ -12,7 +13,13 @@ function Workspace() {
   const [page, setPage] = useState<Page>("users")
   return (
     <AdminLayout page={session?.user.mustChangePassword ? "profile" : page} onNavigate={setPage}>
-      {page === "profile" || session?.user.mustChangePassword ? <ProfilePage /> : <UsersPage />}
+      {page === "profile" || session?.user.mustChangePassword ? (
+        <ProfilePage />
+      ) : page === "plugins" ? (
+        <PluginsPage />
+      ) : (
+        <UsersPage />
+      )}
     </AdminLayout>
   )
 }

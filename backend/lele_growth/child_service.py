@@ -179,6 +179,8 @@ class ChildService:
         from lele_growth.media_service import MediaService
         from lele_growth.object_storage import ObjectStorage
         self.media = MediaService(self, ObjectStorage(self.config['_object_storage']))
+        from lele_growth.plugins.routes import PluginRoutes
+        self.plugins = PluginRoutes(self)
 
     def transaction(self, work, *, exclusive=False, schema_check=True):
         try:
@@ -305,6 +307,9 @@ class ChildService:
                 result=public_user(cur.fetchone())
                 self.audit(cur,user[0],'account.profile')
                 return {'user':result}
+            plugin_result = self.plugins.handle(cur,user,method,path,body)
+            if plugin_result is not NotImplemented:
+                return plugin_result
             if path.startswith('admin/'):
                 require(surface=='admin' and user[3]=='admin',403,'需要管理员权限。')
                 return self.admin(cur,user,method,path,body)
@@ -510,6 +515,10 @@ class ChildService:
         if child[1] is not None:
             return {'ok':True}
         cur.execute('UPDATE lele.children SET deleted_at=now(),deleted_by=%s WHERE id=%s',(user[0],child_id))
+        cur.execute("SELECT to_regclass('lele.child_plugins') IS NOT NULL")
+        if cur.fetchone()[0]:
+            from lele_growth.plugins.catalog import revoke_child
+            revoke_child(cur,child_id)
         cur.execute("UPDATE lele.invitations SET status='revoked' WHERE child_id=%s AND status='pending'",(child_id,))
         self.audit(cur,user[0],'child.delete',child_id)
         return {'ok':True}
@@ -587,6 +596,17 @@ class ChildService:
         require(isinstance(stored_name,str) and stored_name.strip()==child[1],400,'孩子名称请通过资料设置修改。')
         self.media.attach(cur,user,child_id,data)
         updated=self.save(cur,child_id,current,data)
+        if body['kind']=='completion.set' and body['payload'].get('completed') is True:
+            key=body['payload'].get('occurrenceKey')
+            previous_completion=next((item for item in current['data']['completions'] if item['occurrenceKey']==key),None)
+            completed=next((item for item in data['completions'] if item['occurrenceKey']==key and item['completed']),None)
+            if completed is not None and not (previous_completion and previous_completion['completed']):
+                cur.execute("SELECT to_regclass('lele.plugin_event_outbox') IS NOT NULL")
+                if cur.fetchone()[0]:
+                    from lele_growth.plugins.events import emit_task_completed
+                    snapshot=completed['snapshot']
+                    event={'occurrenceKey':key,**{field:snapshot[field] for field in ('seriesId','date','title','points') if field in snapshot}}
+                    emit_task_completed(cur,child_id,updated['revision'],event,body['operationId'])
         cur.execute('INSERT INTO lele.idempotency_records(child_id,operation_id,actor_id,membership_version,payload_sha256,result_revision) VALUES(%s,%s,%s,%s,%s,%s)',(child_id,body['operationId'],user[0],child[4],request_hash,updated['revision']))
         self.audit(cur,user[0],'operation.'+body['kind'],child_id,{'operationId':body['operationId'],'revision':updated['revision']})
         return {**updated,'context':dict(childId=child_id,membershipVersion=child[4])}

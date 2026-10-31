@@ -338,6 +338,9 @@
   padding: 24px 64px 20px 24px;
   border-bottom: 1px solid var(--border);
 }
+.bare-modal-header {
+  border-bottom: 0;
+}
 .ui-modal-header [data-slot="dialog-description"] {
   font-size: var(--text-caption);
   line-height: var(--text-caption--line-height);
@@ -364,6 +367,14 @@
   align-self: center;
   color: var(--text-secondary);
   font-size: var(--text-body);
+}
+.bare-modal-footer {
+  flex: none;
+  display: flex;
+  justify-content: flex-end;
+  flex-direction: row;
+  gap: 12px;
+  padding: 0 24px 24px;
 }
 /* A software keyboard must not squeeze a long form between a fixed header and
    footer. Keep its natural height and scroll the complete panel in one region. */

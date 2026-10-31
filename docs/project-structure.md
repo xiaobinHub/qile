@@ -5,6 +5,7 @@
 | `backend/lele_growth/` | FastAPI、业务、事务、存储、媒体及 SQL |
 | `frontend/parent/`、`frontend/admin/` | 两个 Vite 应用 |
 | `frontend/shared/` | 共享 shadcn/ui 组件及主题 |
+| `plugins/`、`packages/plugin-sdk*` | 独立插件源码及版本化前后端开发合同 |
 | `tests/backend/`、`tests/browser/`、`tests/domain/` | 当前后端、浏览器及领域回归 |
 | `tests/fixtures/` | 回归实际引用的规则对照及视觉样例 |
 | `scripts/` | 开发、检查、打包工具 |
@@ -26,3 +27,5 @@
 - 两端 `web/*-dist/.vite/manifest.json` 是发布资源依赖校验的输入，随构建和发布保存，不对外公开；正式包要求源码及构建结果已提交，开发验收包必须显式加 `--allow-dirty`。
 
 操作见 [本地开发](development.md)、[部署说明](../deploy/README.md) 和 [OSS 说明](oss-storage.md)；移出项目的数量及恢复位置见 [清理记录](local-cleanup-2026-10-23.md)。
+
+插件的部署目录通过 `LELE_PLUGIN_ROOT` 显式指定，并独立于主系统 current 目录；运行 socket 通过 `LELE_PLUGIN_SOCKET_ROOT` 指定。主系统发布包包含插件管理/运行基础能力，不携带 `plugins/` 下的业务源码。插件单独打包，详见 [插件开发](plugins/development.md) 和 [独立部署](plugins/deployment.md)。

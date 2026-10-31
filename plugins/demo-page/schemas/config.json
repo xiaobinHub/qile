@@ -1,0 +1,126 @@
+{
+  "type": "object",
+  "title": "页面能力 Demo 配置",
+  "description": "所有配置共享于当前儿童和当前插件；不存储外部凭据。",
+  "properties": {
+    "title": {
+      "type": "string",
+      "title": "页面标题",
+      "default": "页面能力 Demo",
+      "group": "页面展示",
+      "description": "保存后重新读取运行信息可查看当前标题。",
+      "minLength": 1,
+      "maxLength": 80
+    },
+    "pageSize": {
+      "type": "integer",
+      "title": "每页记录数",
+      "default": 5,
+      "group": "页面展示",
+      "description": "共享记录的分页大小，允许 1–50。",
+      "minimum": 1,
+      "maximum": 50
+    },
+    "multiplier": {
+      "type": "number",
+      "title": "探测数值权重",
+      "default": 1.5,
+      "group": "页面展示",
+      "description": "探测返回 weightedValue = value × multiplier；允许 0.1–10。",
+      "minimum": 0.1,
+      "maximum": 10
+    },
+    "autoRefresh": {
+      "type": "boolean",
+      "title": "自动刷新记录",
+      "default": true,
+      "group": "页面展示",
+      "description": "页面按需刷新共享记录；退出后清理刷新定时器。"
+    },
+    "tone": {
+      "type": "string",
+      "title": "页面色调",
+      "default": "默认",
+      "group": "页面展示",
+      "description": "选择页面的展示色调。",
+      "enum": ["默认", "清新", "暖色"]
+    },
+    "categories": {
+      "type": "array",
+      "title": "记录分类",
+      "default": ["日常", "学习"],
+      "group": "页面展示",
+      "description": "至少选择一项；演示固定文本多选。",
+      "items": {
+        "type": "string",
+        "enum": ["日常", "学习", "运动"]
+      },
+      "uniqueItems": true,
+      "minItems": 1,
+      "maxItems": 3
+    },
+    "targetDate": {
+      "type": "string",
+      "title": "示例目标日期",
+      "default": "2030-01-01",
+      "group": "格式示例",
+      "description": "仅展示日期格式与校验元数据，不创建到期任务。",
+      "format": "date"
+    },
+    "checkpoint": {
+      "type": "string",
+      "title": "示例检查时间",
+      "default": "2030-01-01T12:00:00+08:00",
+      "group": "格式示例",
+      "description": "仅展示带时区日期时间格式与校验元数据，不触发定时任务。",
+      "format": "date-time"
+    },
+    "contactEmail": {
+      "type": "string",
+      "title": "示例联系邮箱",
+      "default": "demo@example.invalid",
+      "group": "格式示例",
+      "description": "仅展示邮箱格式与校验元数据，不发送邮件。",
+      "format": "email",
+      "maxLength": 200
+    },
+    "referenceURL": {
+      "type": "string",
+      "title": "示例参考网址",
+      "default": "https://example.com",
+      "group": "格式示例",
+      "description": "仅展示网址格式与校验元数据，不请求或推送到该网址。",
+      "format": "uri",
+      "maxLength": 1000
+    },
+    "recordBackground": {
+      "type": "boolean",
+      "title": "记录后台心跳",
+      "default": true,
+      "group": "后台记录",
+      "description": "默认每 60 秒在 activity 集合记录心跳，不发送外部消息。"
+    },
+    "captureEvents": {
+      "type": "boolean",
+      "title": "记录任务完成事件",
+      "default": true,
+      "group": "后台记录",
+      "description": "订阅 task.completed，在 activity 集合记录活动，不发送外部消息。"
+    }
+  },
+  "required": [
+    "title",
+    "pageSize",
+    "multiplier",
+    "autoRefresh",
+    "tone",
+    "categories",
+    "targetDate",
+    "checkpoint",
+    "contactEmail",
+    "referenceURL",
+    "recordBackground",
+    "captureEvents"
+  ],
+  "additionalProperties": false
+}

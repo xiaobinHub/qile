@@ -43,7 +43,7 @@ def create_app(config_path, surface='parent'):
     async def api_error(request,error):
         content={'error':error.error}
         if error.kind: content['kind']=error.kind
-        return JSONResponse(content,status_code=error.status)
+        return JSONResponse(content,status_code=error.status,headers={'Retry-After':'5'} if error.kind=='plugin_updating' else None)
 
     @app.exception_handler(StoreError)
     async def store_error(request,error):
@@ -91,7 +91,12 @@ def create_app(config_path, surface='parent'):
             raise ApiError(400,'请求格式不正确。') from None
         if body_bytes and request.headers.get('content-type','').split(';')[0].strip()!='application/json':
             raise ApiError(415,'请使用 JSON 请求格式。')
-        result=await run_in_threadpool(service.request,request.method,path,body,request.cookies.get(cookie_name),request.headers.get('x-csrf-token'),request.headers.get('origin'),surface,request.client.host if request.client else 'unknown')
+        if request.method=='GET' and ('/plugins' in path or path.startswith('admin/plugin')):
+            body={**dict(request.query_params),**body}
+        from lele_growth.plugins.gateway import PluginGateway
+        result=await run_in_threadpool(PluginGateway(service).route,request.method,path,body,request.cookies.get(cookie_name),request.headers.get('x-csrf-token'),request.headers.get('origin'),surface,request.headers.get('x-plugin-release'))
+        if result is NotImplemented:
+            result=await run_in_threadpool(service.request,request.method,path,body,request.cookies.get(cookie_name),request.headers.get('x-csrf-token'),request.headers.get('origin'),surface,request.client.host if request.client else 'unknown')
         if isinstance(result,ImageResponse):
             return Response(result.content,media_type=result.mime)
         token=result.pop('_cookie',None); clear=result.pop('_clear_cookie',False)
@@ -112,11 +117,16 @@ def create_app(config_path, surface='parent'):
     if surface=='parent':
         app.add_api_route('/children/{child_id}',page,methods=['GET'])
 
+    @app.get('/plugin-assets/{plugin_id}/{version}/{asset:path}')
+    def plugin_asset(plugin_id:str,version:str,asset:str,request:Request):
+        from lele_growth.plugins.assets import authorized_asset
+        return FileResponse(authorized_asset(service,request.cookies.get(cookie_name),plugin_id,version,asset,surface))
+
     # Serve only built frontend assets, never source/config or arbitrary paths.
     asset_prefix = '/admin-assets/{asset}' if surface == 'admin' else '/parent-assets/{asset}'
     @app.get(asset_prefix)
     def frontend_asset(asset: str):
-        if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.-]*\.(?:js|css|woff2|png)', asset):
+        if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.-]*\.(?:js|css|woff2|png|webp)', asset):
             raise ApiError(404, '文件不存在。')
         root = (web_root / ('admin-dist' if surface == 'admin' else 'parent-dist')).resolve()
         file = (root / asset).resolve()

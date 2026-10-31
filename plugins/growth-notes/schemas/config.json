@@ -1,0 +1,8 @@
+{
+  "type": "object",
+  "properties": {
+    "title": { "type": "string", "title": "随记标题", "default": "成长随记", "maxLength": 40 }
+  },
+  "required": ["title"],
+  "additionalProperties": false
+}

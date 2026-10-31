@@ -1,0 +1,105 @@
+{
+  "type": "object",
+  "title": "后台能力 Demo 配置",
+  "description": "所有配置共享于当前儿童和当前插件；不存储外部凭据。",
+  "properties": {
+    "message": {
+      "type": "string",
+      "title": "共享消息",
+      "default": "后台能力 Demo：只记录执行结果，不发送外部消息。",
+      "group": "记录内容",
+      "description": "用于每日任务、心跳和事件的站内执行记录，最多 200 字。",
+      "maxLength": 200
+    },
+    "channel": {
+      "type": "string",
+      "title": "记录通道",
+      "default": "站内记录",
+      "group": "记录内容",
+      "description": "仅为 executions 记录的标签；两个选项均不发送外部消息。",
+      "enum": ["站内记录", "执行日志"]
+    },
+    "time": {
+      "type": "string",
+      "title": "每日执行时间",
+      "default": "20:00",
+      "group": "每日计划",
+      "description": "HH:MM 或 HH:MM:SS，由平台调度每日任务。",
+      "format": "time"
+    },
+    "timezone": {
+      "type": "string",
+      "title": "每日计划时区",
+      "default": "Asia/Shanghai",
+      "group": "每日计划",
+      "description": "有效 IANA 时区；星期判断使用任务 occurrence 时间而非重试到达时间。",
+      "format": "timezone"
+    },
+    "weekdays": {
+      "type": "array",
+      "title": "执行星期",
+      "default": ["周一", "周二", "周三", "周四", "周五", "周六", "周日"],
+      "group": "每日计划",
+      "description": "仅这些当地星期执行每日任务；空选代表暂停每日任务，心跳和事件独立。",
+      "items": {
+        "type": "string",
+        "enum": ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
+      },
+      "uniqueItems": true,
+      "minItems": 0,
+      "maxItems": 7
+    },
+    "batchSize": {
+      "type": "integer",
+      "title": "每次生成记录数",
+      "default": 1,
+      "group": "记录内容",
+      "description": "后台任务每次生成 1–3 条记录；同 occurrence 重试沿用相同标识。",
+      "minimum": 1,
+      "maximum": 3
+    },
+    "multiplier": {
+      "type": "number",
+      "title": "数值权重",
+      "default": 1,
+      "group": "记录内容",
+      "description": "weightedPoints = points × multiplier；事件使用实际积分，心跳/每日任务基数为 1。",
+      "minimum": 0.1,
+      "maximum": 10
+    },
+    "recordHeartbeat": {
+      "type": "boolean",
+      "title": "记录后台心跳",
+      "default": true,
+      "group": "后台开关",
+      "description": "默认每 60 秒在 executions 集合记录心跳，不发送外部消息。"
+    },
+    "captureEvents": {
+      "type": "boolean",
+      "title": "记录任务完成事件",
+      "default": true,
+      "group": "后台开关",
+      "description": "订阅 task.completed，仅保存最小任务引用和实际积分。"
+    },
+    "simulateFailure": {
+      "type": "boolean",
+      "title": "模拟后台失败",
+      "default": false,
+      "group": "后台开关",
+      "description": "默认关闭。开启后符合条件的后台任务在产生效果前受控失败，演示平台重试。"
+    }
+  },
+  "required": [
+    "message",
+    "channel",
+    "time",
+    "timezone",
+    "weekdays",
+    "batchSize",
+    "multiplier",
+    "recordHeartbeat",
+    "captureEvents",
+    "simulateFailure"
+  ],
+  "additionalProperties": false
+}

@@ -53,11 +53,13 @@ type RowMenuAction = {
 }
 export function RowMenu({
   label,
+  triggerLabel,
   disabled = false,
   selector,
   actions,
 }: {
   label: string
+  triggerLabel?: string
   disabled?: boolean
   selector?: Record<string, string>
   actions: RowMenuAction[]
@@ -77,14 +79,14 @@ export function RowMenu({
         <Button
           ref={trigger}
           type="button"
-          variant="ghost"
-          size="icon"
-          className="settings-row-menu"
+          variant={triggerLabel ? "link" : "ghost"}
+          size={triggerLabel ? "default" : "icon"}
+          className={triggerLabel ? undefined : "settings-row-menu"}
           aria-label={label}
           disabled={disabled}
           {...selector}
         >
-          <Ellipsis aria-hidden="true" />
+          {triggerLabel || <Ellipsis aria-hidden="true" />}
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent

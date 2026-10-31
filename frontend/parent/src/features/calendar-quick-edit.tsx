@@ -1,6 +1,11 @@
 import "./calendar-quick-edit.css"
 import { useEffect, useRef, useState } from "react"
-import type { CSSProperties } from "react"
+import type {
+  CSSProperties,
+  MouseEvent as ReactMouseEvent,
+  PointerEvent as ReactPointerEvent,
+  WheelEvent,
+} from "react"
 import { GripVertical, Plus } from "lucide-react"
 import { CalendarTrash } from "./calendar-trash"
 import type { TrashDrop } from "./calendar-trash"
@@ -32,8 +37,20 @@ export function useCalendarQuickEdit(data: BusinessData) {
   const [announcement, setAnnouncement] = useState("")
   const [trashDrop, setTrashDrop] = useState<TrashDrop | null>(null)
   const [editingOccurrence, setEditingOccurrence] = useState<Occurrence | null>(null)
+  const [deletedOrder, setDeletedOrder] = useState<string[]>([])
   const mounted = useRef(true)
+  const blockedDragStop = useRef(() => {})
+  const blockedClickUntil = useRef(0)
+  const blockedShakeTimer = useRef<number | null>(null)
   const summary = calendarDraftSummary(draft)
+  const deletedTasks = [...deletedDraftTasks(draft)].sort((left, right) => {
+    const leftIndex = deletedOrder.indexOf(left.occurrenceKey)
+    const rightIndex = deletedOrder.indexOf(right.occurrenceKey)
+    return (
+      (leftIndex === -1 ? Number.MAX_SAFE_INTEGER : leftIndex) -
+      (rightIndex === -1 ? Number.MAX_SAFE_INTEGER : rightIndex)
+    )
+  })
   const snapshot = runtime.getSnapshot()
   const frozen = saving || snapshot.busy || snapshot.unconfirmed
   const active = !!session
@@ -58,6 +75,14 @@ export function useCalendarQuickEdit(data: BusinessData) {
     setDraft(next)
     setSelected(null)
     setError("")
+    if (item.kind === "occurrence") {
+      const key = item.occurrence.occurrenceKey
+      setDeletedOrder((current) =>
+        target === "delete"
+          ? [key, ...current.filter((value) => value !== key)]
+          : current.filter((value) => value !== key),
+      )
+    }
     if (target === "delete" && item.kind === "occurrence")
       setTrashDrop({
         id: operationId(),
@@ -87,11 +112,18 @@ export function useCalendarQuickEdit(data: BusinessData) {
       return false
     })
     return () => {
+      blockedDragStop.current()
       unguard()
       runtime.setEditing(false)
       runtime.patch({ quickEditing: false })
     }
   }, [active])
+  useEffect(
+    () => () => {
+      if (blockedShakeTimer.current !== null) window.clearTimeout(blockedShakeTimer.current)
+    },
+    [],
+  )
   useEffect(() => {
     if (!active || !summary.total) return
     const beforeUnload = (event: BeforeUnloadEvent) => {
@@ -120,9 +152,11 @@ export function useCalendarQuickEdit(data: BusinessData) {
   }, [active, selected, draft, frozen])
   const finish = () => {
     drag.cancelDrag()
+    blockedDragStop.current()
     setSession(null)
     setDraft(emptyCalendarDraft())
     setSelected(null)
+    setDeletedOrder([])
     setError("")
     setAnnouncement("")
     setTrashDrop(null)
@@ -130,6 +164,51 @@ export function useCalendarQuickEdit(data: BusinessData) {
     requestAnimationFrame(() =>
       document.getElementById("quickEditBtn")?.focus({ preventScroll: true }),
     )
+  }
+  const blockedDrag = (event: ReactPointerEvent<HTMLElement>) => {
+    if (!active || frozen || !event.isPrimary || event.button !== 0) return
+    blockedDragStop.current()
+    const card = event.currentTarget
+    const pointerId = event.pointerId
+    const startX = event.clientX
+    const startY = event.clientY
+    const startedAt = performance.now()
+    let shaken = false
+    const move = (next: PointerEvent) => {
+      if (next.pointerId !== pointerId || shaken) return
+      const distance = Math.hypot(next.clientX - startX, next.clientY - startY)
+      if (distance < 6 || (next.pointerType === "touch" && performance.now() - startedAt < 200))
+        return
+      shaken = true
+      blockedClickUntil.current = performance.now() + 350
+      card.classList.remove("quick-task-blocked-shake")
+      void card.offsetWidth
+      card.classList.add("quick-task-blocked-shake")
+      if (blockedShakeTimer.current !== null) window.clearTimeout(blockedShakeTimer.current)
+      blockedShakeTimer.current = window.setTimeout(() => {
+        card.classList.remove("quick-task-blocked-shake")
+        blockedShakeTimer.current = null
+      }, 280)
+      setAnnouncement("已完成任务不可调整，请先退出快捷编辑并撤销完成。")
+    }
+    const stop = () => {
+      if (shaken) blockedClickUntil.current = performance.now() + 100
+      window.removeEventListener("pointermove", move)
+      window.removeEventListener("pointerup", stop)
+      window.removeEventListener("pointercancel", stop)
+      window.removeEventListener("blur", stop)
+      if (blockedDragStop.current === stop) blockedDragStop.current = () => {}
+    }
+    blockedDragStop.current = stop
+    window.addEventListener("pointermove", move)
+    window.addEventListener("pointerup", stop)
+    window.addEventListener("pointercancel", stop)
+    window.addEventListener("blur", stop)
+  }
+  const blockedClick = (event: ReactMouseEvent<HTMLElement>) => {
+    if (performance.now() >= blockedClickUntil.current) return
+    event.preventDefault()
+    event.stopPropagation()
   }
   return {
     active,
@@ -156,12 +235,13 @@ export function useCalendarQuickEdit(data: BusinessData) {
     error,
     announcement,
     trashDrop,
-    deletedTasks: deletedDraftTasks(draft),
+    deletedTasks,
     undoDelete: (key: string) => {
       if (!session || frozen) return
-      const occurrence = deletedDraftTasks(draft).find((item) => item.occurrenceKey === key)
+      const occurrence = deletedTasks.find((item) => item.occurrenceKey === key)
       if (!occurrence) return
       setDraft((current) => restoreDraftTask(current, key))
+      setDeletedOrder((current) => current.filter((value) => value !== key))
       setSelected(null)
       setError("")
       setAnnouncement(`已撤销删除「${occurrence.title}」。`)
@@ -190,10 +270,13 @@ export function useCalendarQuickEdit(data: BusinessData) {
       if (editingOccurrence) place({ kind: "occurrence", occurrence: editingOccurrence }, "delete")
     },
     drag,
+    blockedDrag,
+    blockedClick,
     begin: () => {
       if (snapshot.busy || snapshot.unconfirmed) return
       setSession({ data, revision: snapshot.revision })
       setDraft(emptyCalendarDraft())
+      setDeletedOrder([])
       setError("")
       setAnnouncement("已进入快捷编辑。拖动手柄，或选择任务后点击日期；已完成任务不可调整。")
     },
@@ -245,6 +328,24 @@ export function useCalendarQuickEdit(data: BusinessData) {
 }
 export type CalendarQuickEdit = ReturnType<typeof useCalendarQuickEdit>
 
+function scrollPresetsWithWheel(event: WheelEvent<HTMLDivElement>) {
+  const container = event.currentTarget
+  const maxScroll = container.scrollWidth - container.clientWidth
+  if (
+    maxScroll <= 0 ||
+    !event.deltaY ||
+    Math.abs(event.deltaY) <= Math.abs(event.deltaX) ||
+    event.ctrlKey
+  ) {
+    return
+  }
+  const scale = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? container.clientWidth : 1
+  const next = Math.max(0, Math.min(maxScroll, container.scrollLeft + event.deltaY * scale))
+  if (next === container.scrollLeft) return
+  event.preventDefault()
+  container.scrollLeft = next
+}
+
 export function QuickEditShelf({
   edit,
   onAddPreset,
@@ -275,7 +376,7 @@ export function QuickEditShelf({
           添加常用任务
         </Button>
       </div>
-      <div className="quick-edit-presets">
+      <div className="quick-edit-presets" onWheel={scrollPresetsWithWheel}>
         {presets.length ? (
           presets.map((preset) => {
             const item: CalendarDragItem = { kind: "preset", preset }

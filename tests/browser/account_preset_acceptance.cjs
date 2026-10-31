@@ -7,7 +7,13 @@ async function exercisePresetDuration({dad,firstId,out,api,axe,stage}) {
   for(const [width,height] of [[1305,890],[820,1180],[390,844]]) {
     await dad.setViewportSize({width,height})
     await dad.locator('[data-view="settings"]').click()
-    await dad.locator('#openTaskPresetsSettings').click()
+    if(await dad.locator('#openTaskPresetsSettings').isVisible()) {
+      await dad.locator('#openTaskPresetsSettings').click()
+    } else {
+      await dad.locator('#openSettingsMenu').click()
+      await dad.locator('#mobileOpenTaskPresetsSettings').click()
+      await dad.locator('#settingsMobileNavigation').waitFor({state:'hidden'})
+    }
     await dad.locator('#settingsAddPreset').click()
     const dialog=dad.locator('#taskPresetEditorDialog')
     assert.equal(await dad.locator('#presetEnd').count(),0)

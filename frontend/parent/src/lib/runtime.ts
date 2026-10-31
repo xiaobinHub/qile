@@ -20,7 +20,8 @@ export class ApiError extends Error {
     super(message)
   }
 }
-type View = "calendar" | "store" | "settings" | "onboarding"
+export type CoreView = "calendar" | "store" | "settings"
+export type View = CoreView | "onboarding" | { kind: "plugin"; pluginId: string }
 type CompletionJob = {
   occurrence: Occurrence
   path: string
@@ -141,10 +142,14 @@ export class Runtime {
     method = "GET",
     body?: unknown,
     extraHeaders: Record<string, string> = {},
+    signal?: AbortSignal,
   ): Promise<T> => {
     const generation = this.generation,
       controller = new AbortController()
     this.requests.add(controller)
+    const abort = () => controller.abort()
+    signal?.addEventListener("abort", abort, { once: true })
+    if (signal?.aborted) controller.abort()
     try {
       let response: Response
       try {
@@ -162,13 +167,15 @@ export class Runtime {
           body: body === undefined ? undefined : body instanceof Blob ? body : JSON.stringify(body),
         })
       } catch {
-        if (generation !== this.generation) throw new ApiError("页面已切换。", "stale")
+        if (generation !== this.generation || controller.signal.aborted)
+          throw new ApiError("页面已切换。", "stale")
         throw new ApiError(
           method === "GET" ? "暂时无法连接服务，请重试。" : "保存结果暂未确认，请刷新检查。",
         )
       }
       const result = await response.json().catch(() => ({}))
-      if (generation !== this.generation) throw new ApiError("页面已切换。", "stale")
+      if (generation !== this.generation || controller.signal.aborted)
+        throw new ApiError("页面已切换。", "stale")
       if (!response.ok) {
         if (response.status === 401 && this.state.user) this.signedOut("登录已失效，请重新登录。")
         if (
@@ -196,6 +203,7 @@ export class Runtime {
       }
       return result as T
     } finally {
+      signal?.removeEventListener("abort", abort)
       this.requests.delete(controller)
     }
   }

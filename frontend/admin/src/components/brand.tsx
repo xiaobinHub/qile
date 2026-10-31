@@ -1,9 +1,9 @@
 import { Sprout } from "lucide-react"
 import { cn } from "@shared/lib/utils"
 
-export function Brand({ compact = false }: { compact?: boolean }) {
+export function Brand({ compact = false, className }: { compact?: boolean; className?: string }) {
   return (
-    <div className="flex items-center gap-3">
+    <div className={cn("flex items-center gap-3", className)}>
       <span
         className={cn(
           "flex shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground",

@@ -10,10 +10,10 @@ import stat
 import sys
 
 from lele_growth.child_service import ChildService, require
-from lele_growth.maintenance import bootstrap_service, initialize_service, inspect_schema
+from lele_growth.maintenance import bootstrap_service, initialize_service, inspect_schema, initialize_plugin_platform, inspect_plugin_platform
 from lele_growth.media_migration import cleanup_service
 
-ACTIONS = ('initialize', 'upgrade', 'bootstrap-admin', 'cleanup-staged')
+ACTIONS = ('initialize', 'upgrade', 'bootstrap-admin', 'cleanup-staged', 'upgrade-plugins')
 
 
 def production_service(config_path):
@@ -48,7 +48,7 @@ def execute(service, action, *, apply=False, confirm=None, login_name=None, nick
     if action == 'cleanup-staged':
         require((service.config['_object_storage'] or {}).get('provider') == 'oss', 409, '生产暂存清理需要有效的私有 OSS 配置。')
     status = inspect_schema(service)
-    if action in ('bootstrap-admin', 'cleanup-staged'):
+    if action in ('bootstrap-admin', 'cleanup-staged', 'upgrade-plugins'):
         require(status['version'] == 6, 409, '请先初始化或升级数据库至 v6。')
     if action == 'upgrade':
         require(status['version'] is not None, 409, '数据库尚未初始化，请先执行 initialize。')
@@ -56,6 +56,8 @@ def execute(service, action, *, apply=False, confirm=None, login_name=None, nick
         require(status['users'] == 0, 409, '已有账号，不能重复引导管理员。')
     if not apply:
         result = {'schema': status}
+        if action == 'upgrade-plugins':
+            result['plugins'] = inspect_plugin_platform(service)
         if action == 'cleanup-staged':
             result.update(cleanup_service(service, apply=False))
         return {'dryRun': True, 'action': action, 'target': target, **result}
@@ -64,6 +66,8 @@ def execute(service, action, *, apply=False, confirm=None, login_name=None, nick
         result = initialize_service(service, upgrade_only=action == 'upgrade', audit_detail=detail)
     elif action == 'bootstrap-admin':
         result = {'user': bootstrap_service(service, login_name, nickname, password, audit_detail=detail)}
+    elif action == 'upgrade-plugins':
+        result = initialize_plugin_platform(service, audit_detail=detail)
     else:
         result = cleanup_service(service, apply=True, audit_detail=detail)
     return {'dryRun': False, 'action': action, 'target': target, **result}

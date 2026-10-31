@@ -267,13 +267,29 @@ def main():
     sub = parser.add_subparsers(dest='command', required=True)
     sub.add_parser('setup').add_argument('--source', help='可选：导入到本机开发库的旧版数据包；原文件只读')
     sub.add_parser('reset-admin').add_argument('--login-name', default='admin')
-    for name in ('start', 'stop', 'status', 'test'):
+    for name in ('start', 'stop', 'restart', 'plugins-setup', 'status', 'test'):
         sub.add_parser(name)
     args = parser.parse_args()
     try:
         if args.command == 'setup': setup(args.source)
         elif args.command == 'start': start()
         elif args.command == 'stop': stop()
+        elif args.command == 'restart':
+            stop()
+            for _ in range(30):
+                if not any(health('http://127.0.0.1:' + str(port)) for port in (18787,18788)):
+                    break
+                time.sleep(.1)
+            else:
+                raise RuntimeError('旧开发服务仍在结束，请稍后再启动。')
+            start()
+        elif args.command == 'plugins-setup':
+            prepare_database()
+            from lele_growth.child_service import ChildService, initialize
+            from lele_growth.maintenance import initialize_plugin_platform
+            initialize(CONFIG)
+            result=initialize_plugin_platform(ChildService(CONFIG))
+            print(json.dumps({'environment':'development','plugins':result},ensure_ascii=False))
         elif args.command == 'reset-admin': reset_admin(args.login_name)
         elif args.command == 'status':
             print(json.dumps({surface: health('http://127.0.0.1:' + str(port)) for surface, port in [('parent',18787),('admin',18788)]}))

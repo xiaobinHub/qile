@@ -1,0 +1,16 @@
+{
+  "manifestVersion": 1,
+  "id": "growth-notes",
+  "version": "1.0.0",
+  "type": "page",
+  "platformApi": { "major": 1, "minMinor": 0 },
+  "frontendApi": { "major": 1, "minMinor": 0 },
+  "frontend": { "entry": "frontend/entry.js", "styles": ["frontend/style.css"] },
+  "backend": null,
+  "configSchema": "schemas/config.json",
+  "dataSchemaVersion": 1,
+  "capabilities": ["plugin.state.read", "plugin.state.write"],
+  "tasks": [],
+  "events": [],
+  "icons": []
+}

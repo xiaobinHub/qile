@@ -1,39 +1,10 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "../../shared/src/theme.css";
+@import "../../shared/src/workspace-theme.css";
 @import "./settings/styles.css";
 @source '../../shared/src';
 @source './';
-:root {
-  --background: #eef1f3;
-  --foreground: #1f2933;
-  --card: #ffffff;
-  --card-foreground: #1f2933;
-  --popover: #ffffff;
-  --popover-foreground: #1f2933;
-  --primary: #facc15;
-  --primary-foreground: #1f2933;
-  --secondary: #eef2f5;
-  --secondary-foreground: #374151;
-  --muted: #f1f4f6;
-  --muted-foreground: #526276;
-  --text-secondary: #526276;
-  --accent: #fff0b3;
-  --accent-foreground: #713f12;
-  --brand-ink: #854511;
-  --destructive: #b42318;
-  --destructive-ink: #912018;
-  --border: #d9e1e7;
-  --input: #c5cfd9;
-  --ring: #876716;
-  --radius-control: 6px;
-  --radius-card: 8px;
-  --radius-dialog: 8px;
-  --navigation-height: 40px;
-  --navigation-font-size: var(--text-body);
-  --menu-height: 40px;
-  --menu-font-size: var(--text-body);
-}
 body {
   margin: 0;
   color: var(--foreground);
@@ -125,11 +96,67 @@ a {
 }
 .nav {
   display: flex;
-  flex: none;
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow-x: auto;
   gap: 0;
   padding: 0;
   background: var(--secondary);
   border-radius: var(--radius-card);
+}
+.nav [data-view] {
+  flex-shrink: 0;
+  font-weight: 500;
+  translate: none;
+  transition-property: color, background-color, border-color, box-shadow;
+}
+.plugin-page {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  min-width: 0;
+}
+.plugin-status-notice {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--card);
+  color: var(--muted-foreground);
+}
+.plugin-page-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+.plugin-page-heading h1 {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: var(--text-page);
+  line-height: var(--text-page--line-height);
+  font-weight: 600;
+}
+.plugin-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 24px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--card);
+}
+.plugin-placeholder p {
+  color: var(--muted-foreground);
+}
+.plugin-host,
+.plugin-mount {
+  min-width: 0;
 }
 .child-profile {
   height: auto;

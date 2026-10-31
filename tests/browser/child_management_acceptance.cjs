@@ -181,6 +181,7 @@ async function exerciseChildManagement({
   for (const viewport of [
     { width: 1626, height: 954 },
     { width: 1440, height: 900 },
+    { width: 1022, height: 790 },
     { width: 820, height: 1180 },
     { width: 390, height: 844 },
   ]) {
@@ -214,17 +215,39 @@ async function exerciseChildManagement({
       })
     assert.ok(nearby, "Role badge sits beside nickname")
     assert.ok((await dad.locator("#openInviteFamily").boundingBox()).height >= 44)
-    const columns = await dad
+    const layout = await dad
       .locator(".child-family-list")
-      .evaluate((el) => getComputedStyle(el).gridTemplateColumns.split(" ").length)
-    assert.equal(columns, viewport.width >= 1200 ? 3 : viewport.width > 680 ? 2 : 1)
+      .evaluate((el) => ({
+        columns: getComputedStyle(el).gridTemplateColumns
+          .split(" ")
+          .filter((width) => parseFloat(width) > 0).length,
+        width: el.clientWidth,
+        minimum: parseFloat(getComputedStyle(el).getPropertyValue("--workspace-card-min-width")),
+        count: el.children.length,
+        cards: [...el.children].map((item) => {
+          const rect = item.getBoundingClientRect()
+          return { x: rect.x, y: rect.y, right: rect.right }
+        }),
+      }))
+    assert.equal(
+      layout.columns,
+      Math.min(layout.count, Math.max(1, Math.floor((layout.width + 16) / (layout.minimum + 16)))),
+    )
+    for (let index = 1; index < layout.cards.length; index++) {
+      const previous = layout.cards[index - 1], current = layout.cards[index]
+      if (Math.abs(previous.y - current.y) < 1)
+        assert.ok(Math.abs(current.x - previous.right - 16) < 1, "Member card gaps stay at 16px")
+    }
     const memberCard = dad.locator("[data-member]").filter({ hasText: "测试妈妈" })
     assert.match(await memberCard.innerText(), /账号 ID：qamom/)
     assert.match(await memberCard.locator("[data-member-family-role]").innerText(), /角色：爸爸/)
     const avatarBox=await memberCard.locator(".settings-mini-avatar").boundingBox()
     assert.equal(avatarBox.width,64); assert.equal(avatarBox.height,64)
     const cardBox = await memberCard.boundingBox()
-    assert.ok(cardBox.width <= 260, "Member cards have a maximum width of 260px")
+    assert.ok(
+      Math.abs(cardBox.width - Math.min(300, (layout.width - 16 * (layout.columns - 1)) / layout.columns)) < 1,
+      "Member cards fill grid columns within their 300px width limit",
+    )
     assert.ok(cardBox.height <= 128, "Member cards avoid excessive vertical whitespace")
     const heights = await dad
       .locator(".child-family-row")

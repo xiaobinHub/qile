@@ -2,7 +2,7 @@
   "name": "lele-growth",
   "private": true,
   "scripts": {
-    "test:browser": "node tests/browser/unified_browser_smoke.cjs",
+    "test:browser": "npm run test:browser:core && npm run test:plugins:browser",
     "check:admin": "tsc --project frontend/admin/tsconfig.json --noEmit",
     "build:admin": "npm run check:admin && vite build --config frontend/admin/vite.config.mts",
     "check:parent": "tsc --project frontend/parent/tsconfig.json --noEmit",
@@ -13,7 +13,13 @@
     "build": "npm run build:admin && npm run build:parent",
     "check:layout": "node scripts/check_layout.cjs",
     "test:backend": ".venv/bin/python scripts/dev.py test",
-    "package:release": ".venv/bin/python scripts/package_release.py"
+    "package:release": ".venv/bin/python scripts/package_release.py",
+    "plugin:build": "node scripts/build_plugin.mjs",
+    "test:plugins:browser": "node tests/browser/plugin_acceptance.cjs",
+    "test:browser:core": "node tests/browser/unified_browser_smoke.cjs",
+    "test:plugins:ui": "node tests/browser/plugin_parent_ui.cjs",
+    "check:demo-plugins": "tsc -p plugins/demo-page/tsconfig.json && node scripts/build_plugin.mjs demo-page && node scripts/build_plugin.mjs demo-service",
+    "test:demo-plugins": "PYTHONPATH=backend .venv/bin/python -m unittest discover -s tests/backend -p test_demo_plugins.py && node tests/browser/demo_plugins_acceptance.cjs"
   },
   "devDependencies": {
     "@axe-core/playwright": "4.14.0",

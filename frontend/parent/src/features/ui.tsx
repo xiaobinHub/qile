@@ -89,16 +89,22 @@ export function Modal({
   size = "default",
   returnFocusTo,
   keyboardScroll = false,
+  showCloseButton = true,
+  bareHeader = false,
+  bareFooter = false,
 }: {
   title: string
   description?: string
-  children: ReactNode
+  children?: ReactNode
   onClose: () => void
   id?: string
   footer?: ReactNode
   size?: "small" | "default" | "complex"
   returnFocusTo?: HTMLElement | null | false
   keyboardScroll?: boolean
+  showCloseButton?: boolean
+  bareHeader?: boolean
+  bareFooter?: boolean
 }) {
   const returnFocus = useRef<HTMLElement | null>(document.activeElement as HTMLElement)
   useEffect(() => {
@@ -117,6 +123,7 @@ export function Modal({
         className="feature-dialog ui-modal-frame"
         data-modal-size={size}
         data-keyboard-scroll={keyboardScroll || undefined}
+        showCloseButton={showCloseButton}
         onCloseAutoFocus={(event) => {
           event.preventDefault()
           const target = returnFocusTo === undefined ? returnFocus.current : returnFocusTo
@@ -129,14 +136,18 @@ export function Modal({
           if (runtime.getSnapshot().busy) e.preventDefault()
         }}
       >
-        <DialogHeader className="ui-modal-header">
+        <DialogHeader className={bareHeader ? "ui-modal-header bare-modal-header" : "ui-modal-header"}>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription className={!description ? "sr-only" : ""}>
             {description || title + "，请填写以下内容。"}
           </DialogDescription>
         </DialogHeader>
-        <div className="ui-modal-body">{children}</div>
-        {footer && <DialogFooter className="ui-modal-footer">{footer}</DialogFooter>}
+        {children && <div className="ui-modal-body">{children}</div>}
+        {footer && (
+          <DialogFooter className={bareFooter ? "bare-modal-footer" : "ui-modal-footer"}>
+            {footer}
+          </DialogFooter>
+        )}
       </DialogContent>
     </Dialog>
   )

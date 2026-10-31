@@ -72,6 +72,81 @@ def inspect_schema(service):
     return service.transaction(run, exclusive=True, schema_check=False)
 
 
+PLUGIN_TABLES = ('plugin_platform_versions', 'plugin_catalog', 'plugin_releases', 'plugin_scope_children',
+                 'child_plugins', 'child_plugin_configs', 'child_plugin_records', 'plugin_operations',
+                 'plugin_jobs', 'plugin_event_outbox', 'plugin_event_deliveries', 'plugin_effects', 'plugin_deployments')
+PLUGIN_SCHEMA_VERSION = 2
+
+
+def plugin_schema_source():
+    return (Path(__file__).with_name('db') / 'add_plugin_platform.sql').read_text()
+
+
+def plugin_schema_migrations():
+    return {1: plugin_schema_source(),
+            2: (Path(__file__).with_name('db') / 'migrate_plugin_v1_to_v2.sql').read_text()}
+
+
+def plugin_schema_status(cur):
+    cur.execute("SELECT tablename FROM pg_tables WHERE schemaname='lele' AND tablename=ANY(%s)", (list(PLUGIN_TABLES),))
+    existing = {row[0] for row in cur.fetchall()}
+    pending = [table for table in PLUGIN_TABLES if table not in existing]
+    version = None
+    if 'plugin_platform_versions' in existing:
+        cur.execute('SELECT version,source_sha256 FROM lele.plugin_platform_versions ORDER BY version')
+        rows = cur.fetchall()
+        if rows:
+            known = [(number, hashlib.sha256(source.encode()).hexdigest())
+                     for number, source in plugin_schema_migrations().items()]
+            require(rows == known[:len(rows)] and len(rows) <= len(known) and not pending,
+                    409, '插件数据库结构与维护版本不一致。')
+            version = rows[-1][0]
+    return {'version': version, 'pendingTables': pending,
+            'pendingMigrations': list(range((version or 0) + 1, PLUGIN_SCHEMA_VERSION + 1))}
+
+
+def inspect_plugin_platform(service):
+    return service.transaction(lambda cur: plugin_schema_status(cur), exclusive=True)
+
+
+def initialize_plugin_platform(service, *, audit_detail=None):
+    """Explicit table-only upgrade. Does not register plugins or touch child snapshots."""
+    def run(cur):
+        require(schema_version(cur) == 6, 409, '请先初始化或升级核心数据库。')
+        # schema_version deliberately accepts older v6 fingerprints so the core
+        # upgrader can finish its additive changes. Plugin DDL must never make
+        # that incomplete core look current by replacing its source marker.
+        required_columns = {('points_ledger','task_date'), ('children','gender'),
+                            ('idempotency_records','creation_request_id')}
+        cur.execute("SELECT table_name,column_name FROM information_schema.columns WHERE table_schema='lele' AND table_name=ANY(%s)",
+                    (sorted({table for table, _ in required_columns}),))
+        require(required_columns <= set(cur.fetchall()), 409,
+                '核心数据库增量升级尚未完成，请先执行核心 upgrade。', 'plugin_core_upgrade_required')
+        cur.execute("SELECT obj_description(oid,'pg_namespace') FROM pg_namespace WHERE nspname='lele'")
+        core_marker = cur.fetchone()[0]
+        status = plugin_schema_status(cur)
+        if status['version'] == PLUGIN_SCHEMA_VERSION:
+            return {'initialized': False, 'version': PLUGIN_SCHEMA_VERSION}
+        if status['version'] is None:
+            require(len(status['pendingTables']) == len(PLUGIN_TABLES), 409, '检测到未登记的插件结构，维护停止。')
+        for version, source in plugin_schema_migrations().items():
+            if version > (status['version'] or 0):
+                cur.execute(source)
+                cur.execute('INSERT INTO lele.plugin_platform_versions(version,source_sha256) VALUES(%s,%s)',
+                            (version, hashlib.sha256(source.encode()).hexdigest()))
+        # The existing core marker fingerprints the entire schema. Preserve its
+        # source/version and refresh only its catalog fingerprint after the addition.
+        marker = core_marker.rsplit(':',1)[0] + ':' + PostgresStore._catalog(cur)
+        cur.execute(psycopg.sql.SQL('COMMENT ON SCHEMA lele IS {}').format(psycopg.sql.Literal(marker)))
+        if audit_detail is not None:
+            service.audit(cur, None, 'maintenance.plugins.initialize', detail=audit_detail)
+        result = {'initialized': status['version'] is None, 'version': PLUGIN_SCHEMA_VERSION}
+        if status['version'] is not None:
+            result['upgraded'] = True
+        return result
+    return service.transaction(run, exclusive=True, schema_check=False)
+
+
 def initialize_service(service, *, upgrade_only=False, audit_detail=None):
     source, migration, media, hashes = schema_sources()
     def run(cur):

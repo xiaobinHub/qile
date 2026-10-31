@@ -57,7 +57,7 @@ export function LoginPage() {
                 maxLength={32}
                 placeholder="请输入管理员登录名"
                 disabled={busy}
-                className="h-11"
+                className="h-10"
               />
             </div>
             <div className="space-y-2">
@@ -70,7 +70,7 @@ export function LoginPage() {
                 maxLength={128}
                 placeholder="请输入密码"
                 disabled={busy}
-                className="h-11"
+                className="h-10"
               />
             </div>
             <FormFeedback
@@ -78,7 +78,7 @@ export function LoginPage() {
               message={error || notice}
               success={!error && notice.startsWith("密码已修改")}
             />
-            <Button type="submit" className="h-11 w-full" disabled={busy}>
+            <Button type="submit" className="h-10 w-full" disabled={busy}>
               {busy ? (
                 <>
                   <LoaderCircle className="animate-spin" />

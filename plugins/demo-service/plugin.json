@@ -1,0 +1,48 @@
+{
+  "manifestVersion": 1,
+  "id": "demo-service",
+  "version": "1.0.0",
+  "type": "service",
+  "name": "后台能力 Demo",
+  "description": "无页面入口，演示配置驱动的每日任务、60 秒心跳、事件、批量效果和受控重试。",
+  "instructions": "在配置弹窗修改消息、通道、每日时间/时区、星期、批量数及权重。通过手动探测 POST probe、GET info、GET slow 和 POST fail 测试接口；执行记录读取 executions。默认每 60 秒记录心跳，按当地时间 20:00 执行每日任务，并订阅 task.completed；仅记录，不发送外部消息。通道只是标签。“模拟后台失败”默认关闭，开启后演示无效果失败及平台重试。",
+  "platformApi": {
+    "major": 1,
+    "minMinor": 0
+  },
+  "frontendApi": {
+    "major": 1,
+    "minMinor": 0
+  },
+  "frontend": null,
+  "backend": {
+    "entryModule": "demo_service"
+  },
+  "configSchema": "schemas/config.json",
+  "dataSchemaVersion": 1,
+  "capabilities": [
+    "plugin.state.read",
+    "plugin.state.write",
+    "plugin.jobs.schedule",
+    "plugin.events.subscribe"
+  ],
+  "tasks": [
+    {
+      "id": "heartbeat",
+      "intervalSeconds": 60,
+      "misfirePolicy": "latest",
+      "timeoutSeconds": 15
+    },
+    {
+      "id": "daily-reminder",
+      "schedule": {
+        "configTime": "time",
+        "configTimezone": "timezone"
+      },
+      "misfirePolicy": "latest",
+      "timeoutSeconds": 15
+    }
+  ],
+  "events": ["task.completed"],
+  "icons": ["assets/icon.png"]
+}

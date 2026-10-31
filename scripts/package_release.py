@@ -18,11 +18,12 @@ ROOT = Path(__file__).resolve().parents[1]
 FILES = (
     "README.md", "pyproject.toml", "requirements.txt",
     "deploy/run.py", "deploy/manage.py", "deploy/migrate_legacy.py", "deploy/README.md", "deploy/lele-growth@.service",
+    "deploy/plugins.py", "deploy/plugin_runtime.py", "deploy/lele-growth-plugin-runtime.service", "deploy/plugin-runtime.env.example",
     "deploy/nginx.example.conf", "deploy/production.env.example",
     "config/README.md", "config/production.example.json",
     "config/object-storage.example.json", "licenses/Inter-OFL.txt",
     "licenses/shadcn-ui-MIT.txt", "docs/project-structure.md",
-    "docs/oss-storage.md",
+    "docs/oss-storage.md", "docs/plugins/development.md", "docs/plugins/deployment.md",
 )
 
 
@@ -31,7 +32,7 @@ def release_files(root: Path) -> list[Path]:
     files = [root / name for name in FILES]
     for directory, extensions in (
         ("backend/lele_growth", {".py", ".sql"}),
-        ("web/parent-dist", {".html", ".js", ".css", ".woff2", ".png"}),
+        ("web/parent-dist", {".html", ".js", ".css", ".woff2", ".png", ".webp"}),
         ("web/admin-dist", {".html", ".js", ".css", ".woff2"}),
     ):
         files.extend(file for file in (root / directory).rglob("*")
