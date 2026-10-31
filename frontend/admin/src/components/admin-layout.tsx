@@ -143,13 +143,19 @@ export function AdminLayout({
       : page === "plugins"
         ? "插件管理"
         : "我的账号"
+  const containUsers = page === "users" && !locked
   return (
-    <div className="min-h-svh bg-background">
+    <div
+      className={cn(
+        "min-h-svh bg-background",
+        containUsers && "admin-users-layout h-dvh overflow-hidden",
+      )}
+    >
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-[200px] border-r bg-card md:block">
         {sidebar()}
       </aside>
-      <div className="min-w-0 md:ml-[200px]">
-        <header className="flex h-14 items-center justify-between gap-4 border-b bg-card/90 px-5 sm:px-8">
+      <div className={cn("min-w-0 md:ml-[200px]", containUsers && "flex h-full flex-col")}>
+        <header className="flex h-14 shrink-0 items-center justify-between gap-4 border-b bg-card/90 px-5 sm:px-8">
           <div className="flex min-w-0 items-center gap-3">
             <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
               <SheetTrigger asChild>
@@ -183,10 +189,16 @@ export function AdminLayout({
             <span>管理员工作台</span>
           </div>
         </header>
-        <main id="mainContent" className="mx-auto w-full max-w-[1360px] px-5 py-6 sm:px-7 sm:py-6">
+        <main
+          id="mainContent"
+          className={cn(
+            "mx-auto w-full max-w-[1360px] px-5 py-6 sm:px-7 sm:py-6",
+            containUsers && "min-h-0 flex-1 overflow-hidden",
+          )}
+        >
           {children}
         </main>
-        <footer className="px-5 pt-2 pb-6 text-center text-caption tracking-wide text-muted-foreground sm:px-8">
+        <footer className="shrink-0 px-5 pt-2 pb-6 text-center text-caption tracking-wide text-muted-foreground sm:px-8">
           乐乐成长 · 管理后台
         </footer>
       </div>

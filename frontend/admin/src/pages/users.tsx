@@ -214,7 +214,7 @@ export function UsersPage() {
   const hasFilter = Boolean(query) || filter !== "all"
 
   return (
-    <div className="space-y-5">
+    <div className="admin-users-workspace flex h-full min-h-0 flex-col gap-5">
       <PageHeading
         title="账号管理"
         description="开通与维护家长账号，管理账号的访问状态。"
@@ -254,7 +254,7 @@ export function UsersPage() {
         ))}
       </div>
       <FormFeedback message={flash} success />
-      <Card className="gap-0 overflow-hidden rounded-xl py-0 shadow-none">
+      <Card className="admin-users-card min-h-0 flex-1 gap-0 overflow-hidden rounded-xl py-0 shadow-none">
         <div
           role="search"
           aria-label="账号筛选"
@@ -331,7 +331,13 @@ export function UsersPage() {
             </Button>
           </div>
         )}
-        <div className="admin-user-table min-w-0" aria-busy={loading}>
+        <div
+          className="admin-user-table min-w-0"
+          role="region"
+          aria-label="账号列表"
+          tabIndex={0}
+          aria-busy={loading}
+        >
           <Table className="w-full min-w-[640px] table-fixed sm:min-w-0">
             <TableHeader className="sticky top-0 z-10 bg-card">
               <TableRow className="bg-muted/30 hover:bg-muted/30">
