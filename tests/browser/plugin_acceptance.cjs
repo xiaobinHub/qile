@@ -182,6 +182,47 @@ async function eventually(fn) {
       true,
     )
     check("new plugins pending, metadata retained")
+    const pluginList = admin.getByRole("region", { name: "插件列表", exact: true })
+    for (const viewport of [
+      { width: 1280, height: 900 },
+      { width: 390, height: 844 },
+    ]) {
+      await admin.setViewportSize(viewport)
+      const geometry = await pluginList.evaluate((element) => ({
+        pageHeight: document.documentElement.scrollHeight,
+        viewportHeight: innerHeight,
+        gap:
+          element.nextElementSibling.getBoundingClientRect().top -
+          element.getBoundingClientRect().bottom,
+        height: element.clientHeight,
+        contentHeight: element.scrollHeight,
+      }))
+      assert.ok(geometry.pageHeight <= geometry.viewportHeight + 1)
+      assert.equal(geometry.gap, 0, "Plugin footer must directly follow the list")
+      if (viewport.width === 390) {
+        assert.ok(geometry.height > 0 && geometry.contentHeight > geometry.height)
+        await pluginList.press("End")
+        await admin.waitForFunction(
+          () => document.querySelector('[aria-label="插件列表"]').scrollTop > 0,
+        )
+        assert.equal(await admin.evaluate(() => scrollY), 0)
+        await screenshot(admin, "admin-plugin-list-mobile-scroll")
+      }
+    }
+    await admin.locator("#plugin-open-growth-notes").click()
+    const detailArea = admin.getByRole("region", { name: "插件详情", exact: true })
+    await detailArea.waitFor()
+    await detailArea.press("End")
+    await admin.waitForFunction(
+      () => document.querySelector('[aria-label="插件详情"]').scrollTop > 0,
+    )
+    assert.equal(await admin.evaluate(() => scrollY), 0)
+    await admin.getByRole("button", { name: "返回插件列表", exact: true }).click()
+    await pluginList.waitFor()
+    await admin.setViewportSize({ width: 1280, height: 900 })
+    check(
+      "plugin list and details scroll internally, footer stays flush, desktop/mobile page does not scroll",
+    )
     await admin.locator("#plugin-open-growth-notes").click()
     await admin.getByRole("button", { name: "上架插件", exact: true }).click()
     await admin.getByRole("button", { name: "确认上架", exact: true }).click()

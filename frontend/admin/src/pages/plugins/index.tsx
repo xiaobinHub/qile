@@ -141,7 +141,12 @@ export function PluginsPage() {
 
   if (selectedId)
     return (
-      <div className="flex min-w-0 flex-col gap-4">
+      <div
+        role="region"
+        aria-label="插件详情"
+        tabIndex={0}
+        className="admin-detail-scroll h-full min-h-0 min-w-0 space-y-4 overflow-y-auto overscroll-contain"
+      >
         {error ? <FormFeedback message={`最新状态未能读取：${error}`} /> : null}
         {selected ? (
           <PluginDetail
@@ -167,7 +172,7 @@ export function PluginsPage() {
     )
 
   return (
-    <div className="min-w-0 space-y-5">
+    <div className="admin-list-workspace flex h-full min-h-0 min-w-0 flex-col gap-5">
       <PageHeading
         title="插件管理"
         description="维护插件资料与发布范围，查看安装情况和版本记录。"
@@ -204,7 +209,7 @@ export function PluginsPage() {
           </div>
         ))}
       </div>
-      <Card className="gap-0 overflow-hidden rounded-xl py-0 shadow-none">
+      <Card className="admin-list-card min-h-0 flex-[0_1_auto] gap-0 overflow-hidden rounded-xl py-0 shadow-none">
         <div
           role="search"
           aria-label="插件筛选"
@@ -281,7 +286,13 @@ export function PluginsPage() {
             </Button>
           </div>
         ) : null}
-        <div aria-busy={loading}>
+        <div
+          className="admin-list-scroll"
+          role="region"
+          aria-label="插件列表"
+          tabIndex={0}
+          aria-busy={loading}
+        >
           {!plugins && loading ? (
             <div
               role="status"

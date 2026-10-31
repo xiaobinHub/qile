@@ -24,72 +24,75 @@
   }
 }
 
-.admin-users-workspace > .ui-page-heading {
+.admin-list-workspace > .ui-page-heading {
   margin-bottom: 4px;
 }
-.admin-users-workspace > :not(.admin-users-card),
-.admin-users-card > :not(.admin-user-table) {
+.admin-list-workspace > :not(.admin-list-card),
+.admin-list-card > :not(.admin-list-scroll) {
   flex-shrink: 0;
 }
-.admin-user-table {
+.admin-list-scroll {
   min-height: 0;
   flex: 0 1 auto;
   overflow: auto;
   overscroll-behavior: contain;
+  scrollbar-color: color-mix(in oklab, var(--muted-foreground) 40%, transparent) transparent;
+}
+.admin-user-table {
   background: linear-gradient(
     to bottom,
     color-mix(in oklab, var(--muted) 30%, var(--card)) 44px,
     var(--card) 44px
   );
-  scrollbar-color: color-mix(in oklab, var(--muted-foreground) 40%, transparent) transparent;
 }
 .admin-user-table [data-slot="table-container"] {
   overflow: visible;
 }
-.admin-user-table:focus-visible {
+.admin-list-scroll:focus-visible,
+.admin-detail-scroll:focus-visible {
   outline: 2px solid var(--ring);
   outline-offset: -2px;
 }
 
 @media (max-height: 700px) {
-  .admin-users-layout #mainContent {
+  .admin-list-layout #mainContent {
     padding-block: 12px;
   }
-  .admin-users-workspace {
+  .admin-list-workspace {
     gap: 12px;
   }
-  .admin-users-workspace > .ui-page-heading {
+  .admin-list-workspace > .ui-page-heading {
     margin-bottom: 0;
   }
-  .admin-users-workspace .overview-strip {
+  .admin-list-workspace .overview-strip {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
-  .admin-users-workspace .overview-cell {
+  .admin-list-workspace .overview-cell {
     padding: 8px;
     border-top: 0;
   }
-  .admin-users-workspace .overview-cell + .overview-cell {
+  .admin-list-workspace .overview-cell + .overview-cell {
     border-left: 1px solid var(--border);
   }
-  .admin-users-workspace .overview-cell > div {
+  .admin-list-workspace .overview-cell > div {
     gap: 4px;
     margin-bottom: 4px;
   }
-  .admin-users-workspace .overview-cell > div > p {
+  .admin-list-workspace .overview-cell > div > p {
     white-space: nowrap;
   }
-  .admin-users-card > [role="search"] {
+  .admin-list-card > [role="search"] {
     padding-block: 8px;
   }
-  .admin-users-layout footer {
+  .admin-list-layout footer {
     padding-top: 4px;
     padding-bottom: 8px;
   }
 }
 
 @media (max-height: 600px) {
-  .admin-users-workspace > .ui-page-heading p,
-  .admin-users-layout footer {
+  .admin-list-workspace > .ui-page-heading p,
+  .admin-list-layout footer {
     display: none;
   }
 }

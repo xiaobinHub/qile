@@ -143,18 +143,18 @@ export function AdminLayout({
       : page === "plugins"
         ? "插件管理"
         : "我的账号"
-  const containUsers = page === "users" && !locked
+  const containList = (page === "users" || page === "plugins") && !locked
   return (
     <div
       className={cn(
         "min-h-svh bg-background",
-        containUsers && "admin-users-layout h-dvh overflow-hidden",
+        containList && "admin-list-layout h-dvh overflow-hidden",
       )}
     >
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-[200px] border-r bg-card md:block">
         {sidebar()}
       </aside>
-      <div className={cn("min-w-0 md:ml-[200px]", containUsers && "flex h-full flex-col")}>
+      <div className={cn("min-w-0 md:ml-[200px]", containList && "flex h-full flex-col")}>
         <header className="flex h-14 shrink-0 items-center justify-between gap-4 border-b bg-card/90 px-5 sm:px-8">
           <div className="flex min-w-0 items-center gap-3">
             <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
@@ -193,7 +193,7 @@ export function AdminLayout({
           id="mainContent"
           className={cn(
             "mx-auto w-full max-w-[1360px] px-5 py-6 sm:px-7 sm:py-6",
-            containUsers && "min-h-0 flex-1 overflow-hidden",
+            containList && "min-h-0 flex-1 overflow-hidden",
           )}
         >
           {children}
