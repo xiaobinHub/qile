@@ -304,13 +304,7 @@ export function Applications({ child, controller }: { child: Child; controller: 
                       ? "还没有安装应用"
                       : "暂无可用应用"}
               </strong>
-              <p>
-                {readError
-                  ? "请稍后重试。"
-                  : query
-                    ? "试试其他名称。"
-                    : "可在发现应用中查看当前儿童可使用的应用。"}
-              </p>
+              {(readError || query) && <p>{readError ? "请稍后重试。" : "试试其他名称。"}</p>}
             </div>
           )}
         </TabsContent>

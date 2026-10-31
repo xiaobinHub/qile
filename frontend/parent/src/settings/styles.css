@@ -2146,7 +2146,9 @@ button.account-profile-avatar:focus-visible {
   color: var(--muted-foreground);
   pointer-events: none;
 }
-.applications-search input {
+.applications-search [data-slot="input"] {
+  height: 40px;
+  min-height: 40px;
   padding-left: 36px;
 }
 .applications-grid {
