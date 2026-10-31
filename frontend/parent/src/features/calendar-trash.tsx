@@ -138,7 +138,10 @@ export function CalendarTrash({
                 {deletedTasks.map((item) => (
                   <li key={item.occurrenceKey} data-trash-key={item.occurrenceKey}>
                     <div className="quick-trash-item-text">
-                      <strong title={item.title}>{item.title}</strong>
+                      <strong title={item.title}>
+                        {item.title}
+                        <span className="quick-trash-points">+{item.points}分</span>
+                      </strong>
                       <time dateTime={`${item.date}T${item.startTime}`}>
                         {Number(item.date.slice(5, 7))}月{Number(item.date.slice(8))}日{" "}
                         {item.startTime}–{item.endTime}

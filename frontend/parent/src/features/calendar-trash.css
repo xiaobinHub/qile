@@ -117,8 +117,17 @@
   text-overflow: ellipsis;
 }
 .quick-trash-item-text strong {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
   font-size: var(--text-body);
   font-weight: 500;
+}
+.quick-trash-item-text strong .quick-trash-points {
+  flex: none;
+  color: var(--text-secondary);
+  font-size: var(--text-caption);
+  font-weight: 400;
 }
 .quick-trash-item-text time {
   margin-top: 2px;
