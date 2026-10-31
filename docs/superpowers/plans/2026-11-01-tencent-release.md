@@ -13,10 +13,10 @@
 - [x] Review backend, frontend and deployment changes with emphasis on Linux, schema maintenance, private directories, SDK packaging and build/source consistency.
 - [x] Run non-Demo backend tests, domain/type checks and fresh host builds; fix concrete blockers and commit their changes.
 - [x] Verify the Tencent production migration on an isolated restore with original business rows preserved; validate Linux runtime and package imports.
-- [ ] Merge the verified branch into main, tag the actual deployment commit, generate the clean allowlisted package, and verify that no full Demo source/runtime code is included.
-- [ ] Take a consistent backup on Tencent, explicitly maintain the plugin schema, install matching application/runtime services, and switch the release atomically after health checks.
-- [ ] Check HTTPS, assets, authentication/Origin rejection, private paths, database/OSS reads, runtime health and data preservation. Record remaining provider HTTP/renewal restrictions separately.
-- [ ] Save release, rollback and verification evidence; report the deployed commit and service status. Do not stop the old Alibaba service as part of this task.
+- [x] Merge the verified branch into main, tag the actual deployment commit, generate the clean allowlisted package, and verify that no full Demo source/runtime code is included.
+- [x] Take a consistent backup on Tencent, explicitly maintain the plugin schema, install matching application/runtime services, and switch the release atomically after health checks.
+- [x] Check HTTPS, assets, authentication/Origin rejection, private paths, database/OSS reads, runtime health and data preservation. Record remaining provider HTTP/renewal restrictions separately.
+- [x] Save release, rollback and verification evidence; report the deployed commit and service status. Do not stop the old Alibaba service as part of this task.
 
 Relevant commands:
 
