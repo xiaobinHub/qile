@@ -344,6 +344,7 @@ function Application() {
           title="快捷编辑中"
           description="请先退出快捷编辑模式，点击底部的保存或取消按钮。"
           size="small"
+          showCloseButton={false}
           bareHeader
           bareFooter
           onClose={() => setQuickEditNotice(false)}

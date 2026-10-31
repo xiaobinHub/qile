@@ -89,6 +89,7 @@ export function Modal({
   size = "default",
   returnFocusTo,
   keyboardScroll = false,
+  showCloseButton = true,
   bareHeader = false,
   bareFooter = false,
 }: {
@@ -101,6 +102,7 @@ export function Modal({
   size?: "small" | "default" | "complex"
   returnFocusTo?: HTMLElement | null | false
   keyboardScroll?: boolean
+  showCloseButton?: boolean
   bareHeader?: boolean
   bareFooter?: boolean
 }) {
@@ -121,6 +123,7 @@ export function Modal({
         className="feature-dialog ui-modal-frame"
         data-modal-size={size}
         data-keyboard-scroll={keyboardScroll || undefined}
+        showCloseButton={showCloseButton}
         onCloseAutoFocus={(event) => {
           event.preventDefault()
           const target = returnFocusTo === undefined ? returnFocus.current : returnFocusTo

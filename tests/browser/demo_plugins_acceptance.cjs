@@ -197,6 +197,18 @@ async function applications(page) {
   await page.getByRole("button", { name: "应用管理", exact: true }).click()
   await page.locator("#pluginSearch").waitFor()
 }
+async function quickEditNotice() {
+  await dad.locator("#quickEditBtn").click()
+  await dad.locator('[data-view="settings"]').click()
+  const dialog = dad.locator("#quickEditNoticeDialog")
+  await dialog.waitFor()
+  assert.equal(await dialog.locator('[data-slot="dialog-close"]').count(), 0)
+  assert.equal(await dialog.getByRole("button", { name: "关闭", exact: true }).count(), 0)
+  await dialog.getByRole("button", { name: "知道了", exact: true }).click()
+  await dialog.waitFor({ state: "hidden" })
+  await dad.getByRole("button", { name: "取消", exact: true }).click()
+  await dad.locator("#quickEditBtn").waitFor()
+}
 async function focus(page) {
   await page.evaluate(() => window.dispatchEvent(new Event("focus")))
 }
@@ -1230,6 +1242,10 @@ async function cleanup() {
   }
 }
 const scenarios = [
+  [
+    "quick edit navigation notice has only the acknowledgement action and closes cleanly",
+    quickEditNotice,
+  ],
   [
     "Chinese pending manifests, PNG icons, real admin publish, owner install/shared menu, lazy assets/no service tab",
     publicationAndInstallation,
