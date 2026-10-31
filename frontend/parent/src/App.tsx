@@ -52,6 +52,7 @@ function Application() {
   const [editor, setEditor] = useState<Editor | null>(null),
     [switcher, setSwitcher] = useState(false),
     [logout, setLogout] = useState(false),
+    [quickEditNotice, setQuickEditNotice] = useState(false),
     [confirmation, setConfirmation] = useState<{
       title: string
       description: string
@@ -86,6 +87,7 @@ function Application() {
     setSwitcher(false)
     setConfirmation(null)
     setLogout(false)
+    setQuickEditNotice(false)
     settingsInitialPage.current = undefined
     calendarPrefs.current = { mode: "month", cursor: today() }
   }, [snapshot.epoch])
@@ -209,6 +211,10 @@ function Application() {
                   aria-current={activeViewKey === key ? "page" : undefined}
                   disabled={typeof view === "object" && !plugins.confirmed}
                   onClick={() => {
+                    if (snapshot.quickEditing) {
+                      setQuickEditNotice(true)
+                      return
+                    }
                     settingsInitialPage.current = undefined
                     runtime.setView(view)
                   }}
@@ -228,7 +234,13 @@ function Application() {
                   aria-expanded={switcher}
                   aria-controls="childrenDialog"
                   aria-label={`${child.name}，打开我的孩子`}
-                  onClick={() => setSwitcher(true)}
+                  onClick={() => {
+                    if (snapshot.quickEditing) {
+                      setQuickEditNotice(true)
+                      return
+                    }
+                    setSwitcher(true)
+                  }}
                 >
                   <span className="child-avatar" aria-hidden>
                     <ChildAvatar id={child.avatarId} />
@@ -325,6 +337,22 @@ function Application() {
             )}
           </main>
         </div>
+      )}
+      {quickEditNotice && (
+        <Modal
+          id="quickEditNoticeDialog"
+          title="快捷编辑中"
+          description="请先退出快捷编辑模式。"
+          size="small"
+          onClose={() => setQuickEditNotice(false)}
+          footer={
+            <Button type="button" onClick={() => setQuickEditNotice(false)}>
+              知道了
+            </Button>
+          }
+        >
+          <p className="field-help">当前日程改动仍在草稿中，不会被清除。</p>
+        </Modal>
       )}
       {editor && data && child && (
         <>
