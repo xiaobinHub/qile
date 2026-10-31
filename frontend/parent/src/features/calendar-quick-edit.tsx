@@ -1,6 +1,6 @@
 import "./calendar-quick-edit.css"
 import { useEffect, useRef, useState } from "react"
-import type { CSSProperties } from "react"
+import type { CSSProperties, WheelEvent } from "react"
 import { GripVertical, Plus } from "lucide-react"
 import { CalendarTrash } from "./calendar-trash"
 import type { TrashDrop } from "./calendar-trash"
@@ -265,6 +265,24 @@ export function useCalendarQuickEdit(data: BusinessData) {
 }
 export type CalendarQuickEdit = ReturnType<typeof useCalendarQuickEdit>
 
+function scrollPresetsWithWheel(event: WheelEvent<HTMLDivElement>) {
+  const container = event.currentTarget
+  const maxScroll = container.scrollWidth - container.clientWidth
+  if (
+    maxScroll <= 0 ||
+    !event.deltaY ||
+    Math.abs(event.deltaY) <= Math.abs(event.deltaX) ||
+    event.ctrlKey
+  ) {
+    return
+  }
+  const scale = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? container.clientWidth : 1
+  const next = Math.max(0, Math.min(maxScroll, container.scrollLeft + event.deltaY * scale))
+  if (next === container.scrollLeft) return
+  event.preventDefault()
+  container.scrollLeft = next
+}
+
 export function QuickEditShelf({
   edit,
   onAddPreset,
@@ -295,7 +313,7 @@ export function QuickEditShelf({
           添加常用任务
         </Button>
       </div>
-      <div className="quick-edit-presets">
+      <div className="quick-edit-presets" onWheel={scrollPresetsWithWheel}>
         {presets.length ? (
           presets.map((preset) => {
             const item: CalendarDragItem = { kind: "preset", preset }
