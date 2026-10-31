@@ -200,15 +200,13 @@ export function PluginsPage() {
         ))}
       </div>
       <Card>
-        <CardHeader>
-          <CardTitle>插件目录</CardTitle>
-          <CardDescription>
-            发布状态与运行状态分别展示；进入详情管理上架、下架与范围。
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div role="search" aria-label="插件筛选" className="flex flex-wrap items-end gap-4">
-            <FormField id="plugin-search" label="搜索名称" className="min-w-0 flex-[1_1_220px]">
+        <CardContent className="gap-5">
+          <div
+            role="search"
+            aria-label="插件筛选"
+            className="flex flex-wrap items-end gap-4 border-b pb-5"
+          >
+            <FormField id="plugin-search" label="搜索名称" className="w-full min-w-0 sm:w-64">
               <Input
                 type="search"
                 value={search}
@@ -250,75 +248,73 @@ export function PluginsPage() {
               重新加载
             </Button>
           ) : null}
-        </CardContent>
-      </Card>
-      <div aria-busy={loading}>
-        {!plugins && loading ? (
-          <div role="status" aria-label="正在载入插件" className="grid gap-4 lg:grid-cols-2">
-            {[0, 1, 2, 3].map((index) => (
-              <Skeleton key={index} className="h-60 w-full rounded-xl" />
-            ))}
-          </div>
-        ) : visible.length ? (
-          <ul className="grid min-w-0 gap-4 lg:grid-cols-2">
-            {visible.map((plugin) => (
-              <li key={plugin.id} className="min-w-0">
-                <Card className="h-full">
-                  <CardHeader>
-                    <div className="flex min-w-0 items-start gap-3">
-                      <PluginIcon icon={plugin.icon} />
-                      <div className="flex min-w-0 flex-col gap-1">
-                        <CardTitle className="break-words">{plugin.name || plugin.id}</CardTitle>
-                        <CardDescription className="break-all">
-                          {plugin.id} · {plugin.type === "page" ? "页面型" : "后台型"}
-                        </CardDescription>
-                      </div>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="flex-1">
-                    <PluginStatuses plugin={plugin} />
-                    <p className="whitespace-pre-wrap break-words text-sm text-muted-foreground">
-                      {plugin.description || "尚未填写介绍"}
-                    </p>
-                    <dl className="grid grid-cols-2 gap-3 text-caption">
-                      {[
-                        ["活动版本", plugin.version || "暂无"],
-                        [
-                          "发布范围",
-                          plugin.scopeMode === "all"
-                            ? "全部儿童"
-                            : `${plugin.childIds.length} 位指定儿童`,
-                        ],
-                        ["已安装实例", String(plugin.installedCount)],
-                        ["已启用实例", String(plugin.enabledCount)],
-                      ].map(([label, value]) => (
-                        <div key={label} className="min-w-0">
-                          <dt className="text-muted-foreground">{label}</dt>
-                          <dd className="mt-1 break-all">{value}</dd>
+          <div aria-busy={loading}>
+            {!plugins && loading ? (
+              <div role="status" aria-label="正在载入插件" className="grid gap-4 lg:grid-cols-2">
+                {[0, 1, 2, 3].map((index) => (
+                  <Skeleton key={index} className="h-60 w-full rounded-xl" />
+                ))}
+              </div>
+            ) : visible.length ? (
+              <ul className="grid min-w-0 gap-4 lg:grid-cols-2">
+                {visible.map((plugin) => (
+                  <li key={plugin.id} className="min-w-0">
+                    <Card className="h-full">
+                      <CardHeader>
+                        <div className="flex min-w-0 items-start gap-3">
+                          <PluginIcon icon={plugin.icon} />
+                          <div className="flex min-w-0 flex-col gap-1">
+                            <CardTitle className="break-words">
+                              {plugin.name || plugin.id}
+                            </CardTitle>
+                            <CardDescription className="break-all">
+                              {plugin.id} · {plugin.type === "page" ? "页面型" : "后台型"}
+                            </CardDescription>
+                          </div>
                         </div>
-                      ))}
-                    </dl>
-                  </CardContent>
-                  <CardFooter>
-                    <Button
-                      id={`plugin-open-${plugin.id}`}
-                      type="button"
-                      variant="outline"
-                      className="min-h-11 w-full"
-                      aria-label={`管理插件：${plugin.name || plugin.id}`}
-                      onClick={() => open(plugin)}
-                    >
-                      管理插件
-                      <ArrowRight data-icon="inline-end" />
-                    </Button>
-                  </CardFooter>
-                </Card>
-              </li>
-            ))}
-          </ul>
-        ) : plugins ? (
-          <Card>
-            <CardContent>
+                      </CardHeader>
+                      <CardContent className="flex-1">
+                        <PluginStatuses plugin={plugin} />
+                        <p className="whitespace-pre-wrap break-words text-sm text-muted-foreground">
+                          {plugin.description || "尚未填写介绍"}
+                        </p>
+                        <dl className="grid grid-cols-2 gap-3 text-caption">
+                          {[
+                            ["活动版本", plugin.version || "暂无"],
+                            [
+                              "发布范围",
+                              plugin.scopeMode === "all"
+                                ? "全部儿童"
+                                : `${plugin.childIds.length} 位指定儿童`,
+                            ],
+                            ["已安装实例", String(plugin.installedCount)],
+                            ["已启用实例", String(plugin.enabledCount)],
+                          ].map(([label, value]) => (
+                            <div key={label} className="min-w-0">
+                              <dt className="text-muted-foreground">{label}</dt>
+                              <dd className="mt-1 break-all">{value}</dd>
+                            </div>
+                          ))}
+                        </dl>
+                      </CardContent>
+                      <CardFooter>
+                        <Button
+                          id={`plugin-open-${plugin.id}`}
+                          type="button"
+                          variant="outline"
+                          className="min-h-11 w-full"
+                          aria-label={`管理插件：${plugin.name || plugin.id}`}
+                          onClick={() => open(plugin)}
+                        >
+                          管理插件
+                          <ArrowRight data-icon="inline-end" />
+                        </Button>
+                      </CardFooter>
+                    </Card>
+                  </li>
+                ))}
+              </ul>
+            ) : plugins ? (
               <EmptyState
                 title={filtered ? "没有匹配的插件" : "暂无插件"}
                 description={
@@ -343,15 +339,15 @@ export function PluginsPage() {
                   ) : undefined
                 }
               />
-            </CardContent>
-          </Card>
-        ) : null}
-      </div>
-      {plugins ? (
-        <p role="status" className="text-caption text-muted-foreground">
-          显示 {visible.length} 个插件，共 {plugins.length} 个。
-        </p>
-      ) : null}
+            ) : null}
+          </div>
+          {plugins ? (
+            <p role="status" className="text-caption text-muted-foreground">
+              显示 {visible.length} 个插件，共 {plugins.length} 个。
+            </p>
+          ) : null}
+        </CardContent>
+      </Card>
     </div>
   )
 }
