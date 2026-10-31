@@ -50,11 +50,17 @@ def occurrence(task, config, now):
 
 
 class PluginScheduler:
-    def __init__(self, service, gateway, *, owner=None, lease_seconds=45, clock=utcnow):
+    def __init__(self, service, gateway, *, owner=None, lease_seconds=45, clock=utcnow,
+                 schedule_batch_size=100, schedule_budget_seconds=0.5):
+        require(type(schedule_batch_size) is int and 1 <= schedule_batch_size <= 1000, 400)
+        require(type(schedule_budget_seconds) in (int, float) and 0 < schedule_budget_seconds <= 60, 400)
         self.service, self.gateway = service, gateway
         self.owner = owner or str(uuid.uuid4())
         self.lease_seconds, self.clock = lease_seconds, clock
         self.schedule_errors = {}
+        self.schedule_batch_size = schedule_batch_size
+        self.schedule_budget_seconds = schedule_budget_seconds
+        self.schedule_cursor = None
 
     def enqueue_in_transaction(self, cur, context, task_id, occurrence_key, due_at, payload=None):
         require(isinstance(task_id, str) and 1 <= len(task_id) <= 128, 400)
@@ -79,9 +85,26 @@ class PluginScheduler:
 
     def schedule_due(self):
         now = self.clock()
-        pairs = self.service.transaction(lambda cur: rows_dict(cur.execute('SELECT plugin_id,child_id FROM lele.child_plugins WHERE installed AND enabled ORDER BY plugin_id,child_id LIMIT 1000')))
+        deadline = time.monotonic() + self.schedule_budget_seconds
+        cursor = self.schedule_cursor
+        query = """SELECT cp.plugin_id,cp.child_id FROM lele.child_plugins cp
+            JOIN lele.plugin_catalog p ON p.id=cp.plugin_id
+            WHERE cp.installed AND cp.enabled AND NOT cp.requires_reenable
+              AND p.publication_status='published' AND p.operation_state='ready'"""
+        args = []
+        if cursor is not None:
+            query += ' AND (cp.plugin_id,cp.child_id)>(%s,%s)'
+            args.extend(cursor)
+        query += ' ORDER BY cp.plugin_id,cp.child_id LIMIT %s'
+        args.append(self.schedule_batch_size)
+        pairs = self.service.transaction(lambda cur: rows_dict(cur.execute(query, args)))
+        if not pairs:
+            self.schedule_cursor = None
+            return 0
         count = 0
-        for pair in pairs:
+        for index, pair in enumerate(pairs):
+            if index and time.monotonic() >= deadline:
+                break
             def work(cur):
                 context = active_context(cur, pair['plugin_id'], pair['child_id'])
                 created = 0
@@ -93,15 +116,27 @@ class PluginScheduler:
             try:
                 count += self.service.transaction(work)
             except ApiError:
-                continue
+                pass
             except Exception:
                 key = pair['plugin_id']
                 moment = time.monotonic()
                 if moment - self.schedule_errors.get(key, -60) >= 60:
                     logging.getLogger(__name__).warning('Plugin schedule rejected: %s', key)
                     self.schedule_errors[key] = moment
-                continue
+            finally:
+                # Even an invalid instance must not pin later children behind it.
+                self.schedule_cursor = (pair['plugin_id'], pair['child_id'])
+        else:
+            if len(pairs) < self.schedule_batch_size:
+                self.schedule_cursor = None
         return count
+
+    def _terminal(self, cur, job_id, status):
+        cur.execute("UPDATE lele.plugin_jobs SET status=%s,cancel_requested=cancel_requested OR %s,updated_at=now() WHERE id=%s AND status IN ('pending','retry') RETURNING *",
+                    (status, status == 'cancelled', job_id))
+        job = row_dict(cur)
+        if job:
+            self._sync_event(cur, job, status)
 
     def claim(self, plugin_id=None):
         now = self.clock()
@@ -114,28 +149,28 @@ class PluginScheduler:
                 except ApiError as error:
                     if error.kind == 'plugin_updating':
                         return None
-                    cur.execute("UPDATE lele.plugin_jobs SET status='cancelled',cancel_requested=true,updated_at=now() WHERE id=%s AND status IN ('pending','retry')", (candidate['id'],))
+                    self._terminal(cur, candidate['id'], 'cancelled')
                     return None
                 cur.execute("SELECT * FROM lele.plugin_jobs WHERE id=%s AND status IN ('pending','retry') AND due_at<=%s FOR UPDATE SKIP LOCKED", (candidate['id'], now))
                 job = row_dict(cur)
                 if job is None:
                     return None
                 if job['cancel_requested'] or job['generation'] != context['generation'] or job['config_revision'] != context['configRevision']:
-                    cur.execute("UPDATE lele.plugin_jobs SET status='cancelled',updated_at=now() WHERE id=%s", (job['id'],))
+                    self._terminal(cur, job['id'], 'cancelled')
                     return None
                 task = next((t for t in context['manifest'].get('tasks', []) if t['id'] == job['task_id']), None)
                 event = job['task_id'].startswith('event:') and job['payload'].get('eventType') in context['manifest'].get('events', [])
                 if task is None and not event:
-                    cur.execute("UPDATE lele.plugin_jobs SET status='cancelled',updated_at=now() WHERE id=%s", (job['id'],))
+                    self._terminal(cur, job['id'], 'cancelled')
                     return None
-                task = task or {'misfirePolicy': 'latest'}
-                if job['attempt'] == 0 and task.get('misfirePolicy', 'skip') == 'skip' and now - job['due_at'] > timedelta(minutes=5):
-                    cur.execute("UPDATE lele.plugin_jobs SET status='skipped',updated_at=now() WHERE id=%s", (job['id'],))
+                task = task or {}
+                if not event and job['attempt'] == 0 and task.get('misfirePolicy', 'skip') == 'skip' and now - job['due_at'] > timedelta(minutes=5):
+                    self._terminal(cur, job['id'], 'skipped')
                     return None
-                if task.get('misfirePolicy') == 'latest':
+                if not event and task.get('misfirePolicy') == 'latest':
                     cur.execute("SELECT EXISTS(SELECT 1 FROM lele.plugin_jobs WHERE plugin_id=%s AND child_id=%s AND task_id=%s AND due_at>%s AND due_at<=%s AND status IN ('pending','retry','running','succeeded'))", (job['plugin_id'], job['child_id'], job['task_id'], job['due_at'], now))
                     if cur.fetchone()[0]:
-                        cur.execute("UPDATE lele.plugin_jobs SET status='skipped',updated_at=now() WHERE id=%s", (job['id'],))
+                        self._terminal(cur, job['id'], 'skipped')
                         return None
                 lease = now + timedelta(seconds=max(self.lease_seconds, task.get('timeoutSeconds', 10) + 5))
                 cur.execute("UPDATE lele.plugin_jobs SET status='running',lease_owner=%s,lease_until=%s,attempt=attempt+1,release_id=%s,release_epoch=%s,updated_at=now() WHERE id=%s RETURNING *", (self.owner, lease, context['releaseId'], context['releaseEpoch'], job['id']))

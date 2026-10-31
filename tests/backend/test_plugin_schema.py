@@ -1,6 +1,7 @@
 """Plugin migrations and uniqueness in owned disposable databases only."""
 import copy
 from contextlib import contextmanager
+import hashlib
 import json
 from pathlib import Path
 import tempfile
@@ -12,7 +13,7 @@ import psycopg
 from psycopg import sql
 
 from lele_growth.child_service import ChildService, initialize, ApiError
-from lele_growth.maintenance import initialize_plugin_platform, initialize_service, inspect_plugin_platform, inspect_schema, schema_sources
+from lele_growth.maintenance import initialize_plugin_platform, initialize_service, inspect_plugin_platform, inspect_schema, schema_sources, plugin_schema_source
 from lele_growth.postgres_store import PostgresStore
 from lele_growth.production_maintenance import execute, target_details
 from tests.backend.test_plugin_lifecycle import PluginDatabaseCase
@@ -47,9 +48,9 @@ class PluginSchemaTests(PluginDatabaseCase):
                 return child['id'],service.store.read(cur,child['id']),cur.execute("SELECT 'lele.children'::regclass::oid,'lele.task_series'::regclass::oid").fetchone()
             child_id,before,oids=service.transaction(fixture)
             status_before=inspect_schema(service)
-            self.assertEqual(initialize_plugin_platform(service),{'initialized':True,'version':1})
-            self.assertEqual(initialize_plugin_platform(service),{'initialized':False,'version':1})
-            self.assertEqual(inspect_plugin_platform(service),{'version':1,'pendingTables':[]})
+            self.assertEqual(initialize_plugin_platform(service),{'initialized':True,'version':2})
+            self.assertEqual(initialize_plugin_platform(service),{'initialized':False,'version':2})
+            self.assertEqual(inspect_plugin_platform(service),{'version':2,'pendingTables':[],'pendingMigrations':[]})
             self.assertEqual(inspect_schema(service),status_before)
             self.assertEqual(service.transaction(lambda cur:service.store.read(cur,child_id)),before)
             self.assertEqual(service.transaction(lambda cur:cur.execute("SELECT 'lele.children'::regclass::oid,'lele.task_series'::regclass::oid").fetchone()),oids)
@@ -62,7 +63,7 @@ class PluginSchemaTests(PluginDatabaseCase):
                 with self.assertRaises(ApiError): initialize_plugin_platform(service,audit_detail={'test':True})
             self.assertEqual(inspect_schema(service),before)
             self.assertIsNone(inspect_plugin_platform(service)['version'])
-            self.assertEqual(initialize_plugin_platform(service)['version'],1)
+            self.assertEqual(initialize_plugin_platform(service)['version'],2)
 
     def test_legacy_v6_refuses_plugin_ddl_until_core_additive_upgrades_are_complete(self):
         variants=[(False,False,False),(True,False,False),(True,True,False)]
@@ -102,8 +103,66 @@ class PluginSchemaTests(PluginDatabaseCase):
                 self.assertEqual(initialize_service(service,upgrade_only=True),{'initialized':False,'upgraded':True,'version':6})
                 self.assertEqual(inspect_schema(service)['pendingTableChanges'],[])
                 self.assertEqual(service.transaction(lambda cur:service.store.read(cur,child_id)),record)
-                self.assertEqual(initialize_plugin_platform(service),{'initialized':True,'version':1})
-                self.assertEqual(initialize_plugin_platform(service),{'initialized':False,'version':1})
+                self.assertEqual(initialize_plugin_platform(service),{'initialized':True,'version':2})
+                self.assertEqual(initialize_plugin_platform(service),{'initialized':False,'version':2})
+
+    def install_v1(self, service):
+        source = plugin_schema_source()
+        def run(cur):
+            cur.execute("SELECT obj_description(oid,'pg_namespace') FROM pg_namespace WHERE nspname='lele'")
+            marker = cur.fetchone()[0]
+            cur.execute(source)
+            cur.execute('INSERT INTO lele.plugin_platform_versions(version,source_sha256) VALUES(1,%s)',
+                        (hashlib.sha256(source.encode()).hexdigest(),))
+            updated = marker.rsplit(':', 1)[0] + ':' + PostgresStore._catalog(cur)
+            cur.execute(sql.SQL('COMMENT ON SCHEMA lele IS {}').format(sql.Literal(updated)))
+        service.transaction(run, exclusive=True, schema_check=False)
+
+    def test_v1_to_v2_preserves_data_and_does_not_invent_historical_recipients(self):
+        from lele_growth.plugins.catalog import register_release
+        from lele_growth.plugins.events import emit_task_completed
+        from tests.backend.test_plugin_manifest import manifest
+        with self.fresh_service() as service:
+            self.install_v1(service)
+            def seed(cur):
+                cur.execute("INSERT INTO lele.users(id,login_name,nickname,password_hash,role,status) VALUES('owner','owner','Owner','unused','parent','active')")
+                child = service.create_child(cur, 'owner', '保留历史', gender='boy')
+                register_release(cur, manifest('migration-test'), artifact_sha256='a'*64,
+                                 source_commit='test', config_schema={'type':'object','properties':{}}, activate=True)
+                cur.execute("INSERT INTO lele.child_plugins(child_id,plugin_id,installed) VALUES(%s,'migration-test',true)", (child['id'],))
+                cur.execute("INSERT INTO lele.child_plugin_records(child_id,plugin_id,collection,record_id,payload) VALUES(%s,'migration-test','history','one','{\"kept\":true}')", (child['id'],))
+                cur.execute("INSERT INTO lele.plugin_event_outbox(event_id,child_id,event_type,payload,source_revision) VALUES('legacy',%s,'task.completed','{\"kept\":true}',7)", (child['id'],))
+                return child['id'], service.store.read(cur, child['id'])
+            child_id, before = service.transaction(seed)
+            def snapshot(cur):
+                return {table: cur.execute(sql.SQL('SELECT to_jsonb(r) FROM lele.{} r ORDER BY to_jsonb(r)::text').format(sql.Identifier(table))).fetchall()
+                        for table in ('plugin_catalog', 'plugin_releases', 'child_plugins', 'child_plugin_records')}
+            old_rows = service.transaction(snapshot)
+            # A rolling code switch before explicit maintenance cannot break core writes.
+            self.assertIsNone(service.transaction(lambda cur: emit_task_completed(cur, child_id, 8, {}, 'before-maintenance')))
+            with patch.dict(service.config, {'environment': 'production'}):
+                preview = execute(service, 'upgrade-plugins')
+            self.assertEqual(preview['plugins'], {'version':1,'pendingTables':[],'pendingMigrations':[2]})
+            self.assertEqual(service.transaction(lambda cur: cur.execute("SELECT count(*) FROM information_schema.columns WHERE table_schema='lele' AND table_name='plugin_event_outbox' AND column_name='recipients'").fetchone()[0]), 0)
+            result = initialize_plugin_platform(service)
+            self.assertEqual(result, {'initialized':False,'upgraded':True,'version':2})
+            self.assertEqual(service.transaction(snapshot), old_rows)
+            self.assertEqual(service.transaction(lambda cur: service.store.read(cur, child_id)), before)
+            self.assertEqual(service.transaction(lambda cur: cur.execute('SELECT event_id,payload,source_revision,recipients FROM lele.plugin_event_outbox').fetchall()), [('legacy', {'kept':True}, 7, [])])
+            self.assertEqual(initialize_plugin_platform(service), {'initialized':False,'version':2})
+            self.assertEqual(service.transaction(lambda cur: cur.execute('SELECT version,source_sha256 FROM lele.plugin_platform_versions ORDER BY version').fetchall())[0], (1, hashlib.sha256(plugin_schema_source().encode()).hexdigest()))
+
+    def test_v1_upgrade_failure_rolls_back_column_versions_and_core_fingerprint(self):
+        with self.fresh_service() as service:
+            self.install_v1(service)
+            before = inspect_schema(service)
+            with patch.object(service, 'audit', side_effect=ApiError(503, 'injected failure')):
+                with self.assertRaises(ApiError):
+                    initialize_plugin_platform(service, audit_detail={'test':True})
+            self.assertEqual(inspect_schema(service), before)
+            self.assertEqual(inspect_plugin_platform(service), {'version':1,'pendingTables':[],'pendingMigrations':[2]})
+            self.assertEqual(service.transaction(lambda cur: cur.execute("SELECT count(*) FROM information_schema.columns WHERE table_schema='lele' AND table_name='plugin_event_outbox' AND column_name='recipients'").fetchone()[0]), 0)
+            self.assertEqual(initialize_plugin_platform(service)['version'], 2)
 
     def test_uniqueness_constraints_cover_installation_occurrence_event_and_deployment(self):
         self.publish(); self.install()

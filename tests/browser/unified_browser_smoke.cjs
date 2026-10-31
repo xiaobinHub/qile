@@ -16,7 +16,8 @@ import json,sys
 from pathlib import Path
 import psycopg
 from psycopg import sql
-from lele_growth.child_service import initialize,bootstrap,load_config
+from lele_growth.child_service import ChildService,initialize,bootstrap,load_config
+from lele_growth.maintenance import initialize_plugin_platform
 root=Path.cwd();base=load_config(root/'data/development/config.json');assert base['environment']=='development'
 params={**base['_connect'],'dbname':'postgres'}
 with psycopg.connect(**params,autocommit=True) as c:
@@ -25,7 +26,7 @@ config={'environment':'development','database':{**base['database'],'dbname':'lel
 p=root/'data/testing/browser/config.json';p.parent.mkdir(parents=True,exist_ok=True,mode=0o700);p.parent.chmod(0o700);p.write_text(json.dumps(config));p.chmod(0o600)
 params={**base['_connect'],'dbname':'lele_test_unified_ui'}
 with psycopg.connect(**params) as c:c.execute('DROP SCHEMA IF EXISTS lele CASCADE')
-initialize(p);bootstrap(p,'qaadmin','测试管理员',json.load(sys.stdin)['admin'])
+initialize(p);initialize_plugin_platform(ChildService(p));bootstrap(p,'qaadmin','测试管理员',json.load(sys.stdin)['admin'])
 `;
 let browser;const processes=[],errors=[],scenarios=[],a11y=[];
 const stage=name=>{console.log('CHECK '+name);scenarios.push(name)};

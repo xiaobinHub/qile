@@ -12,7 +12,11 @@
 .venv/bin/python deploy/manage.py upgrade-plugins --config /etc/lele-growth/production.json
 ```
 
-核对预览中的目标与待建表，再添加 `--apply --confirm` 和本次返回的 targetId。迁移只增加插件平台表，不覆盖已有儿童、日历或积分记录。
+核对预览中的目标、待建表与 `pendingMigrations`，再添加 `--apply --confirm` 和本次返回的 targetId。维护只增加插件结构，不覆盖已有儿童、日历或积分记录。
+
+当前插件结构为 v2。首次接入依次安装 v1 和 v2；已安装 v1 的环境只执行独立的 `migrate_plugin_v1_to_v2.sql`，保留 v1 脚本及摘要。v2 为 outbox 增加事件产生时的接收对象快照；历史事件保留原内容，快照默认为空，不推断或补投历史订阅。已有投递、任务和插件记录保留。
+
+已有插件环境升级时，先停止旧插件运行服务，使用候选主系统代码执行上述维护预览和确认，再切换主系统并启动新版插件运行服务。家长端与运行服务应使用同一版本。维护前新版家长端仍可保存核心日历操作，插件管理提示待维护；这段过渡期不新建插件事件。不得让旧版分发器在 v2 升级期间继续按当前订阅推断历史事件。迁移事务失败会同时回滚结构、版本记录和核心结构指纹，可重新预览后重试。
 
 本机开发库可显式执行 `.venv/bin/python scripts/dev.py plugins-setup`，再执行 `.venv/bin/python scripts/dev.py restart`；该入口固定使用本机 development 配置。
 

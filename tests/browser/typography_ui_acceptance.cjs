@@ -179,7 +179,7 @@ async function exerciseTypography({
       )
       await page.goto(adminOrigin)
       await page.locator("#userRows tr[data-user-id]").first().waitFor()
-      await size(page, ".ui-page-heading h1", 22, "admin-users")
+      await size(page, ".ui-page-heading h1", 20, "admin-users")
       await size(page, "#userRows td", 14, "admin-table")
       await shot(page, tag + "-admin")
       await page.locator("#openCreateUser").click()

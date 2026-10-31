@@ -234,8 +234,6 @@ class JobTests(DatabaseFixture):
             raise RuntimeError('rollback original core operation')
         with self.assertRaises(RuntimeError): self.service.transaction(aborted)
         self.assertEqual(self.sql('SELECT count(*) FROM lele.plugin_event_outbox WHERE child_id=%s', (self.child_id,)), [(0,)])
-        event_id = self.service.transaction(emit)
-        self.assertEqual(self.service.transaction(emit), event_id)
         second = 'event-' + uuid.uuid4().hex[:12]
         second_data = copy.deepcopy(data); second_data['id'] = second
         def install_second(cur):
@@ -244,6 +242,8 @@ class JobTests(DatabaseFixture):
             cur.execute('INSERT INTO lele.child_plugins(child_id,plugin_id,installed,enabled) VALUES(%s,%s,true,true)', (self.child_id, second))
             cur.execute('INSERT INTO lele.child_plugin_configs(child_id,plugin_id,config) VALUES(%s,%s,%s)', (self.child_id, second, Jsonb({'message': 'ok'})))
         self.service.transaction(install_second)
+        event_id = self.service.transaction(emit)
+        self.assertEqual(self.service.transaction(emit), event_id)
         dispatcher = EventDispatcher(self.service, self.scheduler)
         dispatcher.dispatch(limit=1000)
         dispatcher.dispatch(limit=1000)

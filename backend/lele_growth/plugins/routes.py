@@ -2,6 +2,7 @@
 from urllib.parse import urlsplit, parse_qs
 
 from lele_growth.child_service import require
+from lele_growth.maintenance import PLUGIN_SCHEMA_VERSION
 from . import catalog, installations
 from .child_picker import list_plugin_children
 from .manifest import safe_relative_path
@@ -25,6 +26,8 @@ class PluginRoutes:
             return NotImplemented
         cur.execute("SELECT to_regclass('lele.plugin_platform_versions') IS NOT NULL")
         require(cur.fetchone()[0],503,'插件平台尚未完成显式数据库维护。','plugin_schema_unavailable')
+        cur.execute('SELECT max(version) FROM lele.plugin_platform_versions')
+        require(cur.fetchone()[0] == PLUGIN_SCHEMA_VERSION,503,'插件平台需要完成增量数据库维护。','plugin_schema_unavailable')
         query={key:values[-1] for key,values in parse_qs(url.query).items()}
         if method=='GET':
             require(set(body)<={'q','view','cursor'},400,'查询字段不正确。')

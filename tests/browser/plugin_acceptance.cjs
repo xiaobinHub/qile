@@ -364,6 +364,8 @@ async function eventually(fn) {
     check(
       "single plugin update and rollback preserve data while core and another plugin stay available",
     )
+    await applications(dad)
+    await dad.locator('[data-plugin-more="growth-notes"]').click()
     await dad.locator('[data-plugin-disable="growth-notes"]').click()
     await dad.locator('[data-view="plugin:growth-notes"]').waitFor({ state: "hidden" })
     await refresh(mom)

@@ -79,6 +79,20 @@ for surface in ('parent','admin'):
                                 cwd=extracted, env=environment, capture_output=True, text=True, check=True)
         self.assertIn('bootstrap-admin', result.stdout)
 
+    def test_host_release_contains_plugin_migration_but_never_full_demo_code(self):
+        for relative in ('plugins/demo-page/code.py', 'plugins/demo-service/code.py',
+                         'output/plugin-releases/demo-page/runtime.py',
+                         'output/plugin-releases/demo-service/runtime.py'):
+            marker = self.root / relative
+            marker.parent.mkdir(parents=True, exist_ok=True)
+            marker.write_text('# synthetic exclusion marker, never executed\n')
+        self.commit()
+        with tarfile.open(package(self.root, self.output)) as archive:
+            names = archive.getnames()
+        self.assertIn('backend/lele_growth/db/migrate_plugin_v1_to_v2.sql', names)
+        self.assertFalse(any(name.startswith(('plugins/', 'output/plugin-releases/')) for name in names))
+        self.assertFalse(any('demo-page' in name or 'demo-service' in name for name in names))
+
     def test_untracked_modified_staged_and_deleted_sources_refuse_release(self):
         for state in ('untracked', 'modified', 'staged', 'deleted'):
             with self.subTest(state=state):

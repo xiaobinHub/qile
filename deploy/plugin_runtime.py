@@ -70,11 +70,19 @@ class PluginRuntimeService:
         # row lock from the previous plugin. Lifecycle operations lock catalog
         # first and may be waiting for that same child.
         pairs = self.service.transaction(lambda cur: rows_dict(cur.execute(
-            "SELECT plugin_id,child_id FROM lele.child_plugins WHERE installed AND enabled ORDER BY plugin_id,child_id LIMIT 10000")))
+            """SELECT cp.plugin_id,cp.child_id FROM lele.child_plugins cp
+            JOIN lele.plugin_catalog p ON p.id=cp.plugin_id
+            WHERE cp.installed AND cp.enabled AND NOT cp.requires_reenable
+              AND p.publication_status='published' AND p.operation_state='ready'
+            ORDER BY cp.plugin_id,cp.child_id""")))
         enabled = set()
+        confirmed = set()
         for pair in pairs:
+            if pair['plugin_id'] in confirmed:
+                continue
             try:
                 current = self.service.transaction(lambda cur: active_context(cur, pair['plugin_id'], pair['child_id']))
+                confirmed.add(pair['plugin_id'])
                 if current['manifest'].get('backend'):
                     enabled.add((pair['plugin_id'], current['version']))
             except ApiError:
