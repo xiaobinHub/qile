@@ -89,6 +89,7 @@ export function Modal({
   size = "default",
   returnFocusTo,
   keyboardScroll = false,
+  bareFooter = false,
 }: {
   title: string
   description?: string
@@ -99,6 +100,7 @@ export function Modal({
   size?: "small" | "default" | "complex"
   returnFocusTo?: HTMLElement | null | false
   keyboardScroll?: boolean
+  bareFooter?: boolean
 }) {
   const returnFocus = useRef<HTMLElement | null>(document.activeElement as HTMLElement)
   useEffect(() => {
@@ -136,7 +138,11 @@ export function Modal({
           </DialogDescription>
         </DialogHeader>
         {children && <div className="ui-modal-body">{children}</div>}
-        {footer && <DialogFooter className="ui-modal-footer">{footer}</DialogFooter>}
+        {footer && (
+          <DialogFooter className={bareFooter ? "bare-modal-footer" : "ui-modal-footer"}>
+            {footer}
+          </DialogFooter>
+        )}
       </DialogContent>
     </Dialog>
   )

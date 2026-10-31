@@ -365,6 +365,14 @@
   color: var(--text-secondary);
   font-size: var(--text-body);
 }
+.bare-modal-footer {
+  flex: none;
+  display: flex;
+  justify-content: flex-end;
+  flex-direction: row;
+  gap: 12px;
+  padding: 0 24px 24px;
+}
 /* A software keyboard must not squeeze a long form between a fixed header and
    footer. Keep its natural height and scroll the complete panel in one region. */
 .ui-modal-frame[data-keyboard-scroll="true"] {
