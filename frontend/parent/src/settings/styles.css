@@ -2094,13 +2094,47 @@ button.account-profile-avatar:focus-visible {
 .applications-toolbar {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 20px;
+  min-width: 0;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+.applications-tabs {
+  flex-shrink: 0;
   gap: 12px;
+  padding: 0;
+}
+.applications-tabs [data-slot="tabs-trigger"] {
+  flex: none;
+  padding-inline: 12px;
+}
+.applications-tabs [data-slot="tabs-trigger"]::after {
+  bottom: -13px;
+  background: var(--primary);
 }
 .applications-search {
   position: relative;
-  flex: 1 1 180px;
+  flex: 0 1 240px;
+  width: 240px;
   min-width: 0;
+}
+@media (max-width: 520px) {
+  .applications-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 16px;
+  }
+  .applications-tabs {
+    align-self: flex-start;
+  }
+  .applications-tabs [data-slot="tabs-trigger"]::after {
+    bottom: -5px;
+  }
+  .applications-search {
+    flex: none;
+    width: 100%;
+  }
 }
 .applications-search > svg {
   position: absolute;

@@ -123,12 +123,6 @@ export function Applications({ child, controller }: { child: Child; controller: 
   }
   return (
     <div className="applications-workspace">
-      <p className="settings-notice">
-        {child.name}的应用、启用状态和配置由家人共享。
-        {!owner
-          ? "仅负责人可以管理应用。"
-          : "页面应用启用后会显示在主导航中，后台应用通过配置使用。"}
-      </p>
       {!confirmed && (
         <p role="status" className="settings-notice">
           应用状态未确认，请刷新成功后再操作。
@@ -136,7 +130,7 @@ export function Applications({ child, controller }: { child: Child; controller: 
       )}
       <Tabs value={view} onValueChange={(value) => setView(value as CatalogView)}>
         <div className="applications-toolbar">
-          <TabsList aria-label="应用目录">
+          <TabsList variant="line" className="applications-tabs" aria-label="应用目录">
             <TabsTrigger value="available">发现应用</TabsTrigger>
             <TabsTrigger value="installed">已安装</TabsTrigger>
           </TabsList>
@@ -150,16 +144,6 @@ export function Applications({ child, controller }: { child: Child; controller: 
               onChange={(event) => setQuery(event.target.value)}
             />
           </div>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => {
-              void pluginStore.refresh()
-              setRefresh((value) => value + 1)
-            }}
-          >
-            刷新
-          </Button>
         </div>
         <TabsContent value={view} className="applications-content" aria-busy={reading}>
           {(readError || state.error || error) && (
@@ -322,7 +306,7 @@ export function Applications({ child, controller }: { child: Child; controller: 
               </strong>
               <p>
                 {readError
-                  ? "请点击刷新重试。"
+                  ? "请稍后重试。"
                   : query
                     ? "试试其他名称。"
                     : "可在发现应用中查看当前儿童可使用的应用。"}
