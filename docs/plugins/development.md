@@ -6,6 +6,8 @@
 
 参考 `plugins/growth-notes/`（页面型）与 `plugins/reminder-demo/`（后台型）。每个目录提供 `plugin.json`、`schemas/config.json`，以及可选的 frontend/backend。
 
+需要覆盖完整接入特性时，参考 `plugins/demo-page/` 和 `plugins/demo-service/`；[完整 Demo 指南](demo-plugins.md)提供能力矩阵、测试步骤与独立验收命令。
+
 - 页面型：`type=page`，启用后自动出现顶部入口。进入页面时才加载 ESM 与样式；使用 `mount(container, context)` 并返回清理函数。
 - 后台型：`type=service`，`frontend=null`，没有顶部入口。配置弹窗由平台统一渲染，不执行插件页面代码。
 - 页面型也可以声明后端任务。插件 ID、类型和代码入口由技术清单决定，管理员编辑展示资料，不编辑执行路径。

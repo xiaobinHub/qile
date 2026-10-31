@@ -1,0 +1,42 @@
+{
+  "manifestVersion": 1,
+  "id": "demo-page",
+  "version": "1.0.0",
+  "type": "page",
+  "name": "页面能力 Demo",
+  "description": "演示共享记录、分页、修订冲突、服务端探测与后台活动的完整页面插件。",
+  "instructions": "进入页面后测试“创建/编辑/归档记录”“同 operationId 重试”“服务端探测”“受控错误”“慢请求”“通知”和“核心导航”。运行信息可核对版本、配置及儿童上下文；后台活动读取 activity。默认每 60 秒记录心跳并订阅 task.completed，仅记录，不发送外部消息。日期、日期时间、邮箱及网址字段仅展示格式元数据。",
+  "platformApi": {
+    "major": 1,
+    "minMinor": 0
+  },
+  "frontendApi": {
+    "major": 1,
+    "minMinor": 0
+  },
+  "frontend": {
+    "entry": "frontend/entry.js",
+    "styles": ["frontend/style.css"]
+  },
+  "backend": {
+    "entryModule": "demo_page"
+  },
+  "configSchema": "schemas/config.json",
+  "dataSchemaVersion": 1,
+  "capabilities": [
+    "plugin.state.read",
+    "plugin.state.write",
+    "plugin.jobs.schedule",
+    "plugin.events.subscribe"
+  ],
+  "tasks": [
+    {
+      "id": "heartbeat",
+      "intervalSeconds": 60,
+      "misfirePolicy": "latest",
+      "timeoutSeconds": 15
+    }
+  ],
+  "events": ["task.completed"],
+  "icons": ["assets/icon.png"]
+}

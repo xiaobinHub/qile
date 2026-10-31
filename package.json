@@ -17,7 +17,9 @@
     "plugin:build": "node scripts/build_plugin.mjs",
     "test:plugins:browser": "node tests/browser/plugin_acceptance.cjs",
     "test:browser:core": "node tests/browser/unified_browser_smoke.cjs",
-    "test:plugins:ui": "node tests/browser/plugin_parent_ui.cjs"
+    "test:plugins:ui": "node tests/browser/plugin_parent_ui.cjs",
+    "check:demo-plugins": "tsc -p plugins/demo-page/tsconfig.json && node scripts/build_plugin.mjs demo-page && node scripts/build_plugin.mjs demo-service",
+    "test:demo-plugins": "PYTHONPATH=backend .venv/bin/python -m unittest discover -s tests/backend -p test_demo_plugins.py && node tests/browser/demo_plugins_acceptance.cjs"
   },
   "devDependencies": {
     "@axe-core/playwright": "4.14.0",
