@@ -54,51 +54,59 @@ export function Applications({ child, controller }: { child: Child; controller: 
   const epoch = runtime.getSnapshot().epoch
   const [view, setView] = useState<CatalogView>("available")
   const [query, setQuery] = useState("")
-  const [result, setResult] = useState<{ key: string; plugins: Plugin[] } | null>(null)
-  const [reading, setReading] = useState(true)
-  const [readError, setReadError] = useState("")
+  const [result, setResult] = useState<{
+    key: string
+    views: Partial<Record<CatalogView, { plugins: Plugin[]; error: string }>>
+  } | null>(null)
   const [error, setError] = useState("")
   const [refresh, setRefresh] = useState(0)
   const [configPlugin, setConfigPlugin] = useState<Plugin | null>(null)
   const [uninstall, setUninstall] = useState<Plugin | null>(null)
-  const requestKey = `${child.id}:${epoch}:${view}:${query.trim()}`
+  const search = query.trim()
+  const requestKey = JSON.stringify([child.id, epoch, search])
   useEffect(() => {
     const controller = new AbortController()
-    setReading(true)
-    setReadError("")
+    function receive(view: CatalogView, plugins: Plugin[] | null, error = "") {
+      if (controller.signal.aborted || !pluginStore.matches(child.id, epoch)) return
+      setResult((previous) => {
+        const views = previous?.key === requestKey ? previous.views : {}
+        return {
+          key: requestKey,
+          views: {
+            ...views,
+            [view]: { plugins: plugins ?? views[view]?.plugins ?? [], error },
+          },
+        }
+      })
+    }
     const timer = window.setTimeout(
       () => {
-        void pluginClient
-          .list(child.id, view, query.trim(), controller.signal)
-          .then((response) => {
-            if (!controller.signal.aborted && pluginStore.matches(child.id, epoch))
-              setResult({ key: requestKey, plugins: response.plugins })
-          })
-          .catch((failure) => {
-            if (!controller.signal.aborted && pluginStore.matches(child.id, epoch))
-              setReadError(pluginError(failure))
-          })
-          .finally(() => {
-            if (!controller.signal.aborted) setReading(false)
-          })
+        for (const view of ["available", "installed"] as const) {
+          void pluginClient
+            .list(child.id, view, search, controller.signal)
+            .then((response) => receive(view, response.plugins))
+            .catch((failure) => receive(view, null, pluginError(failure)))
+        }
       },
-      query ? 200 : 0,
+      search ? 200 : 0,
     )
     return () => {
       clearTimeout(timer)
       controller.abort()
     }
-  }, [child.id, epoch, requestKey, state.catalogVersion, refresh])
+  }, [child.id, epoch, requestKey, search, state.catalogVersion, refresh])
+  const entry = result?.key === requestKey ? result.views[view] : undefined
+  const reading = !entry
+  const readError = entry?.error || ""
   const owner = child.role === "owner" && !child.archived
   const current = state.childId === child.id && state.epoch === epoch
   const confirmed = current && state.confirmed
   const known = new Map(current ? state.plugins.map((plugin) => [plugin.id, plugin]) : [])
-  const plugins =
-    result?.key === requestKey
-      ? result.plugins
-          .map((plugin) => known.get(plugin.id) || plugin)
-          .filter((plugin) => view !== "installed" || plugin.installed)
-      : []
+  const plugins = entry
+    ? entry.plugins
+        .map((plugin) => known.get(plugin.id) || plugin)
+        .filter((plugin) => view !== "installed" || plugin.installed)
+    : []
   plugins.sort(
     (a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name) || a.id.localeCompare(b.id),
   )
@@ -145,7 +153,7 @@ export function Applications({ child, controller }: { child: Child; controller: 
             />
           </div>
         </div>
-        <TabsContent value={view} className="applications-content" aria-busy={reading}>
+        <TabsContent forceMount value={view} className="applications-content" aria-busy={reading}>
           {(readError || state.error || error) && (
             <p className="form-error" role="alert">
               {error || readError || state.error}

@@ -204,8 +204,10 @@ async function mock(context, role) {
       return state.offlineStatus ? json({ error: "状态暂时离线" }, 503) : json(response)
     }
     if (tail === "plugins") {
-      state.catalogCalls.push({ id, role })
       const query = url.searchParams.get("q") || ""
+      const view = url.searchParams.get("view")
+      state.catalogCalls.push({ id, role, view, query })
+      await gated(`${id}:catalog:${view}`)
       return json({
         plugins: state.plugins[id].filter(
           (plugin) =>
@@ -396,6 +398,45 @@ async function run() {
     assert.equal(state.assets.length, 0)
     await settings(page)
     assert.equal(state.assets.length, 0)
+    await page.locator("#pluginSearch").fill("不存在的应用")
+    await page.getByText("没有找到匹配的应用", { exact: true }).waitFor()
+    await page.getByRole("tab", { name: "已安装", exact: true }).click()
+    await page.getByText("没有找到匹配的应用", { exact: true }).waitFor()
+    const callsBeforeSwitch = state.catalogCalls.length
+    await page.evaluate(() => {
+      window.catalogFlashes = []
+      window.catalogObserver = new MutationObserver(() => {
+        if (document.querySelector('[aria-label="正在读取应用"]'))
+          window.catalogFlashes.push("loading")
+      })
+      window.catalogObserver.observe(document.querySelector(".applications-content"), {
+        childList: true,
+        subtree: true,
+      })
+    })
+    for (const name of ["发现应用", "已安装", "发现应用", "已安装"]) {
+      await page.getByRole("tab", { name, exact: true }).click()
+      assert.match(await page.getByRole("tabpanel").innerText(), /没有找到匹配的应用/)
+    }
+    assert.equal(state.catalogCalls.length, callsBeforeSwitch)
+    const availableRefresh = gate("a:catalog:available")
+    const installedRefresh = gate("a:catalog:installed")
+    getPlugin("a", "page-demo").description = "后台刷新验证"
+    await page.evaluate(async () => {
+      const { pluginStore } = await import("/parent-assets/src/plugins/store.ts")
+      await pluginStore.refresh()
+    })
+    await Promise.all([availableRefresh.captured, installedRefresh.captured])
+    await page.getByRole("tab", { name: "发现应用", exact: true }).click()
+    assert.match(await page.getByRole("tabpanel").innerText(), /没有找到匹配的应用/)
+    assert.equal(await page.getByLabel("正在读取应用", { exact: true }).count(), 0)
+    availableRefresh.release()
+    installedRefresh.release()
+    assert.deepEqual(await page.evaluate(() => window.catalogFlashes), [])
+    await page.evaluate(() => window.catalogObserver.disconnect())
+    checks.push(
+      "cached empty tabs switch without requests or loading flashes, including delayed background refresh",
+    )
     await page.locator("#pluginSearch").fill("后台")
     await page.waitForFunction(() => document.querySelectorAll(".application-card").length === 1)
     assert.match(await page.locator(".application-card").innerText(), /后台提醒/)

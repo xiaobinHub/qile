@@ -4,7 +4,7 @@
     "src": "../../node_modules/@fontsource-variable/inter/files/inter-latin-wght-normal.woff2"
   },
   "index.html": {
-    "file": "index-C_sugLuh.js",
+    "file": "index-C4sdxhtQ.js",
     "name": "index",
     "src": "index.html",
     "isEntry": true,
@@ -30,7 +30,7 @@
     "src": "src/assets/quick-trash/lid.png"
   },
   "src/features/print.tsx": {
-    "file": "print-CXLik-KN.js",
+    "file": "print-forkHUHX.js",
     "name": "print",
     "src": "src/features/print.tsx",
     "isDynamicEntry": true,
@@ -39,7 +39,7 @@
     ]
   },
   "src/features/store.tsx": {
-    "file": "store-DuRu5c94.js",
+    "file": "store-BuWD-MCC.js",
     "name": "store",
     "src": "src/features/store.tsx",
     "isDynamicEntry": true,
