@@ -33,10 +33,15 @@
 }
 .admin-user-table {
   min-height: 0;
-  flex: 1;
+  flex: 0 1 auto;
   overflow: auto;
   overscroll-behavior: contain;
-  scrollbar-gutter: stable;
+  background: linear-gradient(
+    to bottom,
+    color-mix(in oklab, var(--muted) 30%, var(--card)) 44px,
+    var(--card) 44px
+  );
+  scrollbar-color: color-mix(in oklab, var(--muted-foreground) 40%, transparent) transparent;
 }
 .admin-user-table [data-slot="table-container"] {
   overflow: visible;

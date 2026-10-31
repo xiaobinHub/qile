@@ -254,7 +254,7 @@ export function UsersPage() {
         ))}
       </div>
       <FormFeedback message={flash} success />
-      <Card className="admin-users-card min-h-0 flex-1 gap-0 overflow-hidden rounded-xl py-0 shadow-none">
+      <Card className="admin-users-card min-h-0 flex-[0_1_auto] gap-0 overflow-hidden rounded-xl py-0 shadow-none">
         <div
           role="search"
           aria-label="账号筛选"
