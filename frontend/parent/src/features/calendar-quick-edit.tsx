@@ -1,6 +1,11 @@
 import "./calendar-quick-edit.css"
 import { useEffect, useRef, useState } from "react"
-import type { CSSProperties, WheelEvent } from "react"
+import type {
+  CSSProperties,
+  MouseEvent as ReactMouseEvent,
+  PointerEvent as ReactPointerEvent,
+  WheelEvent,
+} from "react"
 import { GripVertical, Plus } from "lucide-react"
 import { CalendarTrash } from "./calendar-trash"
 import type { TrashDrop } from "./calendar-trash"
@@ -34,6 +39,9 @@ export function useCalendarQuickEdit(data: BusinessData) {
   const [editingOccurrence, setEditingOccurrence] = useState<Occurrence | null>(null)
   const [deletedOrder, setDeletedOrder] = useState<string[]>([])
   const mounted = useRef(true)
+  const blockedDragStop = useRef(() => {})
+  const blockedClickUntil = useRef(0)
+  const blockedShakeTimer = useRef<number | null>(null)
   const summary = calendarDraftSummary(draft)
   const deletedTasks = [...deletedDraftTasks(draft)].sort((left, right) => {
     const leftIndex = deletedOrder.indexOf(left.occurrenceKey)
@@ -104,11 +112,18 @@ export function useCalendarQuickEdit(data: BusinessData) {
       return false
     })
     return () => {
+      blockedDragStop.current()
       unguard()
       runtime.setEditing(false)
       runtime.patch({ quickEditing: false })
     }
   }, [active])
+  useEffect(
+    () => () => {
+      if (blockedShakeTimer.current !== null) window.clearTimeout(blockedShakeTimer.current)
+    },
+    [],
+  )
   useEffect(() => {
     if (!active || !summary.total) return
     const beforeUnload = (event: BeforeUnloadEvent) => {
@@ -137,6 +152,7 @@ export function useCalendarQuickEdit(data: BusinessData) {
   }, [active, selected, draft, frozen])
   const finish = () => {
     drag.cancelDrag()
+    blockedDragStop.current()
     setSession(null)
     setDraft(emptyCalendarDraft())
     setSelected(null)
@@ -148,6 +164,51 @@ export function useCalendarQuickEdit(data: BusinessData) {
     requestAnimationFrame(() =>
       document.getElementById("quickEditBtn")?.focus({ preventScroll: true }),
     )
+  }
+  const blockedDrag = (event: ReactPointerEvent<HTMLElement>) => {
+    if (!active || frozen || !event.isPrimary || event.button !== 0) return
+    blockedDragStop.current()
+    const card = event.currentTarget
+    const pointerId = event.pointerId
+    const startX = event.clientX
+    const startY = event.clientY
+    const startedAt = performance.now()
+    let shaken = false
+    const move = (next: PointerEvent) => {
+      if (next.pointerId !== pointerId || shaken) return
+      const distance = Math.hypot(next.clientX - startX, next.clientY - startY)
+      if (distance < 6 || (next.pointerType === "touch" && performance.now() - startedAt < 200))
+        return
+      shaken = true
+      blockedClickUntil.current = performance.now() + 350
+      card.classList.remove("quick-task-blocked-shake")
+      void card.offsetWidth
+      card.classList.add("quick-task-blocked-shake")
+      if (blockedShakeTimer.current !== null) window.clearTimeout(blockedShakeTimer.current)
+      blockedShakeTimer.current = window.setTimeout(() => {
+        card.classList.remove("quick-task-blocked-shake")
+        blockedShakeTimer.current = null
+      }, 280)
+      setAnnouncement("已完成任务不可调整，请先退出快捷编辑并撤销完成。")
+    }
+    const stop = () => {
+      if (shaken) blockedClickUntil.current = performance.now() + 100
+      window.removeEventListener("pointermove", move)
+      window.removeEventListener("pointerup", stop)
+      window.removeEventListener("pointercancel", stop)
+      window.removeEventListener("blur", stop)
+      if (blockedDragStop.current === stop) blockedDragStop.current = () => {}
+    }
+    blockedDragStop.current = stop
+    window.addEventListener("pointermove", move)
+    window.addEventListener("pointerup", stop)
+    window.addEventListener("pointercancel", stop)
+    window.addEventListener("blur", stop)
+  }
+  const blockedClick = (event: ReactMouseEvent<HTMLElement>) => {
+    if (performance.now() >= blockedClickUntil.current) return
+    event.preventDefault()
+    event.stopPropagation()
   }
   return {
     active,
@@ -209,6 +270,8 @@ export function useCalendarQuickEdit(data: BusinessData) {
       if (editingOccurrence) place({ kind: "occurrence", occurrence: editingOccurrence }, "delete")
     },
     drag,
+    blockedDrag,
+    blockedClick,
     begin: () => {
       if (snapshot.busy || snapshot.unconfirmed) return
       setSession({ data, revision: snapshot.revision })

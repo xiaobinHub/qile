@@ -309,7 +309,31 @@ async function exerciseQuickEdit({ browser, dad, origin, firstId, out, api, data
 
     stage('quick edit: task title opens a draft editor; completed tasks stay read-only')
     await enter()
-    await row(completed).locator('.calendar-task-edit').click()
+    const completedCard = row(completed)
+    const completedTitle = completedCard.locator('.calendar-task-edit')
+    const completedTitleBox = await completedTitle.boundingBox()
+    await dad.mouse.move(completedTitleBox.x + completedTitleBox.width / 2, completedTitleBox.y + completedTitleBox.height / 2)
+    await dad.mouse.down()
+    await dad.mouse.move(completedTitleBox.x + completedTitleBox.width / 2 + 12, completedTitleBox.y + completedTitleBox.height / 2, { steps: 3 })
+    await dad.waitForFunction(
+      (key) => document.querySelector(`[data-month-occ="${key}"]`)?.classList.contains("quick-task-blocked-shake"),
+      completed,
+    )
+    assert.equal(
+      await completedCard.evaluate((el) => getComputedStyle(el).animationName),
+      "quick-task-blocked-shake",
+      "Dragging a completed task shakes its card",
+    )
+    await dad.waitForFunction(
+      (key) => !document.querySelector(`[data-month-occ="${key}"]`)?.classList.contains("quick-task-blocked-shake"),
+      completed,
+    )
+    await dad.waitForTimeout(200)
+    await dad.mouse.up()
+    await dad.waitForTimeout(20)
+    assert.equal(await dad.locator('#taskDialog').count(), 0, "Blocked drag does not open the editor")
+    await dad.waitForTimeout(100)
+    await completedTitle.click()
     let taskDialog=dad.locator('#taskDialog')
     assert.equal(await taskDialog.locator('#taskTitle').isDisabled(),true)
     await taskDialog.getByRole('button',{name:'取消',exact:true}).click()

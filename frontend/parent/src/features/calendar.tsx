@@ -1342,6 +1342,14 @@ function MonthCalendar({
                           data.categories.find((c) => c.id === o.categoryId)?.color || "#68716c",
                       } as React.CSSProperties
                     }
+                    onPointerDownCapture={
+                      quickEdit.active && isDone(data, o) && !quickEdit.frozen
+                        ? quickEdit.blockedDrag
+                        : undefined
+                    }
+                    onClickCapture={
+                      quickEdit.active && isDone(data, o) ? quickEdit.blockedClick : undefined
+                    }
                   >
                     {quickEdit.active ? (
                       <QuickEditTask edit={quickEdit} occurrence={o} />
