@@ -3,6 +3,7 @@ from urllib.parse import urlsplit, parse_qs
 
 from lele_growth.child_service import require
 from . import catalog, installations
+from .child_picker import list_plugin_children
 from .manifest import safe_relative_path
 from .policy import active_context, catalog_row, rows_dict
 
@@ -71,8 +72,7 @@ class PluginRoutes:
         if parts==['admin','plugin-children']:
             require(method=='GET',405,'接口不支持此操作。')
             search=query.get('q',''); require(isinstance(search,str) and len(search)<=200)
-            cur.execute("SELECT c.id,c.name,u.nickname AS \"ownerName\" FROM lele.children c JOIN lele.users u ON u.id=c.owner_id WHERE c.deleted_at IS NULL AND (strpos(lower(c.name),lower(%s))>0 OR strpos(lower(u.nickname),lower(%s))>0 OR strpos(lower(c.id),lower(%s))>0) ORDER BY c.name,c.id LIMIT 200",(search,search,search))
-            return {'children':rows_dict(cur)}
+            return list_plugin_children(cur, search, query.get('cursor', ''))
         if len(parts)==2:
             require(method=='GET',405,'接口不支持此操作。')
             return {'plugins':catalog.list_admin(cur,query.get('q',''))}

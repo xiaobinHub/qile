@@ -125,17 +125,10 @@ export function PluginConfigDialog({
     setSaving(true)
     setError("")
     try {
-      const result = await pluginStore.saveConfig(
-        child.id,
-        plugin,
-        checked.config,
-        loaded.revision,
-        enable,
-      )
+      await pluginStore.saveConfig(child.id, plugin, checked.config, loaded.revision, enable)
       if (!active.current || !pluginStore.matches(child.id, epoch)) return
-      setLoaded(result)
-      setDraft(configDraft(result.config, result.schema))
       notify(enable ? "应用配置已保存并启用。" : "应用配置已保存，当前儿童的家人共享此配置。")
+      onClose()
     } catch (failure) {
       if (active.current && pluginStore.matches(child.id, epoch)) {
         setError(pluginError(failure))
@@ -184,7 +177,15 @@ export function PluginConfigDialog({
           noValidate
         >
           <div className="plugin-config-body">
-            {plugin.instructions && <p className="plugin-instructions">{plugin.instructions}</p>}
+            {plugin.instructions && (
+              <section
+                className="plugin-instructions-card"
+                aria-labelledby="pluginInstructionsTitle"
+              >
+                <h3 id="pluginInstructionsTitle">使用说明</h3>
+                <p className="plugin-instructions">{plugin.instructions}</p>
+              </section>
+            )}
             {pluginReason(plugin) && <p className="settings-notice">{pluginReason(plugin)}</p>}
             {child.archived && <p className="settings-notice">儿童已归档，配置仅可查看。</p>}
             {reading ? <p role="status">正在读取共享配置…</p> : null}
@@ -232,14 +233,16 @@ export function PluginConfigDialog({
             <Button type="button" variant="outline" disabled={saving} onClick={onClose}>
               关闭
             </Button>
-            <Button
-              type="button"
-              variant="outline"
-              disabled={!confirmed || busy || reading}
-              onClick={() => setReload((value) => value + 1)}
-            >
-              重新读取
-            </Button>
+            {(changed || conflict || (!loaded && error)) && (
+              <Button
+                type="button"
+                variant="outline"
+                disabled={!confirmed || busy || reading}
+                onClick={() => setReload((value) => value + 1)}
+              >
+                重新读取
+              </Button>
+            )}
             {!confirmed && (
               <Button
                 type="button"

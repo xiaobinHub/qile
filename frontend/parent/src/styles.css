@@ -1,39 +1,10 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "../../shared/src/theme.css";
+@import "../../shared/src/workspace-theme.css";
 @import "./settings/styles.css";
 @source '../../shared/src';
 @source './';
-:root {
-  --background: #eef1f3;
-  --foreground: #1f2933;
-  --card: #ffffff;
-  --card-foreground: #1f2933;
-  --popover: #ffffff;
-  --popover-foreground: #1f2933;
-  --primary: #facc15;
-  --primary-foreground: #1f2933;
-  --secondary: #eef2f5;
-  --secondary-foreground: #374151;
-  --muted: #f1f4f6;
-  --muted-foreground: #526276;
-  --text-secondary: #526276;
-  --accent: #fff0b3;
-  --accent-foreground: #713f12;
-  --brand-ink: #854511;
-  --destructive: #b42318;
-  --destructive-ink: #912018;
-  --border: #d9e1e7;
-  --input: #c5cfd9;
-  --ring: #876716;
-  --radius-control: 6px;
-  --radius-card: 8px;
-  --radius-dialog: 8px;
-  --navigation-height: 40px;
-  --navigation-font-size: var(--text-body);
-  --menu-height: 40px;
-  --menu-font-size: var(--text-body);
-}
 body {
   margin: 0;
   color: var(--foreground);
@@ -135,6 +106,9 @@ a {
 }
 .nav [data-view] {
   flex-shrink: 0;
+  font-weight: 500;
+  translate: none;
+  transition-property: color, background-color, border-color, box-shadow;
 }
 .plugin-page {
   display: flex;

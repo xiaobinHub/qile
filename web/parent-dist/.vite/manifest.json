@@ -4,7 +4,7 @@
     "src": "../../node_modules/@fontsource-variable/inter/files/inter-latin-wght-normal.woff2"
   },
   "index.html": {
-    "file": "index-C4sdxhtQ.js",
+    "file": "index-CXf1PPOB.js",
     "name": "index",
     "src": "index.html",
     "isEntry": true,
@@ -13,24 +13,24 @@
       "src/features/print.tsx"
     ],
     "css": [
-      "index-KEvjosp0.css"
+      "index-TGHCiZPF.css"
     ],
     "assets": [
-      "body-Dshqjjcx.png",
-      "lid-DQ43e5nM.png",
+      "body-pK_vdBQA.webp",
+      "lid-CzhuCnmC.webp",
       "inter-latin-wght-normal-Dx4kXJAl.woff2"
     ]
   },
-  "src/assets/quick-trash/body.png": {
-    "file": "body-Dshqjjcx.png",
-    "src": "src/assets/quick-trash/body.png"
+  "src/assets/quick-trash/body.webp": {
+    "file": "body-pK_vdBQA.webp",
+    "src": "src/assets/quick-trash/body.webp"
   },
-  "src/assets/quick-trash/lid.png": {
-    "file": "lid-DQ43e5nM.png",
-    "src": "src/assets/quick-trash/lid.png"
+  "src/assets/quick-trash/lid.webp": {
+    "file": "lid-CzhuCnmC.webp",
+    "src": "src/assets/quick-trash/lid.webp"
   },
   "src/features/print.tsx": {
-    "file": "print-forkHUHX.js",
+    "file": "print-dUfwKpWu.js",
     "name": "print",
     "src": "src/features/print.tsx",
     "isDynamicEntry": true,
@@ -39,7 +39,7 @@
     ]
   },
   "src/features/store.tsx": {
-    "file": "store-BuWD-MCC.js",
+    "file": "store-CZOg8fBk.js",
     "name": "store",
     "src": "src/features/store.tsx",
     "isDynamicEntry": true,

@@ -1,10 +1,9 @@
 import { useEffect, useState } from "react"
-import { History, RefreshCw } from "lucide-react"
+import { History } from "lucide-react"
 import { errorMessage, isIgnoredError } from "@/lib/session"
 import { EmptyState } from "@shared/components/empty-state"
 import { FormFeedback } from "@shared/components/form-feedback"
 import { Badge } from "@shared/components/ui/badge"
-import { Button } from "@shared/components/ui/button"
 import {
   Card,
   CardHeader,
@@ -49,7 +48,6 @@ export function DeploymentHistory({ plugin, request }: { plugin: Plugin; request
   const [records, setRecords] = useState<Deployment[] | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
-  const [retry, setRetry] = useState(0)
   useEffect(() => {
     const controller = new AbortController()
     let active = true
@@ -74,27 +72,25 @@ export function DeploymentHistory({ plugin, request }: { plugin: Plugin; request
       active = false
       controller.abort()
     }
-  }, [plugin.id, plugin.revision, plugin.operationState, request, retry])
+  }, [plugin.id, plugin.revision, plugin.operationState, request])
 
   return (
-    <Card>
+    <Card className="plugin-detail-card" aria-labelledby="pluginDeploymentsTitle">
       <CardHeader>
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <CardTitle>版本与部署记录</CardTitle>
-          <Button
-            type="button"
-            variant="outline"
-            className="min-h-11"
-            disabled={loading}
-            onClick={() => setRetry((value) => value + 1)}
-          >
-            <RefreshCw data-icon="inline-start" />
-            刷新记录
-          </Button>
-        </div>
+        <CardTitle id="pluginDeploymentsTitle">版本与部署记录</CardTitle>
         <CardDescription>查看版本发布、切换、回退及失败记录。</CardDescription>
       </CardHeader>
       <CardContent aria-busy={loading}>
+        <dl className="plugin-details-grid plugin-version-summary">
+          <div>
+            <dt>活动版本</dt>
+            <dd>{plugin.version || "暂无活动版本"}</dd>
+          </div>
+          <div>
+            <dt>发布标识</dt>
+            <dd>{plugin.releaseId || "暂无"}</dd>
+          </div>
+        </dl>
         <FormFeedback message={error} />
         {!records && loading ? (
           <div role="status" aria-label="正在读取部署记录" className="flex flex-col gap-3">

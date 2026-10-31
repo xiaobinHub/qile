@@ -1159,6 +1159,7 @@ async function revocations() {
     }
     // Owner uses the actual host control; shared menu must disappear in both sessions.
     await applications(dad)
+    await dad.locator(`[data-plugin-more="${id}"]`).click()
     await dad.locator(`[data-plugin-disable="${id}"]`).click()
     await eventually("disabled " + id, async () => !(await plugin(id)).effectiveEnabled)
     await denied(id, release)

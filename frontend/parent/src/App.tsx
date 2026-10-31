@@ -1,6 +1,6 @@
 import { ChildAvatar } from "./features/child-avatar"
 import { Suspense, lazy, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react"
-import { Sprout } from "lucide-react"
+import { Menu, Sprout } from "lucide-react"
 import { ToastProvider, useToast } from "@shared/components/ui/toast"
 import { Button, Confirm, ErrorText, SaveResolution, Modal } from "./features/ui"
 import { Skeleton } from "@shared/components/ui/skeleton"
@@ -31,7 +31,7 @@ function Application() {
     child && !child.archived && plugins.childId === child.id && plugins.epoch === snapshot.epoch
       ? plugins.plugins
           .filter((plugin) => hasPageTab(plugin, child.id))
-          .sort((a, b) => a.sortOrder - b.sortOrder || a.id.localeCompare(b.id))
+          .sort((a, b) => b.sortOrder - a.sortOrder || a.id.localeCompare(b.id))
       : []
   const navigation: { key: string; label: string; view: View }[] = child
     ? [
@@ -47,6 +47,8 @@ function Application() {
     : [{ key: "settings", label: "设置", view: "settings" }]
   const activeViewKey =
     typeof snapshot.view === "object" ? `plugin:${snapshot.view.pluginId}` : snapshot.view
+  const [settingsMenuOpen, setSettingsMenuOpen] = useState(false)
+  useEffect(() => setSettingsMenuOpen(false), [activeViewKey, child?.id])
   const [editor, setEditor] = useState<Editor | null>(null),
     [switcher, setSwitcher] = useState(false),
     [logout, setLogout] = useState(false),
@@ -172,6 +174,22 @@ function Application() {
       ) : (
         <div className="app">
           <header className="topbar">
+            {snapshot.view === "settings" && (
+              <Button
+                id="openSettingsMenu"
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="settings-menu-trigger"
+                aria-label="打开设置菜单"
+                aria-haspopup="dialog"
+                aria-controls="settingsMobileNavigation"
+                aria-expanded={settingsMenuOpen}
+                onClick={() => setSettingsMenuOpen(true)}
+              >
+                <Menu aria-hidden />
+              </Button>
+            )}
             <div className="brand">
               <span className="brand-mark">
                 <Sprout aria-hidden />
@@ -241,6 +259,8 @@ function Application() {
               </div>
             ) : snapshot.view === "settings" ? (
               <SettingsPage
+                menuOpen={settingsMenuOpen}
+                onMenuOpenChange={setSettingsMenuOpen}
                 key={`${child?.id || "account"}:${snapshot.epoch}`}
                 controller={controller}
                 initialPage={settingsInitialPage.current}

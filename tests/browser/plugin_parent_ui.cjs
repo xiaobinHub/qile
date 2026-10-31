@@ -336,7 +336,13 @@ async function mock(context, role) {
 }
 async function settings(page) {
   await page.locator('[data-view="settings"]').click()
-  await page.locator("#openApplicationSettings").click()
+  if (await page.locator("#openApplicationSettings").isVisible())
+    await page.locator("#openApplicationSettings").click()
+  else {
+    await page.getByRole("button", { name: "打开设置菜单", exact: true }).click()
+    await page.locator("#mobileOpenApplicationSettings").click()
+    await page.getByRole("dialog", { name: "设置菜单", exact: true }).waitFor({ state: "hidden" })
+  }
   await page.locator('[data-plugin-id="service-demo"]').waitFor()
 }
 async function focus(page) {
@@ -455,6 +461,7 @@ async function run() {
     await page.locator('[data-plugin-config="service-demo"]').click()
     const dialog = page.locator("#pluginConfigDialog")
     await dialog.getByLabel("提醒内容", { exact: false }).fill("共享的新提醒")
+    assert.equal(await dialog.getByRole("button", { name: "重新读取", exact: true }).count(), 0)
     await dialog.getByLabel("每天次数", { exact: false }).fill("8")
     await dialog.getByRole("button", { name: "保存配置", exact: true }).click()
     await dialog.getByText("不能大于 5。", { exact: true }).waitFor()
@@ -498,15 +505,23 @@ async function run() {
     await dialog.getByRole("combobox").click()
     await page.getByRole("option", { name: "记录", exact: true }).click()
     await dialog.getByRole("button", { name: "保存配置", exact: true }).click()
+    await dialog.waitFor({ state: "hidden" })
     await page.waitForFunction(
-      () => !document.querySelector('#pluginConfigDialog button[type="submit"]').disabled,
+      () => document.activeElement?.getAttribute("data-plugin-config") === "service-demo",
     )
+    await page
+      .getByText("应用配置已保存，当前儿童的家人共享此配置。", { exact: true })
+      .first()
+      .waitFor()
     assert.equal(configFor("a", "service-demo").title, "共享的新提醒")
     assert.equal(configFor("a", "service-demo").active, true)
     assert.equal(configFor("a", "service-demo").channel, "记录")
     assert.deepEqual(configFor("a", "service-demo").weekdays, ["周一", "周三"])
     assert.equal(state.writes.find((w) => w.action === "config").body.expectedRevision, 4)
     assert.equal(state.assets.length, 0)
+    await page.locator('[data-plugin-config="service-demo"]').click()
+    await dialog.getByLabel("提醒内容", { exact: false }).waitFor()
+    assert.equal(await dialog.getByLabel("提醒内容", { exact: false }).inputValue(), "共享的新提醒")
     await checkA11y(page)
     await page.screenshot({ path: path.join(out, "config-desktop.png") })
     state.conflictNext = true
@@ -719,6 +734,7 @@ async function run() {
     )
 
     await settings(page)
+    await page.locator('[data-plugin-more="page-demo"]').click()
     await page.locator('[data-plugin-disable="page-demo"]').click()
     await page.waitForFunction(() => !document.querySelector('[data-view="plugin:page-demo"]'))
     await focus(memberPage)
@@ -729,6 +745,7 @@ async function run() {
     await dialog.locator("#pluginConfigField-0").waitFor()
     assert.equal(await dialog.locator("#pluginConfigField-0").isDisabled(), false)
     await dialog.getByRole("button", { name: "关闭", exact: true }).last().click()
+    await page.locator('[data-plugin-more="page-demo"]').click()
     await page.locator('[data-plugin-uninstall="page-demo"]').click()
     await page.getByRole("alertdialog").getByRole("button", { name: "卸载", exact: true }).click()
     await page.locator('[data-plugin-install="page-demo"]').waitFor()
@@ -859,7 +876,7 @@ async function run() {
     const beforeCombined = state.writes.length
     const beforeCombinedRevision = getPlugin("a", "new-demo").revision
     await dialog.getByRole("button", { name: "保存并启用", exact: true }).click()
-    await dialog.locator("[data-plugin-save-enable]").waitFor({ state: "hidden" })
+    await dialog.waitFor({ state: "hidden" })
     const combined = state.writes.slice(beforeCombined)
     assert.deepEqual(
       combined.map((write) => write.action),
@@ -868,7 +885,6 @@ async function run() {
     assert.equal(combined[1].body.expectedRevision, beforeCombinedRevision + 1)
     assert.notEqual(combined[0].body.operationId, combined[1].body.operationId)
     assert.equal(getPlugin("a", "new-demo").effectiveEnabled, true)
-    await dialog.getByRole("button", { name: "关闭", exact: true }).last().click()
 
     await page.locator('[data-plugin-config="disabled-demo"]').click()
     await dialog.getByLabel("提醒内容", { exact: false }).fill("启用失败也保留的草稿")
@@ -890,9 +906,8 @@ async function run() {
       true,
     )
     await dialog.getByRole("button", { name: "保存并启用", exact: true }).click()
-    await dialog.locator("[data-plugin-save-enable]").waitFor({ state: "hidden" })
+    await dialog.waitFor({ state: "hidden" })
     assert.equal(getPlugin("a", "disabled-demo").effectiveEnabled, true)
-    await dialog.getByRole("button", { name: "关闭", exact: true }).last().click()
     checks.push(
       "save-and-enable sends config then enable with returned revision; failed enable preserves draft/error and retry succeeds",
     )
@@ -922,6 +937,7 @@ async function run() {
       "[data-plugin-uninstall]",
       "[data-plugin-config]",
       "[data-plugin-open]",
+      "[data-plugin-more]",
     ]) {
       assert.equal(
         await page
@@ -962,10 +978,7 @@ async function run() {
       await dialog.getByRole("button", { name: "保存配置", exact: true }).isDisabled(),
       true,
     )
-    assert.equal(
-      await dialog.getByRole("button", { name: "重新读取", exact: true }).isDisabled(),
-      true,
-    )
+    assert.equal(await dialog.getByRole("button", { name: "重新读取", exact: true }).count(), 0)
     assert.equal(
       await dialog.getByLabel("提醒内容", { exact: false }).inputValue(),
       "状态未确认时保留的草稿",

@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState, type FormEvent } from "react"
-import { ArrowLeft, RefreshCw } from "lucide-react"
+import { ArrowLeft, Pencil, X } from "lucide-react"
 import { errorMessage, isIgnoredError } from "@/lib/session"
 import { useMounted } from "@/lib/use-mounted"
 import { AsyncConfirm } from "@shared/components/async-confirm"
 import { FormField } from "@shared/components/form-field"
 import { FormFeedback } from "@shared/components/form-feedback"
-import { PageHeading } from "@shared/components/page-heading"
 import { Button } from "@shared/components/ui/button"
+import { useToast } from "@shared/components/ui/toast"
 import {
   Card,
   CardHeader,
@@ -15,15 +15,16 @@ import {
   CardContent,
   CardFooter,
 } from "@shared/components/ui/card"
-import { Input } from "@shared/components/ui/input"
 import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@shared/components/ui/select"
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@shared/components/ui/dialog"
+import { Input } from "@shared/components/ui/input"
 import { Textarea } from "@shared/components/ui/textarea"
 import { PluginApiError, type PluginRequest } from "./client"
 import { DeploymentHistory } from "./deployments"
@@ -46,7 +47,9 @@ export function PluginDetail({
   refreshing: boolean
   onBack: () => void
 }) {
+  const { toast } = useToast()
   // Keep the revision that the drafts were based on, even when polling sees another admin's edit.
+  const [editing, setEditing] = useState(false)
   const [base, setBase] = useState(plugin)
   const [metadata, setMetadata] = useState(() => metadataOf(plugin))
   const [sortOrder, setSortOrder] = useState(String(plugin.sortOrder))
@@ -54,22 +57,16 @@ export function PluginDetail({
   const [busy, setBusy] = useState(false)
   const [uncertain, setUncertain] = useState(false)
   const [error, setError] = useState("")
-  const [message, setMessage] = useState("")
   const [confirmation, setConfirmation] = useState<Action | null>(null)
   const pending = useRef(false)
   const mounted = useMounted()
   const latest = useRef(plugin)
   latest.current = plugin
 
-  const selectedIcon = metadata.icon ?? base.icon
-  const packageIcons = [...new Set((plugin.icons ?? []).filter(Boolean))]
-  const iconDirty = selectedIcon !== base.icon
-  const iconValid = !iconDirty || selectedIcon === "" || packageIcons.includes(selectedIcon)
   const metadataDirty =
     metadata.name !== base.name ||
     metadata.description !== base.description ||
     metadata.instructions !== base.instructions ||
-    iconDirty ||
     sortOrder !== String(base.sortOrder)
   const scopeDirty = !sameScope(base, scope)
   const dirty = metadataDirty || scopeDirty
@@ -79,7 +76,7 @@ export function PluginDetail({
   const shrinking = isScopeShrink(base, scope)
   const emptyScope = scope.scopeMode === "children" && scope.childIds.length === 0
   const validSortOrder = sortOrder.trim() !== "" && Number.isSafeInteger(Number(sortOrder))
-  const metadataValid = Boolean(metadata.name.trim() && validSortOrder && iconValid)
+  const metadataValid = Boolean(metadata.name.trim() && validSortOrder)
   const publishProblem = updating
     ? "插件更新中，请等待更新完成后上架。"
     : plugin.operationState !== "ready"
@@ -91,7 +88,7 @@ export function PluginDetail({
           : base.scopeMode === "children" && !base.childIds.length
             ? "请先保存至少一位指定儿童。"
             : dirty
-              ? "请先保存或重新载入未保存的修改。"
+              ? "请先保存未保存的修改。"
               : ""
 
   function adopt(next: Plugin, preserve?: "metadata" | "scope" | "all") {
@@ -122,7 +119,7 @@ export function PluginDetail({
       if (mounted.current && next) {
         adopt(next)
         setConfirmation(null)
-        setMessage("已载入最新资料和发布范围。")
+        toast({ title: "已载入最新资料和发布范围。" })
       }
     } catch (failure) {
       if (mounted.current && !isIgnoredError(failure)) setError(errorMessage(failure))
@@ -141,11 +138,9 @@ export function PluginDetail({
       throw new Error("更新期间仅允许下架或缩小发布范围。")
     if (action === "publish" && publishProblem) throw new Error(publishProblem)
     if (action === "scope" && emptyScope) throw new Error("请选择至少一位儿童。")
-    if (action === "metadata" && !iconValid) throw new Error("请选择发布包提供的图标。")
     pending.current = true
     setBusy(true)
     setError("")
-    setMessage("")
     const expectedRevision = base.revision
     const path = `plugins/${encodeURIComponent(plugin.id)}`
     const preserve =
@@ -166,7 +161,6 @@ export function PluginDetail({
               description: metadata.description.trim(),
               instructions: metadata.instructions.trim(),
               sortOrder: Number(sortOrder),
-              ...(iconDirty ? { icon: selectedIcon } : {}),
               expectedRevision,
             }
           : action === "scope"
@@ -177,22 +171,25 @@ export function PluginDetail({
               }
             : { expectedRevision },
       )
-      if (!mounted.current) return
+      if (!mounted.current) return false
+      let confirmed = Boolean(result.plugin)
       if (result.plugin) adopt(result.plugin, preserve)
       setConfirmation(null)
-      setMessage(
-        action === "metadata"
-          ? "插件资料已保存。"
-          : action === "scope"
-            ? "发布范围已保存，移出范围的儿童需由负责人重新启用。"
-            : action === "publish"
-              ? "插件已上架；儿童需自行安装并由负责人启用。"
-              : "插件已下架，重新上架后仍需由负责人重新启用。",
-      )
+      toast({
+        title:
+          action === "metadata"
+            ? "插件资料已保存。"
+            : action === "scope"
+              ? "发布范围已保存，移出范围的儿童需由负责人重新启用。"
+              : action === "publish"
+                ? "插件已上架；儿童需自行安装并由负责人启用。"
+                : "插件已下架，重新上架后仍需由负责人重新启用。",
+      })
       try {
         const plugins = await refresh()
         const next = plugins.find((item) => item.id === plugin.id)
         if (mounted.current && next) {
+          confirmed = true
           if (!preserve || result.plugin?.revision === next.revision) adopt(next, preserve)
           // Do not rebase remaining drafts onto an unrelated admin's edit between commit/read.
           // With a response plugin, retaining that baseline lets the usual stale banner appear.
@@ -207,8 +204,9 @@ export function PluginDetail({
           setError("操作已提交，但最新状态读取失败。请重新载入后继续。")
         }
       }
+      return confirmed
     } catch (failure) {
-      if (!mounted.current || isIgnoredError(failure)) return
+      if (!mounted.current || isIgnoredError(failure)) return false
       if (failure instanceof PluginApiError && failure.status === 409) {
         setConfirmation(null)
         setUncertain(true)
@@ -241,9 +239,22 @@ export function PluginDetail({
   function saveMetadata(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!metadataValid || locked || updating) return
-    void mutate("metadata").catch(() => {
-      /* Displayed in the form. */
-    })
+    void mutate("metadata")
+      .then((confirmed) => {
+        if (confirmed && mounted.current) setEditing(false)
+      })
+      .catch(() => {
+        /* Displayed in the form. */
+      })
+  }
+
+  function changeEditing(open: boolean) {
+    if (pending.current) return
+    if (open && (locked || updating)) return
+    setEditing(open)
+    setMetadata(metadataOf(base))
+    setSortOrder(String(base.sortOrder))
+    if (!uncertain) setError("")
   }
 
   const impact = `当前有 ${plugin.installedCount} 个已安装实例、${plugin.enabledCount} 个已启用实例。`
@@ -255,112 +266,199 @@ export function PluginDetail({
         : `${impact} ${shrinking ? `本次缩小范围，最多影响 ${plugin.installedCount} 个已安装实例、${plugin.enabledCount} 个已启用实例。` : "本次调整开放对象。"} 仅移出范围的儿童会失去资格，保留配置及历史；恢复范围后需负责人重新启用。新增范围不会自动安装。`
 
   return (
-    <div className="flex min-w-0 flex-col gap-5">
-      <Button
-        type="button"
-        variant="ghost"
-        className="min-h-11 self-start"
-        disabled={busy}
-        onClick={onBack}
-      >
-        <ArrowLeft data-icon="inline-start" />
-        返回插件列表
-      </Button>
-      <PageHeading
-        title={plugin.name || plugin.id}
-        description="维护插件资料、发布范围与上下架状态。"
-        actions={
+    <div className="plugin-detail-workspace">
+      <header className="plugin-detail-header">
+        <Button
+          type="button"
+          variant="ghost"
+          className="self-start"
+          disabled={busy}
+          onClick={onBack}
+        >
+          <ArrowLeft data-icon="inline-start" />
+          返回插件列表
+        </Button>
+        <div className="plugin-detail-title-row">
+          <div className="plugin-detail-identity">
+            <PluginIcon icon={plugin.icon} />
+            <div className="min-w-0">
+              <h1>{plugin.name || plugin.id}</h1>
+              <PluginStatuses plugin={plugin} />
+            </div>
+          </div>
+          <div className="plugin-detail-actions">
+            {plugin.publicationStatus === "published" ? (
+              <Button
+                type="button"
+                variant="destructive"
+                disabled={locked}
+                onClick={() => setConfirmation("unpublish")}
+              >
+                下架插件
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                disabled={locked || Boolean(publishProblem)}
+                aria-describedby={publishProblem ? "plugin-publish-help" : undefined}
+                onClick={() => setConfirmation("publish")}
+              >
+                {plugin.publicationStatus === "unpublished" ? "重新上架" : "上架插件"}
+              </Button>
+            )}
+          </div>
+        </div>
+        <FormFeedback message={editing ? "" : error} />
+        {stale && !editing && (
+          <FormFeedback message="插件已有新的修改。当前草稿仍保留；请重新载入并核对后再编辑，重新载入会放弃草稿。" />
+        )}
+        {(uncertain || stale) && !editing && (
           <Button
+            id="pluginRecoverDetails"
             type="button"
             variant="outline"
-            className="min-h-11"
+            className="self-start"
             disabled={busy || refreshing}
             onClick={() => void reload()}
           >
-            <RefreshCw data-icon="inline-start" />
-            重新载入
+            核对最新状态
           </Button>
-        }
-      />
-      <PluginStatuses plugin={plugin} />
-      <FormFeedback message={error} />
-      <FormFeedback message={message} success />
-      {stale ? (
-        <FormFeedback message="插件已有新的修改。当前草稿仍保留；请重新载入最新资料后再编辑，重新载入会放弃草稿。" />
-      ) : null}
-      {dirty ? (
-        <p role="status" className="text-caption text-muted-foreground">
-          有未保存的修改。返回列表或重新载入会放弃草稿。
-        </p>
-      ) : null}
-      {updating ? (
-        <p role="status" className="text-sm text-muted-foreground">
-          插件正在更新，暂不能修改资料、上架或扩大范围；仍可下架、缩小范围。
-        </p>
-      ) : null}
-      {plugin.reason ? <FormFeedback message={plugin.reason} /> : null}
-      <Card>
-        <CardHeader>
-          <CardTitle>发布与影响</CardTitle>
-          <CardDescription>{impact}</CardDescription>
+        )}
+        {dirty && !editing && (
+          <p role="status" className="text-caption text-muted-foreground">
+            有未保存的修改。返回列表会放弃草稿。
+          </p>
+        )}
+        {updating && (
+          <p role="status" className="text-caption text-muted-foreground">
+            插件正在更新，暂不能修改资料、上架或扩大范围；仍可下架、缩小范围。
+          </p>
+        )}
+        {plugin.reason && <FormFeedback message={plugin.reason} />}
+        {plugin.publicationStatus !== "published" && publishProblem && (
+          <p id="plugin-publish-help" className="text-caption text-muted-foreground">
+            {publishProblem}
+          </p>
+        )}
+      </header>
+      <Card className="plugin-detail-card" aria-labelledby="pluginDetailsTitle">
+        <CardHeader className="plugin-card-heading">
+          <CardTitle id="pluginDetailsTitle">插件详情</CardTitle>
+          <Button
+            id="editPluginMetadata"
+            type="button"
+            size="sm"
+            className="h-8 min-h-8"
+            variant="outline"
+            disabled={locked || updating}
+            onClick={() => changeEditing(true)}
+          >
+            <Pencil data-icon="inline-start" />
+            编辑
+          </Button>
         </CardHeader>
         <CardContent>
-          <dl className="grid min-w-0 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <dl className="plugin-details-grid">
             {[
+              ["名称", plugin.name || plugin.id],
               ["插件 ID", plugin.id],
               ["类型", plugin.type === "page" ? "页面型" : "后台型"],
-              ["活动版本", plugin.version || "暂无活动版本"],
-              ["发布标识", plugin.releaseId || "暂无"],
+              ["排序", String(plugin.sortOrder)],
             ].map(([label, value]) => (
-              <div key={label} className="min-w-0">
-                <dt className="text-caption text-muted-foreground">{label}</dt>
-                <dd className="mt-1 break-all">{value}</dd>
+              <div key={label}>
+                <dt>{label}</dt>
+                <dd>{value}</dd>
               </div>
             ))}
+            <div className="plugin-details-wide">
+              <dt>介绍</dt>
+              <dd>{plugin.description || "尚未填写"}</dd>
+            </div>
+            <div className="plugin-details-wide">
+              <dt>使用说明</dt>
+              <dd>{plugin.instructions || "尚未填写"}</dd>
+            </div>
           </dl>
-          <p className="text-caption text-muted-foreground">
-            已保存范围：
-            {plugin.scopeMode === "all" ? "全部儿童" : `${plugin.childIds.length} 位指定儿童`}
-            。启用数量代表家长的启用选择，实际可用还取决于发布范围、配置和运行状态。
-          </p>
-          {plugin.publicationStatus !== "published" && publishProblem ? (
-            <p id="plugin-publish-help" className="text-caption text-muted-foreground">
-              {publishProblem}
-            </p>
-          ) : null}
         </CardContent>
-        <CardFooter className="flex-wrap gap-3">
-          {plugin.publicationStatus === "published" ? (
-            <Button
-              type="button"
-              variant="destructive"
-              className="min-h-11"
-              disabled={locked}
-              onClick={() => setConfirmation("unpublish")}
-            >
-              下架插件
-            </Button>
-          ) : (
-            <Button
-              type="button"
-              className="min-h-11"
-              disabled={locked || Boolean(publishProblem)}
-              aria-describedby={publishProblem ? "plugin-publish-help" : undefined}
-              onClick={() => setConfirmation("publish")}
-            >
-              {plugin.publicationStatus === "unpublished" ? "重新上架" : "上架插件"}
-            </Button>
-          )}
+      </Card>
+      <Card className="plugin-detail-card" aria-labelledby="pluginScopeTitle">
+        <CardHeader className="plugin-scope-heading">
+          <CardTitle id="pluginScopeTitle">发布范围</CardTitle>
+          <CardDescription className="text-caption">{impact}</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ScopePicker
+            value={scope}
+            original={base}
+            selectedChildren={plugin.scopeChildren}
+            updating={updating}
+            disabled={locked}
+            request={request}
+            onChange={setScope}
+          />
+        </CardContent>
+        <CardFooter className="justify-end">
+          <Button
+            type="button"
+            disabled={locked || !scopeDirty || emptyScope || (updating && !shrinking)}
+            onClick={() => setConfirmation("scope")}
+          >
+            保存发布范围
+          </Button>
         </CardFooter>
       </Card>
-      <div className="grid min-w-0 items-start gap-5 xl:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>插件资料</CardTitle>
-            <CardDescription>对家长展示的名称、介绍和使用说明。</CardDescription>
-          </CardHeader>
-          <form onSubmit={saveMetadata} className="flex flex-col gap-5">
-            <CardContent>
+      <DeploymentHistory plugin={plugin} request={request} />
+      <Dialog open={editing} onOpenChange={changeEditing}>
+        <DialogContent
+          className="ui-modal-frame admin-dialog plugin-metadata-dialog"
+          showCloseButton={false}
+          onOpenAutoFocus={(event) => {
+            event.preventDefault()
+            document.getElementById("plugin-name")?.focus()
+          }}
+          onCloseAutoFocus={(event) => {
+            event.preventDefault()
+            const edit = document.getElementById("editPluginMetadata") as HTMLButtonElement | null
+            const target =
+              edit && !edit.disabled ? edit : document.getElementById("pluginRecoverDetails")
+            target?.focus()
+          }}
+          onEscapeKeyDown={(event) => {
+            if (pending.current) event.preventDefault()
+          }}
+          onInteractOutside={(event) => {
+            if (pending.current) event.preventDefault()
+          }}
+        >
+          <DialogClose asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              aria-label="关闭"
+              className="absolute top-4 right-4"
+              disabled={busy}
+            >
+              <X aria-hidden />
+            </Button>
+          </DialogClose>
+          <DialogHeader className="ui-modal-header pr-16 text-left">
+            <DialogTitle>编辑插件详情</DialogTitle>
+            <DialogDescription>修改家长端展示的名称、介绍、使用说明和排序。</DialogDescription>
+          </DialogHeader>
+          <form
+            id="pluginMetadataForm"
+            onSubmit={saveMetadata}
+            className="flex min-h-0 flex-1 flex-col"
+          >
+            <div className="ui-modal-body flex flex-col gap-5">
+              <FormFeedback message={error} />
+              {stale && (
+                <FormFeedback message="插件已有新的修改。请重新载入并核对后再编辑，重新载入会放弃当前草稿。" />
+              )}
+              {uncertain && !error && (
+                <FormFeedback message="保存结果尚未确认，请重新载入并核对后再操作。" />
+              )}
               <fieldset disabled={locked || updating} className="flex min-w-0 flex-col gap-5">
                 <legend className="sr-only">编辑插件资料</legend>
                 <FormField id="plugin-name" label="名称" required>
@@ -396,7 +494,7 @@ export function PluginDetail({
                   id="plugin-sort-order"
                   label="排序"
                   error={!validSortOrder ? "请输入有效整数。" : undefined}
-                  help="数值越小，展示越靠前。"
+                  help="数值越大，展示越靠前。"
                 >
                   <Input
                     type="number"
@@ -407,99 +505,37 @@ export function PluginDetail({
                   />
                 </FormField>
               </fieldset>
-              <fieldset disabled={locked || updating} className="flex min-w-0 flex-col gap-3">
-                <legend className="mb-2 text-sm font-medium">发布包图标</legend>
-                <Select
-                  value={selectedIcon ? `package:${selectedIcon}` : "builtin"}
-                  disabled={locked || updating}
-                  onValueChange={(value) => {
-                    const icon = value === "builtin" ? "" : value.slice("package:".length)
-                    if (icon === "" || packageIcons.includes(icon))
-                      setMetadata({ ...metadata, icon })
-                  }}
+            </div>
+            <DialogFooter className="ui-modal-footer">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={busy}
+                onClick={() => changeEditing(false)}
+              >
+                取消
+              </Button>
+              {(uncertain || stale) && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={busy || refreshing}
+                  onClick={() => void reload()}
                 >
-                  <FormField
-                    id="plugin-icon"
-                    label="图标"
-                    help="仅可选择发布包提供的图标，或使用内置默认图标。"
-                    error={!iconValid ? "所选图标已不可用，请重新选择。" : undefined}
-                  >
-                    <SelectTrigger className="min-h-11 w-full min-w-0">
-                      <SelectValue />
-                    </SelectTrigger>
-                  </FormField>
-                  <SelectContent position="popper">
-                    <SelectGroup>
-                      <SelectItem value="builtin">内置默认图标</SelectItem>
-                      {selectedIcon && !packageIcons.includes(selectedIcon) ? (
-                        <SelectItem value={`package:${selectedIcon}`} disabled>
-                          当前图标（保留）
-                        </SelectItem>
-                      ) : null}
-                      {packageIcons.map((icon) => (
-                        <SelectItem key={icon} value={`package:${icon}`}>
-                          <span className="max-w-[min(70vw,24rem)] truncate" title={icon}>
-                            {icon}
-                          </span>
-                        </SelectItem>
-                      ))}
-                    </SelectGroup>
-                  </SelectContent>
-                </Select>
-                <div className="flex min-w-0 items-center gap-3">
-                  <PluginIcon icon={selectedIcon} />
-                  <p className="min-w-0 break-all text-caption text-muted-foreground">
-                    {selectedIcon || "使用内置默认图标"}
-                  </p>
-                </div>
-              </fieldset>
-            </CardContent>
-            <CardFooter>
+                  读取最新资料
+                </Button>
+              )}
               <Button
                 type="submit"
-                className="min-h-11"
+                className="min-h-10"
                 disabled={locked || updating || !metadataDirty || !metadataValid}
               >
                 {busy ? "正在保存…" : "保存资料"}
               </Button>
-            </CardFooter>
+            </DialogFooter>
           </form>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>发布范围</CardTitle>
-            <CardDescription>开放资格以儿童为单位，同一儿童的家庭成员共享。</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <ScopePicker
-              value={scope}
-              original={base}
-              updating={updating}
-              disabled={locked}
-              request={request}
-              onChange={setScope}
-            />
-            {scopeDirty ? (
-              <p role="status" className="text-caption text-muted-foreground">
-                {shrinking
-                  ? `缩小范围最多影响 ${plugin.installedCount} 个已安装实例、${plugin.enabledCount} 个已启用实例；仅移出范围的儿童受影响。`
-                  : "新增范围只开放发现和安装资格，不自动安装或启用。"}
-              </p>
-            ) : null}
-          </CardContent>
-          <CardFooter>
-            <Button
-              type="button"
-              className="min-h-11"
-              disabled={locked || !scopeDirty || emptyScope || (updating && !shrinking)}
-              onClick={() => setConfirmation("scope")}
-            >
-              保存发布范围
-            </Button>
-          </CardFooter>
-        </Card>
-      </div>
-      <DeploymentHistory plugin={plugin} request={request} />
+        </DialogContent>
+      </Dialog>
       <AsyncConfirm
         open={confirmation !== null}
         onOpenChange={(open) => {

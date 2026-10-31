@@ -228,7 +228,7 @@ export function CalendarPage({
           {mode === "month" && !child.archived && (
             <Button
               id="quickEditBtn"
-              variant={quickEdit.active ? "secondary" : "outline"}
+              variant="default"
               className={quickEdit.active ? "quick-edit-active-button" : undefined}
               aria-pressed={quickEdit.active}
               disabled={quickEdit.active || busy || snapshot.unconfirmed}
@@ -236,6 +236,17 @@ export function CalendarPage({
             >
               <Pencil />
               {quickEdit.active ? "快捷编辑中" : "快捷编辑"}
+            </Button>
+          )}
+          {!child.archived && (
+            <Button
+              id="newTaskBtn"
+              variant="outline"
+              disabled={quickEdit.active}
+              onClick={() => openTask({ date: today() })}
+            >
+              <Plus />
+              新建任务
             </Button>
           )}
           <Button
@@ -247,16 +258,6 @@ export function CalendarPage({
             <Printer />
             打印
           </Button>
-          {!child.archived && (
-            <Button
-              id="newTaskBtn"
-              disabled={quickEdit.active}
-              onClick={() => openTask({ date: today() })}
-            >
-              <Plus />
-              新建任务
-            </Button>
-          )}
         </div>
       </div>
       {child.archived && <p className="notice">孩子已归档，当前仅可查看。</p>}

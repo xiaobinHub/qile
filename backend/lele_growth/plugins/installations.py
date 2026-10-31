@@ -44,7 +44,7 @@ def child_plugin(cur, plugin_id, child_id):
 def list_child(cur, child_id, *, view='available', query=''):
     require(view in ('available','installed','status') and isinstance(query,str) and len(query)<=200)
     cur.execute("SELECT p.id FROM lele.plugin_catalog p LEFT JOIN lele.child_plugins cp ON cp.plugin_id=p.id AND cp.child_id=%s WHERE strpos(lower(p.name),lower(%s))>0 AND " +
-                ("cp.installed" if view in ('installed','status') else "p.publication_status='published' AND (p.scope_mode='all' OR EXISTS(SELECT 1 FROM lele.plugin_scope_children s WHERE s.plugin_id=p.id AND s.child_id=%s))") + ' ORDER BY p.sort_order,p.id',
+                ("cp.installed" if view in ('installed','status') else "p.publication_status='published' AND (p.scope_mode='all' OR EXISTS(SELECT 1 FROM lele.plugin_scope_children s WHERE s.plugin_id=p.id AND s.child_id=%s))") + ' ORDER BY p.sort_order DESC,p.id',
                 (child_id,query) if view in ('installed','status') else (child_id,query,child_id))
     return [child_plugin(cur,r['id'],child_id) for r in rows_dict(cur)]
 

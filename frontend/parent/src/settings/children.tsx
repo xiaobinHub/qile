@@ -3,7 +3,7 @@ import { ChildCreateDialog } from "./child-create-dialog"
 import { ChildAvatar } from "../features/child-avatar"
 import { ChildAvatarDialog } from "./child-avatar-dialog"
 import { childGenderLabel } from "../features/child-gender-picker"
-import { useState } from "react"
+import { useState, type CSSProperties } from "react"
 import {
   Badge,
   Button,
@@ -195,7 +195,15 @@ export function ChildManagement({ controller, child }: { controller: Controller;
                 retry={() => setReload((value) => value + 1)}
               />
             )}
-            <ul className="child-family-list">
+            <ul
+              className="child-family-list workspace-card-grid"
+              style={
+                {
+                  "--workspace-card-count":
+                    read.value.members.length + read.value.invitations.length,
+                } as CSSProperties
+              }
+            >
               {read.value.members.map((member) => (
                 <li className="child-family-item" key={member.userId} data-member={member.userId}>
                   <Card className="child-family-row gap-0 py-0">

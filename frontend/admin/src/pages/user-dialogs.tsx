@@ -46,7 +46,7 @@ function CloseButton({ disabled }: { disabled: boolean }) {
         type="button"
         variant="ghost"
         size="icon-sm"
-        className="absolute top-3 right-3 size-11 text-muted-foreground"
+        className="absolute top-3 right-3 size-10 text-muted-foreground"
         disabled={disabled}
         aria-label="关闭弹窗"
       >
@@ -112,7 +112,7 @@ export function CreateUserDialog({ onComplete }: { onComplete: MutationComplete 
   return (
     <Dialog open={open} onOpenChange={changeOpen}>
       <DialogTrigger asChild>
-        <Button id="openCreateUser" type="button" className="h-11 gap-2 shadow-xs">
+        <Button id="openCreateUser" type="button" className="h-10 gap-2 shadow-xs">
           <Plus className="size-4" />
           开通账号
         </Button>

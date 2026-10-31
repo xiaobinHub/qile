@@ -106,7 +106,7 @@ function UserActions({
           data-actions={user.id}
           aria-label={`管理 ${user.nickname} 的账号`}
           disabled={Boolean(pendingAction.current)}
-          className="size-11 text-muted-foreground"
+          className="size-10 text-muted-foreground"
         >
           <Ellipsis className="size-4" />
         </Button>
@@ -261,14 +261,14 @@ export function UsersPage() {
           className="flex flex-wrap items-center gap-3 border-b px-4 py-3 sm:px-5"
         >
           <div className="relative min-w-0 flex-[1_1_210px] sm:max-w-[300px]">
-            <Search className="pointer-events-none absolute top-3.5 left-3 size-4 text-muted-foreground" />
+            <Search className="pointer-events-none absolute top-1/2 -translate-y-1/2 left-3 size-4 text-muted-foreground" />
             <Input
               id="search"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder="搜索昵称或登录名"
               aria-label="搜索账号"
-              className="h-11 bg-card pr-11 pl-9 text-sm"
+              className="h-10 bg-card pr-11 pl-9 text-sm"
             />
             {search && (
               <Button
@@ -276,7 +276,7 @@ export function UsersPage() {
                 variant="ghost"
                 size="icon-xs"
                 aria-label="清除搜索"
-                className="absolute top-0 right-0 size-11 text-muted-foreground"
+                className="absolute top-0 right-0 size-10 text-muted-foreground"
                 onClick={() => setSearch("")}
               >
                 <X className="size-3.5" />
@@ -290,7 +290,7 @@ export function UsersPage() {
             <SelectTrigger
               id="statusFilter"
               aria-label="筛选账号状态"
-              className="h-11 w-[130px] bg-card text-sm"
+              className="h-10 w-[130px] bg-card text-sm"
             >
               <SelectValue />
             </SelectTrigger>
@@ -310,7 +310,7 @@ export function UsersPage() {
               setFlash("")
               void loadUsers()
             }}
-            className="ml-auto h-11 gap-2 bg-card px-3 text-sm"
+            className="ml-auto h-10 gap-2 bg-card px-3 text-sm"
           >
             <RefreshCw className={`size-3.5 ${loading ? "animate-spin" : ""}`} />
             刷新
@@ -341,7 +341,7 @@ export function UsersPage() {
           <Table className="w-full min-w-[640px] table-fixed sm:min-w-0">
             <TableHeader className="sticky top-0 z-10 bg-card">
               <TableRow className="bg-muted/30 hover:bg-muted/30">
-                <TableHead className="h-11 w-[34%] pl-3 text-caption font-normal text-muted-foreground sm:pl-5 xl:w-[30%]">
+                <TableHead className="h-10 w-[34%] pl-3 text-caption font-normal text-muted-foreground sm:pl-5 xl:w-[30%]">
                   昵称
                 </TableHead>
                 <TableHead className="w-[27%] text-caption font-normal text-muted-foreground xl:w-[24%]">
@@ -442,7 +442,7 @@ export function UsersPage() {
                           />
                         ) : (
                           <span
-                            className="inline-flex size-11 items-center justify-center text-muted-foreground/40"
+                            className="inline-flex size-10 items-center justify-center text-muted-foreground/40"
                             title="管理员账号由本人维护"
                           >
                             <LockKeyhole className="size-3.5" aria-label="管理员账号由本人维护" />
@@ -458,7 +458,7 @@ export function UsersPage() {
               role="status"
               className="flex min-h-[240px] flex-col items-center justify-center px-5 py-12 text-center"
             >
-              <div className="mb-3 flex size-11 items-center justify-center rounded-full bg-muted text-muted-foreground">
+              <div className="mb-3 flex size-10 items-center justify-center rounded-full bg-muted text-muted-foreground">
                 {hasFilter ? <Search className="size-5" /> : <UsersRound className="size-5" />}
               </div>
               <p className="text-sm font-medium">{hasFilter ? "没有匹配的账号" : "暂无账号"}</p>

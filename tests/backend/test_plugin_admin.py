@@ -13,6 +13,52 @@ class PluginAdminTests(PluginDatabaseCase):
     def admin_action(self,action,body=None,method='POST'):
         return self.call(method,'admin/plugins/'+self.plugin_id+'/'+action,body or {'expectedRevision':self.admin_plugin()['revision']},actor='admin')['plugin']
 
+    def test_larger_sort_order_precedes_smaller_in_admin_and_all_child_views(self):
+        other = 'plugin-' + uuid.uuid4().hex[:12]
+        self.service.transaction(lambda cur: register_release(cur, manifest(other),
+            artifact_sha256='b'*64, source_commit='sort-test', activate=True), exclusive=True)
+        targets = {self.plugin_id, other}
+        for plugin_id in targets:
+            current = next(p for p in self.call('GET', 'admin/plugins', actor='admin')['plugins'] if p['id'] == plugin_id)
+            self.call('POST', 'admin/plugins/' + plugin_id + '/publish',
+                {'expectedRevision': current['revision']}, actor='admin')
+            self.call('POST', 'children/' + self.a['id'] + '/plugins/' + plugin_id + '/install',
+                {'operationId': str(uuid.uuid4()), 'expectedRevision': 0})
+        for orders, expected in (((100, 10), [self.plugin_id, other]), ((-5, 20), [other, self.plugin_id])):
+            for plugin_id, order in zip((self.plugin_id, other), orders):
+                current = next(p for p in self.call('GET', 'admin/plugins', actor='admin')['plugins'] if p['id'] == plugin_id)
+                self.call('PATCH', 'admin/plugins/' + plugin_id,
+                    {'sortOrder': order, 'expectedRevision': current['revision']}, actor='admin')
+            admin = self.call('GET', 'admin/plugins', actor='admin')['plugins']
+            self.assertEqual([p['id'] for p in admin if p['id'] in targets], expected)
+            for view in ('available', 'installed', 'status'):
+                with self.subTest(orders=orders, view=view):
+                    items = self.call('GET', self.ppath(), {'view': view})['plugins']
+                    self.assertEqual([p['id'] for p in items if p['id'] in targets], expected)
+
+    def test_child_picker_paginates_every_match_and_binds_cursor_to_search(self):
+        def seed(cur):
+            return [self.service.create_child(cur, 'owner', '页测' + str(index).zfill(3), gender='boy')['id'] for index in range(55)]
+        expected = self.service.transaction(seed)
+        first = self.call('GET', 'admin/plugin-children', {'q': '页测'}, actor='admin')
+        self.assertEqual(len(first['children']), 50)
+        self.assertTrue(first['nextCursor'])
+        second = self.call('GET', 'admin/plugin-children', {'q': '页测', 'cursor': first['nextCursor']}, actor='admin')
+        self.assertEqual(len(second['children']), 5)
+        self.assertIsNone(second['nextCursor'])
+        self.assertEqual([child['id'] for child in first['children'] + second['children']], expected)
+        for query in ({'q': '测试', 'cursor': first['nextCursor']}, {'cursor': 'invalid!'}):
+            with self.subTest(query=query), self.assertRaises(ApiError) as bad:
+                self.call('GET', 'admin/plugin-children', query, actor='admin')
+            self.assertEqual(bad.exception.status, 400)
+
+    def test_admin_scope_includes_selected_child_names_without_parent_data_leak(self):
+        selected = self.admin_action('scope', {'scopeMode': 'children', 'childIds': [self.a['id']], 'expectedRevision': self.admin_plugin()['revision']}, method='PUT')
+        self.assertEqual(selected['scopeChildren'], [{'id': self.a['id'], 'name': self.a['name'], 'ownerName': 'owner'}])
+        self.publish()
+        item = next(p for p in self.call('GET', self.ppath())['plugins'] if p['id'] == self.plugin_id)
+        self.assertNotIn('scopeChildren', item)
+
     def test_child_picker_searches_exact_child_identifier(self):
         children=self.call('GET','admin/plugin-children',{'q':self.a['id']},actor='admin')['children']
         self.assertEqual([child['id'] for child in children],[self.a['id']])

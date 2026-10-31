@@ -1,17 +1,7 @@
-import { useState, type ReactNode } from "react"
-import {
-  ChevronRight,
-  LayoutGrid,
-  LogOut,
-  Menu,
-  Puzzle,
-  ShieldCheck,
-  UserRound,
-  UsersRound,
-} from "lucide-react"
+import { useLayoutEffect, useRef, useState, type ReactNode } from "react"
+import { ChevronRight, LogOut, Menu, Puzzle, UserRound, UsersRound } from "lucide-react"
 import { Brand } from "@/components/brand"
 import { Button } from "@shared/components/ui/button"
-import { Separator } from "@shared/components/ui/separator"
 import {
   Sheet,
   SheetContent,
@@ -23,6 +13,19 @@ import { useSession } from "@/lib/session"
 import { cn } from "@shared/lib/utils"
 
 export type Page = "users" | "plugins" | "profile"
+const navigation = [
+  {
+    title: "工作空间",
+    items: [
+      { page: "users" as const, label: "账号管理", icon: UsersRound, id: "UsersNav" },
+      { page: "plugins" as const, label: "插件管理", icon: Puzzle, id: "PluginsNav" },
+    ],
+  },
+  {
+    title: "账号管理",
+    items: [{ page: "profile" as const, label: "我的账号", icon: UserRound, id: "ProfileNav" }],
+  },
+]
 export function AdminLayout({
   page,
   onNavigate,
@@ -34,9 +37,17 @@ export function AdminLayout({
 }) {
   const { session, signOut } = useSession()
   const [mobileOpen, setMobileOpen] = useState(false)
+  const content = useRef<HTMLElement>(null)
+  const locked = Boolean(session?.user.mustChangePassword)
+  useLayoutEffect(() => {
+    if (content.current) {
+      content.current.scrollTop = 0
+      content.current.scrollLeft = 0
+    }
+  }, [page, locked])
   if (!session) return null
   const { user } = session
-  const locked = user.mustChangePassword
+  const containList = (page === "users" || page === "plugins") && !locked
   function navigate(next: Page) {
     if (!locked) {
       onNavigate(next)
@@ -45,163 +56,102 @@ export function AdminLayout({
   }
   function sidebar(mobile = false) {
     return (
-      <div className="flex h-full flex-col">
-        <div className="px-5 pt-6 pb-7">
-          <Brand compact />
-        </div>
-        <div className="px-5 pb-3 text-caption font-medium tracking-[0.14em] text-muted-foreground">
-          工作空间
-        </div>
-        <nav aria-label="后台导航" className="space-y-1.5 px-3">
-          <Button
-            id={mobile ? "mobileUsersNav" : "usersNav"}
-            type="button"
-            variant="ghost"
-            disabled={locked}
-            aria-current={page === "users" && !locked ? "page" : undefined}
-            className={cn(
-              "h-11 w-full justify-start gap-3 rounded-lg px-3 text-sm font-normal text-muted-foreground [&_svg]:size-[18px]",
-              page === "users" && !locked && "bg-accent font-medium text-brand-ink hover:bg-accent",
+      <nav aria-label="后台导航" className="admin-navigation">
+        {navigation.map((group) => (
+          <div className="admin-nav-group" key={group.title}>
+            <h2>{group.title}</h2>
+            {group.items.map(({ page: next, label, icon: Icon, id }) => {
+              const active = locked ? next === "profile" : page === next
+              return (
+                <Button
+                  key={next}
+                  id={mobile ? `mobile${id}` : id[0].toLowerCase() + id.slice(1)}
+                  type="button"
+                  variant="sidebar-navigation"
+                  size="menu"
+                  disabled={locked}
+                  aria-current={active ? "page" : undefined}
+                  className="admin-nav-item"
+                  onClick={() => navigate(next)}
+                >
+                  <Icon aria-hidden />
+                  <span>{label}</span>
+                  {active && <ChevronRight aria-hidden className="admin-nav-arrow" />}
+                </Button>
+              )
+            })}
+            {group.title === "账号管理" && (
+              <Button
+                id={mobile ? "mobileLogout" : "logout"}
+                type="button"
+                variant="sidebar-navigation"
+                size="menu"
+                className="admin-nav-item"
+                onClick={() => void signOut()}
+              >
+                <LogOut aria-hidden />
+                <span>退出登录</span>
+              </Button>
             )}
-            onClick={() => navigate("users")}
-          >
-            <UsersRound />
-            <span>账号管理</span>
-            {page === "users" && !locked && (
-              <span className="ml-auto size-1.5 rounded-full bg-primary" />
-            )}
-          </Button>
-          <Button
-            id={mobile ? "mobilePluginsNav" : "pluginsNav"}
-            type="button"
-            variant="ghost"
-            disabled={locked}
-            aria-current={page === "plugins" && !locked ? "page" : undefined}
-            className={cn(
-              "h-11 w-full justify-start gap-3 rounded-lg px-3 text-sm font-normal text-muted-foreground [&_svg]:size-[18px]",
-              page === "plugins" &&
-                !locked &&
-                "bg-accent font-medium text-brand-ink hover:bg-accent",
-            )}
-            onClick={() => navigate("plugins")}
-          >
-            <Puzzle data-icon="inline-start" />
-            <span>插件管理</span>
-            {page === "plugins" && !locked && (
-              <span className="ml-auto size-1.5 rounded-full bg-primary" />
-            )}
-          </Button>
-          <Button
-            id={mobile ? "mobileProfileNav" : "profileNav"}
-            type="button"
-            variant="ghost"
-            disabled={locked}
-            aria-current={page === "profile" || locked ? "page" : undefined}
-            className={cn(
-              "h-11 w-full justify-start gap-3 rounded-lg px-3 text-sm font-normal text-muted-foreground [&_svg]:size-[18px]",
-              (page === "profile" || locked) &&
-                "bg-accent font-medium text-brand-ink hover:bg-accent",
-            )}
-            onClick={() => navigate("profile")}
-          >
-            <UserRound />
-            <span>我的账号</span>
-          </Button>
-        </nav>
-        <div className="mt-auto px-4 pb-5">
-          <Separator className="mb-4" />
-          <div className="mb-3 flex min-w-0 items-center gap-2.5 px-1">
-            <div className="flex size-9 shrink-0 items-center justify-center rounded-full border border-border bg-muted/70 text-sm font-medium text-muted-foreground">
-              {Array.from(user.nickname || user.loginName)[0]}
-            </div>
-            <div className="min-w-0">
-              <p className="truncate text-sm font-medium" title={user.nickname}>
-                {user.nickname}
-              </p>
-              <p className="mt-0.5 text-caption text-muted-foreground">管理员</p>
-            </div>
-            <ShieldCheck className="ml-auto size-4 shrink-0 text-brand-ink/70" />
           </div>
-          <Button
-            id={mobile ? "mobileLogout" : "logout"}
-            type="button"
-            variant="ghost"
-            className="h-11 w-full justify-start gap-2.5 px-2.5 text-sm text-muted-foreground"
-            onClick={() => void signOut()}
-          >
-            <LogOut className="size-4" />
-            退出登录
-          </Button>
-        </div>
-      </div>
+        ))}
+      </nav>
     )
   }
-  const title = locked
-    ? "密码设置"
-    : page === "users"
-      ? "账号管理"
-      : page === "plugins"
-        ? "插件管理"
-        : "我的账号"
-  const containList = (page === "users" || page === "plugins") && !locked
   return (
-    <div
-      className={cn(
-        "min-h-svh bg-background",
-        containList && "admin-list-layout h-dvh overflow-hidden",
-      )}
-    >
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-[200px] border-r bg-card md:block">
-        {sidebar()}
-      </aside>
-      <div className={cn("min-w-0 md:ml-[200px]", containList && "flex h-full flex-col")}>
-        <header className="flex h-14 shrink-0 items-center justify-between gap-4 border-b bg-card/90 px-5 sm:px-8">
-          <div className="flex min-w-0 items-center gap-3">
-            <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
-              <SheetTrigger asChild>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label="打开导航"
-                  className="-ml-2 size-11 md:hidden"
-                >
-                  <Menu />
-                </Button>
-              </SheetTrigger>
-              <SheetContent side="left" className="w-[264px] gap-0 p-0">
-                <SheetTitle className="sr-only">后台导航</SheetTitle>
-                <SheetDescription className="sr-only">
-                  账号管理、插件管理和个人账号设置
-                </SheetDescription>
-                {sidebar(true)}
-              </SheetContent>
-            </Sheet>
-            <LayoutGrid className="hidden size-4 text-muted-foreground sm:block" />
-            <div className="flex items-center gap-2 text-caption sm:gap-3">
-              <span className="text-muted-foreground">管理后台</span>
-              <ChevronRight className="size-3 text-muted-foreground/60" />
-              <span className="font-medium">{title}</span>
-            </div>
-          </div>
-          <div className="flex shrink-0 items-center gap-1.5 rounded-full border border-border/80 bg-muted/30 px-2.5 py-1 text-caption text-muted-foreground">
-            <span className="size-1.5 rounded-full bg-primary" />
-            <span>管理员工作台</span>
-          </div>
-        </header>
+    <div className={cn("admin-shell", containList && "admin-list-layout")}>
+      <header className="admin-topbar">
+        <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
+          <SheetTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              aria-label="打开导航"
+              className="admin-menu-trigger"
+            >
+              <Menu aria-hidden />
+            </Button>
+          </SheetTrigger>
+          <SheetContent side="left" className="admin-mobile-sidebar">
+            <SheetTitle>管理后台</SheetTitle>
+            <SheetDescription className="sr-only">
+              账号管理、插件管理和个人账号设置
+            </SheetDescription>
+            {sidebar(true)}
+          </SheetContent>
+        </Sheet>
+        <Brand className="admin-workspace-brand" />
+        <Button
+          type="button"
+          variant="ghost"
+          className="admin-user-entry"
+          aria-label={`${user.nickname || user.loginName}，我的账号`}
+          disabled={locked}
+          onClick={() => navigate("profile")}
+        >
+          <span className="admin-user-avatar" aria-hidden>
+            {Array.from(user.nickname || user.loginName)[0]}
+          </span>
+          <span className="admin-user-copy">
+            <strong>{user.nickname || user.loginName}</strong>
+            <small>管理员</small>
+          </span>
+        </Button>
+      </header>
+      <div className="admin-columns">
+        <aside className="admin-sidebar" aria-label="管理菜单">
+          {sidebar()}
+        </aside>
         <main
+          ref={content}
           id="mainContent"
-          className={cn(
-            "mx-auto w-full max-w-[1360px] px-5 py-6 sm:px-7 sm:py-6",
-            containList && "min-h-0 flex-1 overflow-hidden",
-          )}
+          className={cn("admin-content", containList && "admin-content-list")}
         >
           {children}
         </main>
-        <footer className="shrink-0 px-5 pt-2 pb-6 text-center text-caption tracking-wide text-muted-foreground sm:px-8">
-          乐乐成长 · 管理后台
-        </footer>
       </div>
+      <footer className="admin-footer">乐乐成长 · 管理后台</footer>
     </div>
   )
 }

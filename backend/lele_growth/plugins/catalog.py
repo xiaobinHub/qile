@@ -74,18 +74,19 @@ def admin_plugin(cur, plugin_id):
     plugin = catalog_row(cur,plugin_id)
     cur.execute('SELECT release_id,version,config_schema,manifest FROM lele.plugin_releases WHERE release_id=%s',(plugin['active_release_id'],))
     plugin.update(row_dict(cur) or {})
-    cur.execute('SELECT child_id FROM lele.plugin_scope_children WHERE plugin_id=%s ORDER BY child_id',(plugin_id,))
-    plugin['child_ids']=[row['child_id'] for row in rows_dict(cur)]
+    cur.execute('SELECT s.child_id,c.name,u.nickname AS "ownerName" FROM lele.plugin_scope_children s LEFT JOIN lele.children c ON c.id=s.child_id LEFT JOIN lele.users u ON u.id=c.owner_id WHERE s.plugin_id=%s ORDER BY s.child_id',(plugin_id,))
+    selected = rows_dict(cur)
+    plugin['child_ids']=[row['child_id'] for row in selected]
     cur.execute('SELECT count(*) FILTER(WHERE installed) AS installed_count,count(*) FILTER(WHERE installed AND enabled) AS enabled_count FROM lele.child_plugins WHERE plugin_id=%s',(plugin_id,))
     counts=row_dict(cur)
     result=public_plugin(plugin,admin=True)
-    result.update(installedCount=counts['installed_count'],enabledCount=counts['enabled_count'])
+    result.update(installedCount=counts['installed_count'],enabledCount=counts['enabled_count'],scopeChildren=[{'id':row['child_id'],'name':row['name'],'ownerName':row['ownerName'] or ''} for row in selected if row['name'] is not None])
     return result
 
 
 def list_admin(cur, query=''):
     require(isinstance(query,str) and len(query)<=200)
-    cur.execute('SELECT id FROM lele.plugin_catalog WHERE strpos(lower(name),lower(%s))>0 ORDER BY sort_order,id',(query,))
+    cur.execute('SELECT id FROM lele.plugin_catalog WHERE strpos(lower(name),lower(%s))>0 ORDER BY sort_order DESC,id',(query,))
     return [admin_plugin(cur,p['id']) for p in rows_dict(cur)]
 
 

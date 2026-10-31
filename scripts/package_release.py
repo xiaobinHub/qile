@@ -32,7 +32,7 @@ def release_files(root: Path) -> list[Path]:
     files = [root / name for name in FILES]
     for directory, extensions in (
         ("backend/lele_growth", {".py", ".sql"}),
-        ("web/parent-dist", {".html", ".js", ".css", ".woff2", ".png"}),
+        ("web/parent-dist", {".html", ".js", ".css", ".woff2", ".png", ".webp"}),
         ("web/admin-dist", {".html", ".js", ".css", ".woff2"}),
     ):
         files.extend(file for file in (root / directory).rglob("*")

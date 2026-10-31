@@ -1,17 +1,37 @@
 import { Puzzle } from "lucide-react"
 import { useState } from "react"
-import { Badge } from "@shared/components/ui/badge"
+import { StatusBadge } from "@shared/components/status-badge"
 import { operationLabels, publicationLabels, type Plugin } from "./types"
 
-export function PluginStatuses({ plugin }: { plugin: Plugin }) {
+export function PluginStatuses({ plugin, compact = false }: { plugin: Plugin; compact?: boolean }) {
   return (
-    <div className="flex flex-wrap gap-2">
-      <Badge variant={plugin.publicationStatus === "published" ? "default" : "secondary"}>
-        发布：{publicationLabels[plugin.publicationStatus]}
-      </Badge>
-      <Badge variant={plugin.operationState === "failed" ? "destructive" : "outline"}>
-        运行：{operationLabels[plugin.operationState]}
-      </Badge>
+    <div className={`plugin-statuses${compact ? " plugin-statuses-compact" : ""}`}>
+      <StatusBadge
+        className="plugin-status-tag"
+        tone={
+          plugin.publicationStatus === "published"
+            ? "success"
+            : plugin.publicationStatus === "pending"
+              ? "warning"
+              : "neutral"
+        }
+      >
+        <span className={compact ? "sr-only" : undefined}>发布：</span>
+        {publicationLabels[plugin.publicationStatus]}
+      </StatusBadge>
+      <StatusBadge
+        className="plugin-status-tag"
+        tone={
+          plugin.operationState === "ready"
+            ? "success"
+            : plugin.operationState === "updating"
+              ? "brand"
+              : "danger"
+        }
+      >
+        <span className={compact ? "sr-only" : undefined}>运行：</span>
+        {operationLabels[plugin.operationState]}
+      </StatusBadge>
     </div>
   )
 }
@@ -31,7 +51,7 @@ export function PluginIcon({ icon }: { icon: string }) {
   const [failedIcon, setFailedIcon] = useState<string | null>(null)
   const source = packageIconUrl(icon)
   return (
-    <div className="flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-xl border bg-muted text-muted-foreground">
+    <div className="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-xl border bg-muted text-muted-foreground">
       {source && failedIcon !== icon ? (
         <img
           src={source}

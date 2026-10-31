@@ -8,8 +8,8 @@ import { Popover, PopoverContent, PopoverTrigger } from "@shared/components/ui/p
 import { fmtFull } from "../domain/calendar"
 import type { Occurrence } from "../domain/types"
 import type { CalendarDragOrigin } from "./calendar-quick-drag"
-import trashBody from "../assets/quick-trash/body.png"
-import trashLid from "../assets/quick-trash/lid.png"
+import trashBody from "../assets/quick-trash/body.webp"
+import trashLid from "../assets/quick-trash/lid.webp"
 
 export type TrashDrop = {
   id: string

@@ -1,14 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react"
-import {
-  ArrowRight,
-  CircleCheck,
-  CircleMinus,
-  Clock3,
-  Puzzle,
-  RefreshCw,
-  Search,
-  X,
-} from "lucide-react"
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react"
+import { ArrowRight, CircleCheck, CircleMinus, Clock3, Puzzle, Search, X } from "lucide-react"
 import { errorMessage, isIgnoredError } from "@/lib/session"
 import { useMounted } from "@/lib/use-mounted"
 import { EmptyState } from "@shared/components/empty-state"
@@ -135,7 +126,7 @@ export function PluginsPage() {
     )
     .sort(
       (first, second) =>
-        first.sortOrder - second.sortOrder || first.name.localeCompare(second.name, "zh-CN"),
+        second.sortOrder - first.sortOrder || first.name.localeCompare(second.name, "zh-CN"),
     )
   const filtered = Boolean(query) || filter !== "all"
 
@@ -162,7 +153,7 @@ export function PluginsPage() {
             title="插件已不在当前列表中"
             description="请刷新列表后重新选择。"
             action={
-              <Button type="button" variant="outline" className="min-h-11" onClick={back}>
+              <Button type="button" variant="outline" className="min-h-10" onClick={back}>
                 返回插件列表
               </Button>
             }
@@ -215,15 +206,15 @@ export function PluginsPage() {
           aria-label="插件筛选"
           className="flex flex-wrap items-center gap-3 border-b px-4 py-3 sm:px-5"
         >
-          <div className="relative min-w-0 flex-[1_1_210px] sm:max-w-64">
-            <Search className="pointer-events-none absolute top-3.5 left-3 size-4 text-muted-foreground" />
+          <div className="relative min-w-0 flex-[1_1_210px] sm:max-w-[300px]">
+            <Search className="pointer-events-none absolute top-1/2 -translate-y-1/2 left-3 size-4 text-muted-foreground" />
             <Input
               id="plugin-search"
               type="search"
               value={search}
               placeholder="搜索插件名称"
               aria-label="搜索插件名称"
-              className="h-11 bg-card pr-11 pl-9 text-sm"
+              className="h-10 bg-card pr-11 pl-9 text-sm"
               onChange={(event) => setSearch(event.target.value)}
             />
             {search && (
@@ -232,7 +223,7 @@ export function PluginsPage() {
                 variant="ghost"
                 size="icon-xs"
                 aria-label="清除搜索"
-                className="absolute top-0 right-0 size-11 text-muted-foreground"
+                className="absolute top-0 right-0 size-10 text-muted-foreground"
                 onClick={() => setSearch("")}
               >
                 <X className="size-3.5" />
@@ -246,7 +237,7 @@ export function PluginsPage() {
             <SelectTrigger
               id="plugin-publication-filter"
               aria-label="筛选发布状态"
-              className="h-11 w-[130px] bg-card text-sm"
+              className="h-10 w-[130px] bg-card text-sm"
             >
               <SelectValue />
             </SelectTrigger>
@@ -259,17 +250,6 @@ export function PluginsPage() {
               </SelectGroup>
             </SelectContent>
           </Select>
-          <Button
-            id="refreshPlugins"
-            type="button"
-            variant="outline"
-            disabled={loading}
-            onClick={() => void refresh().catch(() => {})}
-            className="ml-auto h-11 gap-2 bg-card px-3 text-sm"
-          >
-            <RefreshCw className={`size-3.5 ${loading ? "animate-spin" : ""}`} />
-            刷新
-          </Button>
         </div>
         {error ? (
           <div className="border-b p-4">
@@ -287,7 +267,7 @@ export function PluginsPage() {
           </div>
         ) : null}
         <div
-          className="admin-list-scroll"
+          className="admin-list-scroll plugin-catalog"
           role="region"
           aria-label="插件列表"
           tabIndex={0}
@@ -297,34 +277,42 @@ export function PluginsPage() {
             <div
               role="status"
               aria-label="正在载入插件"
-              className="grid gap-4 p-4 sm:p-5 lg:grid-cols-2"
+              className="plugin-catalog-grid workspace-card-grid"
+              style={{ "--workspace-card-count": 3 } as CSSProperties}
             >
-              {[0, 1, 2, 3].map((index) => (
+              {[0, 1, 2].map((index) => (
                 <Skeleton key={index} className="h-60 w-full rounded-xl" />
               ))}
             </div>
           ) : visible.length ? (
-            <ul className="grid min-w-0 gap-4 p-4 sm:p-5 lg:grid-cols-2">
+            <ul
+              className="plugin-catalog-grid workspace-card-grid min-w-0"
+              style={{ "--workspace-card-count": visible.length } as CSSProperties}
+            >
               {visible.map((plugin) => (
                 <li key={plugin.id} className="min-w-0">
-                  <Card size="sm" className="h-full shadow-none">
+                  <Card size="sm" className="plugin-catalog-card h-full shadow-none">
                     <CardHeader>
-                      <div className="flex min-w-0 items-start gap-3">
+                      <div className="flex min-w-0 items-start gap-2">
                         <PluginIcon icon={plugin.icon} />
-                        <div className="flex min-w-0 flex-col gap-1">
-                          <CardTitle className="break-words">{plugin.name || plugin.id}</CardTitle>
-                          <CardDescription className="break-all">
+                        <div className="flex min-w-0 flex-1 flex-col gap-1">
+                          <div className="plugin-catalog-title-row">
+                            <CardTitle className="min-w-0 break-words">
+                              {plugin.name || plugin.id}
+                            </CardTitle>
+                            <PluginStatuses plugin={plugin} compact />
+                          </div>
+                          <CardDescription className="break-all text-caption">
                             {plugin.id} · {plugin.type === "page" ? "页面型" : "后台型"}
                           </CardDescription>
                         </div>
                       </div>
                     </CardHeader>
                     <CardContent className="flex-1">
-                      <PluginStatuses plugin={plugin} />
-                      <p className="whitespace-pre-wrap break-words text-sm text-muted-foreground">
+                      <p className="line-clamp-2 whitespace-pre-wrap break-words text-caption text-muted-foreground">
                         {plugin.description || "尚未填写介绍"}
                       </p>
-                      <dl className="grid grid-cols-2 gap-3 text-caption">
+                      <dl className="grid grid-cols-2 gap-2 text-caption">
                         {[
                           ["活动版本", plugin.version || "暂无"],
                           [
@@ -343,12 +331,12 @@ export function PluginsPage() {
                         ))}
                       </dl>
                     </CardContent>
-                    <CardFooter>
+                    <CardFooter className="justify-end">
                       <Button
                         id={`plugin-open-${plugin.id}`}
                         type="button"
-                        variant="outline"
-                        className="min-h-11 w-full"
+                        size="sm"
+                        className="plugin-catalog-action"
                         aria-label={`管理插件：${plugin.name || plugin.id}`}
                         onClick={() => open(plugin)}
                       >
@@ -365,7 +353,7 @@ export function PluginsPage() {
               role="status"
               className="flex min-h-[240px] flex-col items-center justify-center px-5 py-12 text-center"
             >
-              <div className="mb-3 flex size-11 items-center justify-center rounded-full bg-muted text-muted-foreground">
+              <div className="mb-3 flex size-10 items-center justify-center rounded-full bg-muted text-muted-foreground">
                 {filtered ? <Search className="size-5" /> : <Puzzle className="size-5" />}
               </div>
               <p className="text-sm font-medium">{filtered ? "没有匹配的插件" : "暂无插件"}</p>

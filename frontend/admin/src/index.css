@@ -1,6 +1,8 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "../../shared/src/theme.css";
+@import "../../shared/src/workspace-theme.css";
+@import "./workspace.css";
 @source "../../shared/src";
 
 @layer components {
@@ -41,8 +43,8 @@
 .admin-user-table {
   background: linear-gradient(
     to bottom,
-    color-mix(in oklab, var(--muted) 30%, var(--card)) 44px,
-    var(--card) 44px
+    color-mix(in oklab, var(--muted) 30%, var(--card)) 40px,
+    var(--card) 40px
   );
 }
 .admin-user-table [data-slot="table-container"] {

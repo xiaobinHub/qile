@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
+import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@shared/components/ui/sheet"
 import { AccountManagement } from "./account"
 import { ChildManagement, Invitations } from "./children"
 import { Categories, Presets } from "./tasks"
@@ -64,16 +65,65 @@ function Settings({
   version,
   controller,
   navigate,
+  menuOpen,
+  onMenuOpenChange,
 }: {
   selected: string
   version: number
   controller: Controller
   navigate: (key: string) => void
+  menuOpen: boolean
+  onMenuOpenChange: (open: boolean) => void
 }) {
   const context = controller.deps.context(),
     { child } = context
   const visible = child ? groups : groups.filter((group) => group.title === "账号管理")
   const item = visible.flatMap((group) => group.items).find((item) => item[0] === selected)!
+  const pendingNavigation = useRef<(() => void) | null>(null)
+  useEffect(() => {
+    const media = window.matchMedia("(min-width: 768px)")
+    const close = () => {
+      if (media.matches) onMenuOpenChange(false)
+    }
+    close()
+    media.addEventListener("change", close)
+    return () => media.removeEventListener("change", close)
+  }, [onMenuOpenChange])
+  function navigation(mobile = false) {
+    return (
+      <nav aria-label={mobile ? "设置菜单导航" : "设置导航"}>
+        {visible.map((group) => (
+          <div className="settings-nav-group" key={group.title}>
+            <h2>{group.title}</h2>
+            {group.items.map(([key, label, icon, id]) => (
+              <Button
+                variant="sidebar-navigation"
+                size="menu"
+                type="button"
+                id={mobile ? `mobile${id[0].toUpperCase()}${id.slice(1)}` : id}
+                data-settings-page={key}
+                key={`${key}:${selected}`}
+                className={`settings-nav-item ${key === selected ? "is-active" : ""} ${key === "account/logout" ? "settings-signout" : ""}`}
+                aria-current={key === selected ? "page" : undefined}
+                onClick={() => {
+                  const action = () =>
+                    key === "account/logout" ? controller.deps.logout() : navigate(key)
+                  if (mobile) {
+                    pendingNavigation.current = action
+                    onMenuOpenChange(false)
+                  } else action()
+                }}
+              >
+                <Icon name={icon} />
+                <span>{label}</span>
+                {key === selected && <Icon name="arrow" />}
+              </Button>
+            ))}
+          </div>
+        ))}
+      </nav>
+    )
+  }
   return (
     <section className="settings-workspace" aria-label="设置">
       {!child && (
@@ -89,35 +139,33 @@ function Settings({
           </Button>
         </div>
       )}
+      <Sheet open={menuOpen} onOpenChange={onMenuOpenChange}>
+        <SheetContent
+          id="settingsMobileNavigation"
+          side="left"
+          className="settings-mobile-sidebar"
+          onCloseAutoFocus={(event) => {
+            event.preventDefault()
+            const action = pendingNavigation.current
+            pendingNavigation.current = null
+            queueMicrotask(() => {
+              const target = window.matchMedia("(min-width: 768px)").matches
+                ? document.querySelector<HTMLElement>('.settings-sidebar [aria-current="page"]')
+                : document.getElementById("openSettingsMenu")
+              target?.focus({ preventScroll: true })
+              action?.()
+            })
+          }}
+        >
+          <SheetTitle>设置菜单</SheetTitle>
+          <SheetDescription className="sr-only">
+            {visible.map((group) => group.title).join("、")}
+          </SheetDescription>
+          {navigation(true)}
+        </SheetContent>
+      </Sheet>
       <div className="settings-columns">
-        <Card className="settings-sidebar gap-0 py-0">
-          <nav aria-label="设置导航">
-            {visible.map((group) => (
-              <div className="settings-nav-group" key={group.title}>
-                <h2>{group.title}</h2>
-                {group.items.map(([key, label, icon, id]) => (
-                  <Button
-                    variant="sidebar-navigation"
-                    size="menu"
-                    type="button"
-                    id={id}
-                    data-settings-page={key}
-                    key={`${key}:${selected}`}
-                    className={`settings-nav-item ${key === selected ? "is-active" : ""} ${key === "account/logout" ? "settings-signout" : ""}`}
-                    aria-current={key === selected ? "page" : undefined}
-                    onClick={() =>
-                      key === "account/logout" ? controller.deps.logout() : navigate(key)
-                    }
-                  >
-                    <Icon name={icon} />
-                    <span>{label}</span>
-                    {key === selected && <Icon name="arrow" />}
-                  </Button>
-                ))}
-              </div>
-            ))}
-          </nav>
-        </Card>
+        <Card className="settings-sidebar gap-0 py-0">{navigation()}</Card>
         <Card
           className={`settings-detail gap-0 py-0 ${selected === "child/manage" ? "settings-child-management" : selected === "account/profile" ? "settings-account-management" : ""}`}
           role="region"
@@ -149,9 +197,13 @@ function Settings({
 export function SettingsPage({
   controller,
   initialPage,
+  menuOpen,
+  onMenuOpenChange,
 }: {
   controller: Controller
   initialPage?: string
+  menuOpen: boolean
+  onMenuOpenChange: (open: boolean) => void
 }) {
   const [selected, select] = useState(
     controller.deps.context().child
@@ -176,6 +228,8 @@ export function SettingsPage({
   return (
     <Settings
       selected={selected}
+      menuOpen={menuOpen}
+      onMenuOpenChange={onMenuOpenChange}
       version={version}
       controller={controller}
       navigate={(page) => {

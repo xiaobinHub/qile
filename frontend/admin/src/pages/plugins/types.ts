@@ -19,6 +19,7 @@ export type Plugin = PluginScope & {
   sortOrder: number
   installedCount: number
   enabledCount: number
+  scopeChildren?: PluginChild[]
   reason: string | null
 }
 
