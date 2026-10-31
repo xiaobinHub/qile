@@ -89,6 +89,7 @@ export function Modal({
   size = "default",
   returnFocusTo,
   keyboardScroll = false,
+  bareHeader = false,
   bareFooter = false,
 }: {
   title: string
@@ -100,6 +101,7 @@ export function Modal({
   size?: "small" | "default" | "complex"
   returnFocusTo?: HTMLElement | null | false
   keyboardScroll?: boolean
+  bareHeader?: boolean
   bareFooter?: boolean
 }) {
   const returnFocus = useRef<HTMLElement | null>(document.activeElement as HTMLElement)
@@ -131,7 +133,7 @@ export function Modal({
           if (runtime.getSnapshot().busy) e.preventDefault()
         }}
       >
-        <DialogHeader className="ui-modal-header">
+        <DialogHeader className={bareHeader ? "ui-modal-header bare-modal-header" : "ui-modal-header"}>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription className={!description ? "sr-only" : ""}>
             {description || title + "，请填写以下内容。"}
