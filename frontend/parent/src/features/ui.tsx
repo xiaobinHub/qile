@@ -92,7 +92,7 @@ export function Modal({
 }: {
   title: string
   description?: string
-  children: ReactNode
+  children?: ReactNode
   onClose: () => void
   id?: string
   footer?: ReactNode
@@ -135,7 +135,7 @@ export function Modal({
             {description || title + "，请填写以下内容。"}
           </DialogDescription>
         </DialogHeader>
-        <div className="ui-modal-body">{children}</div>
+        {children && <div className="ui-modal-body">{children}</div>}
         {footer && <DialogFooter className="ui-modal-footer">{footer}</DialogFooter>}
       </DialogContent>
     </Dialog>

@@ -342,7 +342,7 @@ function Application() {
         <Modal
           id="quickEditNoticeDialog"
           title="快捷编辑中"
-          description="请先退出快捷编辑模式。"
+          description="请先退出快捷编辑模式，点击底部的保存或取消按钮。"
           size="small"
           onClose={() => setQuickEditNotice(false)}
           footer={
@@ -351,7 +351,6 @@ function Application() {
             </Button>
           }
         >
-          <p className="field-help">当前日程改动仍在草稿中，不会被清除。</p>
         </Modal>
       )}
       {editor && data && child && (
