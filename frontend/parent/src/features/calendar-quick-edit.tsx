@@ -32,8 +32,17 @@ export function useCalendarQuickEdit(data: BusinessData) {
   const [announcement, setAnnouncement] = useState("")
   const [trashDrop, setTrashDrop] = useState<TrashDrop | null>(null)
   const [editingOccurrence, setEditingOccurrence] = useState<Occurrence | null>(null)
+  const [deletedOrder, setDeletedOrder] = useState<string[]>([])
   const mounted = useRef(true)
   const summary = calendarDraftSummary(draft)
+  const deletedTasks = [...deletedDraftTasks(draft)].sort((left, right) => {
+    const leftIndex = deletedOrder.indexOf(left.occurrenceKey)
+    const rightIndex = deletedOrder.indexOf(right.occurrenceKey)
+    return (
+      (leftIndex === -1 ? Number.MAX_SAFE_INTEGER : leftIndex) -
+      (rightIndex === -1 ? Number.MAX_SAFE_INTEGER : rightIndex)
+    )
+  })
   const snapshot = runtime.getSnapshot()
   const frozen = saving || snapshot.busy || snapshot.unconfirmed
   const active = !!session
@@ -58,6 +67,14 @@ export function useCalendarQuickEdit(data: BusinessData) {
     setDraft(next)
     setSelected(null)
     setError("")
+    if (item.kind === "occurrence") {
+      const key = item.occurrence.occurrenceKey
+      setDeletedOrder((current) =>
+        target === "delete"
+          ? [key, ...current.filter((value) => value !== key)]
+          : current.filter((value) => value !== key),
+      )
+    }
     if (target === "delete" && item.kind === "occurrence")
       setTrashDrop({
         id: operationId(),
@@ -123,6 +140,7 @@ export function useCalendarQuickEdit(data: BusinessData) {
     setSession(null)
     setDraft(emptyCalendarDraft())
     setSelected(null)
+    setDeletedOrder([])
     setError("")
     setAnnouncement("")
     setTrashDrop(null)
@@ -156,12 +174,13 @@ export function useCalendarQuickEdit(data: BusinessData) {
     error,
     announcement,
     trashDrop,
-    deletedTasks: deletedDraftTasks(draft),
+    deletedTasks,
     undoDelete: (key: string) => {
       if (!session || frozen) return
-      const occurrence = deletedDraftTasks(draft).find((item) => item.occurrenceKey === key)
+      const occurrence = deletedTasks.find((item) => item.occurrenceKey === key)
       if (!occurrence) return
       setDraft((current) => restoreDraftTask(current, key))
+      setDeletedOrder((current) => current.filter((value) => value !== key))
       setSelected(null)
       setError("")
       setAnnouncement(`已撤销删除「${occurrence.title}」。`)
@@ -194,6 +213,7 @@ export function useCalendarQuickEdit(data: BusinessData) {
       if (snapshot.busy || snapshot.unconfirmed) return
       setSession({ data, revision: snapshot.revision })
       setDraft(emptyCalendarDraft())
+      setDeletedOrder([])
       setError("")
       setAnnouncement("已进入快捷编辑。拖动手柄，或选择任务后点击日期；已完成任务不可调整。")
     },
