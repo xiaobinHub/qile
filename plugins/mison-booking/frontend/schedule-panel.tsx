@@ -1,8 +1,9 @@
 import { Check, ChevronLeft, ChevronRight, ChevronsUp, FileText, Info } from "lucide-react"
-import { Checkbox } from "@shared/components/ui/checkbox"
+import { Switch } from "@shared/components/ui/switch"
 import { Field, FieldLabel } from "@shared/components/ui/field"
 import { Badge } from "@shared/components/ui/badge"
 import { Separator } from "@shared/components/ui/separator"
+import { Skeleton } from "@shared/components/ui/skeleton"
 import { ToggleGroup, ToggleGroupItem } from "@shared/components/ui/toggle-group"
 import {
   Card,
@@ -77,6 +78,18 @@ export function SchedulePanel({
 }) {
   const onlyAvailableId = useId()
   const [onlyAvailable, setOnlyAvailable] = useState(false)
+  const [loadingVisible, setLoadingVisible] = useState(false)
+  const staleTeacher = !!schedule && schedule.teacher.id !== teacher.id
+  useEffect(() => {
+    if (!loading) {
+      if (!staleTeacher) setLoadingVisible(false)
+      return
+    }
+    // Fast switches can replace the data directly without flashing a loader.
+    const timer = setTimeout(() => setLoadingVisible(true), 120)
+    return () => clearTimeout(timer)
+  }, [loading, staleTeacher])
+  const showSkeleton = (loading && (!schedule || loadingVisible)) || (!!loadError && staleTeacher)
   const activeDate = requestedDate ?? schedule?.date ?? ""
   const filteredDays = schedule?.days.filter((day) => !onlyAvailable || day.available) ?? []
   const slotMap = new Map(schedule?.slots.map((slot) => [slot.start, slot]) ?? [])
@@ -115,6 +128,7 @@ export function SchedulePanel({
     ["prepared", "dispatching", "uncertain", "partially_succeeded", "needs_repair"].includes(
       operation.state,
     )
+  const scheduleBlocked = blocked || loading || staleTeacher || !!unresolved
   const disabledReason = !selected.length
     ? "请选择时段"
     : !contiguous
@@ -265,18 +279,29 @@ export function SchedulePanel({
       ) : (
         <>
           <div className="mison-stage-scroll" role="region" aria-label="约课内容" tabIndex={0}>
-            <div className="mison-stage-body">
+            <div className="mison-stage-body" data-schedule-loading={showSkeleton || undefined}>
               <div className="mison-section-heading">
                 <div className="mison-date-heading">
-                  <h3>
-                    {activeDate
-                      ? `${activeDate.slice(0, 4)}年${Number(activeDate.slice(5, 7))}月`
-                      : "选择上课日期"}
+                  <h3 className="mison-schedule-month">
+                    <span>
+                      {activeDate
+                        ? `${activeDate.slice(0, 4)}年${Number(activeDate.slice(5, 7))}月`
+                        : "选择上课日期"}
+                    </span>
+                    {showSkeleton ? (
+                      <Skeleton className="mison-schedule-cell-skeleton" aria-hidden="true" />
+                    ) : null}
                   </h3>
-                  <Field orientation="horizontal" className="mison-available-dates">
-                    <Checkbox
+                  <Field
+                    orientation="horizontal"
+                    className="mison-available-dates"
+                    data-disabled={scheduleBlocked || undefined}
+                  >
+                    <Switch
                       id={onlyAvailableId}
+                      className="after:-inset-y-3.5"
                       checked={onlyAvailable}
+                      disabled={scheduleBlocked}
                       onCheckedChange={(checked) => {
                         setOnlyAvailable(checked === true)
                         if (
@@ -296,7 +321,7 @@ export function SchedulePanel({
                     variant="outline"
                     size="icon"
                     aria-label="上一组日期"
-                    disabled={page === 0}
+                    disabled={scheduleBlocked || page === 0}
                     onClick={() => setPage(page - 1)}
                   >
                     <ChevronLeft />
@@ -305,7 +330,11 @@ export function SchedulePanel({
                     variant="outline"
                     size="icon"
                     aria-label="下一组日期"
-                    disabled={!schedule || (page + 1) * datesPerPage >= filteredDays.length}
+                    disabled={
+                      scheduleBlocked ||
+                      !schedule ||
+                      (page + 1) * datesPerPage >= filteredDays.length
+                    }
                     onClick={() => setPage(page + 1)}
                   >
                     <ChevronRight />
@@ -324,12 +353,17 @@ export function SchedulePanel({
                 style={{
                   gridTemplateColumns: `repeat(${datesPerPage}, 64px)`,
                 }}
-                disabled={blocked || !!unresolved}
+                disabled={scheduleBlocked}
                 aria-label="上课日期"
               >
-                {onlyAvailable && !dates.length && !loading ? (
+                {onlyAvailable && !dates.length && !loading && !showSkeleton ? (
                   <small className="mison-no-dates">暂无可约日期</small>
                 ) : null}
+                {showSkeleton && !dates.length
+                  ? Array.from({ length: datesPerPage }, (_, index) => (
+                      <Skeleton key={index} className="mison-date-skeleton" aria-hidden="true" />
+                    ))
+                  : null}
                 {dates.map((day) => (
                   <ToggleGroupItem
                     key={day.date}
@@ -341,6 +375,9 @@ export function SchedulePanel({
                   >
                     <span>{weekday(day.date)}</span>
                     <strong>{Number(day.date.slice(8))}</strong>
+                    {showSkeleton ? (
+                      <Skeleton className="mison-schedule-cell-skeleton" aria-hidden="true" />
+                    ) : null}
                   </ToggleGroupItem>
                 ))}
               </ToggleGroup>
@@ -352,7 +389,7 @@ export function SchedulePanel({
                     className="mison-slots"
                     value={selected}
                     aria-label="可选课时"
-                    disabled={blocked || loading || !!loadError}
+                    disabled={scheduleBlocked || !!loadError}
                     onValueChange={(next) => {
                       const changed =
                         next.find((value) => !selected.includes(value)) ??
@@ -365,24 +402,33 @@ export function SchedulePanel({
                         key={slot.start}
                         value={slot.start}
                         aria-label={`${slot.start}${slot.state === "mine" ? " 本人已约" : ""}`}
-                        disabled={slot.state !== "available" || blocked || loading || !!loadError}
+                        disabled={slot.state !== "available" || scheduleBlocked || !!loadError}
                         data-unavailable={slot.state !== "available"}
                         title={slot.reason ?? undefined}
                       >
                         <span>{slot.start}</span>
                         {slot.state === "mine" ? <small>本人已约</small> : null}
+                        {showSkeleton ? (
+                          <Skeleton className="mison-schedule-cell-skeleton" aria-hidden="true" />
+                        ) : null}
                       </ToggleGroupItem>
                     ))}
                   </ToggleGroup>
+                ) : loading ? (
+                  <div className="mison-slots" aria-hidden="true">
+                    {Array.from({ length: 12 }, (_, index) => (
+                      <Skeleton key={index} className="mison-slot-skeleton" />
+                    ))}
+                  </div>
                 ) : (
                   <Empty title="当天暂无可约时段">
                     <p>试试其他日期，或选择另一位老师。</p>
                   </Empty>
                 )}
                 {loading ? (
-                  <div className="mison-slots-overlay" role="status">
+                  <span className="sr-only" role="status">
                     正在加载时段…
-                  </div>
+                  </span>
                 ) : loadError ? (
                   <div className="mison-slots-overlay" role="alert">
                     <span>{loadError}</span>
@@ -401,21 +447,13 @@ export function SchedulePanel({
           <footer className="mison-stage-footer">
             <div>
               已选 <strong>{selected.length}</strong> 课时
-              <small>
-                {selected
-                  .map((s) => {
-                    const slot = schedule?.slots.find((l) => l.start === s)
-                    return `${s}–${slot?.end ?? ""}`
-                  })
-                  .join(" · ")}
-              </small>
             </div>
             <div className="mison-actions">
               <Button variant="ghost" disabled={!selected.length || blocked} onClick={onClear}>
                 清空
               </Button>
               <Button
-                disabled={!!disabledReason || blocked || loading || !!loadError}
+                disabled={!!disabledReason || scheduleBlocked || !!loadError}
                 onClick={onNext}
               >
                 {busy ? "正在推荐课件…" : "下一步：确认课件"}

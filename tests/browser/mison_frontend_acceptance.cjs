@@ -246,16 +246,30 @@ async function main() {
             },
           })
         }
-        if (/^teachers\/[^/]+\/schedule(?:\?|$)/.test(relative) && scheduleMode !== "normal") {
-          const mode = scheduleMode
-          await new Promise((resolve) => setTimeout(resolve, 500))
-          if (mode === "failure")
+        const scheduleRequest = /^teachers\/[^/]+\/schedule(?:\?|$)/.test(relative)
+        const scheduleRequestMode = scheduleMode
+        if (scheduleRequest && scheduleRequestMode !== "normal") {
+          const delay =
+            scheduleRequestMode === "race"
+              ? relative.startsWith("teachers/demo-1/")
+                ? 800
+                : 180
+              : 500
+          await new Promise((resolve) => setTimeout(resolve, delay))
+          if (scheduleRequestMode === "failure")
             return json({
               ok: false,
               error: { code: "UPSTREAM_UNAVAILABLE", message: "模拟时段查询失败" },
             })
         }
         const response = await fixtureApi(relative, options)
+        if (scheduleRequest && scheduleRequestMode === "race") {
+          response.data.slots.find((slot) => slot.start === "10:00").state = relative.startsWith(
+            "teachers/demo-1/",
+          )
+            ? "occupied"
+            : "available"
+        }
         if (touchAcceptance) {
           const name = relative.split("?")[0]
           if (name === "teachers" || (name === "bookings" && req.method() === "GET")) {
@@ -403,7 +417,8 @@ async function main() {
       await page.waitForFunction(() => {
         const panel = document.querySelector(".mison-booking")
         if (!panel) return false
-        return Math.abs(panel.getBoundingClientRect().bottom + 16 - innerHeight) < 2
+        const gutter = parseFloat(getComputedStyle(document.querySelector("#main")).paddingBottom)
+        return Math.abs(panel.getBoundingClientRect().bottom + gutter - innerHeight) < 2
       })
       assert.ok(
         await page.evaluate(() => document.documentElement.scrollHeight <= innerHeight + 1),
@@ -547,6 +562,27 @@ async function main() {
     await loginForm.getByRole("button", { name: "登录", exact: true }).dblclick()
     await ready()
     assert.equal(loginCalls, 2, "double click sends one request")
+    if (process.env.SCHEDULE_TRANSITION_ACCEPTANCE === "1") {
+      await page.locator('[data-book-teacher="demo-0"]').click()
+      await slot("10:00").waitFor()
+      await require("./mison_schedule_transition.cjs")({
+        page,
+        stage: page.getByRole("region", { name: "约课区" }),
+        out,
+        setMode: (value) => {
+          scheduleMode = value
+        },
+      })
+      assert.deepEqual(errors, [])
+      console.log(
+        JSON.stringify(
+          { passed: true, engine: engine.name(), evidence: out, pageErrors: errors },
+          null,
+          2,
+        ),
+      )
+      return
+    }
     if (touchAcceptance) {
       await require("./ipad_touch_acceptance.cjs")
         .exerciseMisonTouch({
@@ -675,8 +711,8 @@ async function main() {
     )
     assert.equal(await page.locator('.mison-teacher-card[data-slot="card"]').count(), 6)
     assert.equal(
-      await page.getByRole("checkbox", { name: "仅看收藏" }).getAttribute("data-slot"),
-      "checkbox",
+      await page.getByRole("switch", { name: "仅看收藏" }).getAttribute("data-slot"),
+      "switch",
     )
     assert.equal(
       await page.locator(".mison-ui dialog, .mison-ui details, .mison-ui select").count(),
@@ -783,11 +819,11 @@ async function main() {
     await count(1)
     await page.getByRole("button", { name: "清空筛选" }).click()
     await count(6)
-    await page.getByRole("checkbox", { name: "仅看收藏" }).check()
+    await page.getByRole("switch", { name: "仅看收藏" }).check()
     await count(2)
     await page.getByRole("button", { name: "清空筛选" }).click()
-    assert.equal(await page.getByRole("checkbox", { name: "仅看收藏" }).isChecked(), true)
-    await page.getByRole("checkbox", { name: "仅看收藏" }).uncheck()
+    assert.equal(await page.getByRole("switch", { name: "仅看收藏" }).isChecked(), true)
+    await page.getByRole("switch", { name: "仅看收藏" }).uncheck()
     await count(6)
     // Slow old search must not overwrite a newer result.
     slowSearch = true
@@ -881,7 +917,7 @@ async function main() {
     )
     await stage.getByRole("button", { name: "上一组日期", exact: true }).click()
 
-    const availableOnly = stage.getByRole("checkbox", { name: "只看可约日期" })
+    const availableOnly = stage.getByRole("switch", { name: "只看可约日期" })
     const allDateCount = await dateOptions.count()
     await availableOnly.check()
     assert.equal(await stage.locator('.mison-date-option[data-unavailable="true"]').count(), 0)
@@ -890,6 +926,14 @@ async function main() {
         (await stage.getByRole("button", { name: "下一组日期" }).isEnabled()),
     )
     await availableOnly.uncheck()
+    await require("./mison_schedule_transition.cjs")({
+      page,
+      stage,
+      out,
+      setMode: (value) => {
+        scheduleMode = value
+      },
+    })
     const unchangedStageHeight = (await stage.boundingBox()).height
     const unchangedSidebarHeight = (await sidebar.boundingBox()).height
     const teacherReadsBeforeDate = requests.filter((url) =>
@@ -1348,6 +1392,7 @@ async function main() {
             "stale response",
             "expand/collapse and draft retention",
             "teacher switch confirmation",
+            "teacher switch skeleton, stable geometry and scroll, failure retry, stale responses",
             "contiguous slots",
             "courseware selection and preview",
             "write timeout no resend",

@@ -2,6 +2,7 @@ import { useEffect, useId, useLayoutEffect, useRef, useState } from "react"
 import { Popover, PopoverTrigger } from "@shared/components/ui/popover"
 import { ToggleGroup, ToggleGroupItem } from "@shared/components/ui/toggle-group"
 import { Checkbox } from "@shared/components/ui/checkbox"
+import { Switch } from "@shared/components/ui/switch"
 import { Field, FieldLabel, FieldSet, FieldLegend } from "@shared/components/ui/field"
 import { Card, CardHeader, CardTitle, CardAction, CardFooter } from "@shared/components/ui/card"
 import { Badge } from "@shared/components/ui/badge"
@@ -139,8 +140,9 @@ export function TeacherFilterBar({
         </PopoverContent>
       </Popover>
       <Field orientation="horizontal" className="mison-favorites-field">
-        <Checkbox
+        <Switch
           id={`${prefix}-favorites`}
+          className="after:-inset-y-3.5"
           checked={value.favoritesOnly}
           onCheckedChange={(checked) => onChange({ ...value, favoritesOnly: checked === true })}
         />

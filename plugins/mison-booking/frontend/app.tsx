@@ -168,7 +168,8 @@ export function App({ context }: { context: PluginContext }) {
     if (!teacher || !connected) return
     setScheduleLoading(true)
     setScheduleError("")
-    setSchedule((old) => (old?.teacher.id === teacher.id ? old : null))
+    // Keep the previous grid's geometry while the next teacher loads. The
+    // schedule panel masks it and disables interaction until the request ends.
     getSchedule(context, teacher.id, date)
       .then((r) => {
         if (alive && active()) {
@@ -273,6 +274,7 @@ export function App({ context }: { context: PluginContext }) {
     if (
       !teacher ||
       !schedule ||
+      schedule.teacher.id !== teacher.id ||
       scheduleLoading ||
       scheduleError ||
       (date && schedule.date !== date) ||
