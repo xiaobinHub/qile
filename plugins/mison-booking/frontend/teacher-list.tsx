@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from "react"
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react"
 import { Popover, PopoverTrigger } from "@shared/components/ui/popover"
 import { ToggleGroup, ToggleGroupItem } from "@shared/components/ui/toggle-group"
 import { Checkbox } from "@shared/components/ui/checkbox"
@@ -237,6 +237,12 @@ export function TeacherList({
   favoriteBusy: string | null
 }) {
   const sentinel = useRef<HTMLDivElement>(null)
+  const scrollport = useRef<HTMLDivElement>(null)
+  const positions = useRef({ gallery: 0, sidebar: 0 })
+  useLayoutEffect(() => {
+    if (scrollport.current)
+      scrollport.current.scrollTop = positions.current[expanded ? "sidebar" : "gallery"]
+  }, [expanded])
   const attempted = useRef<string | null>(null)
   useEffect(() => {
     attempted.current = null
@@ -244,7 +250,7 @@ export function TeacherList({
   useEffect(() => {
     const target = sentinel.current
     if (!target || !nextCursor || loading) return
-    // Use the browser viewport as root: it clips both page and sidebar scrolling.
+    // Pagination belongs to this list, including in sidebar mode.
     const observer = new IntersectionObserver(
       (entries) => {
         if (!entries.some((entry) => entry.isIntersecting) || attempted.current === nextCursor)
@@ -252,7 +258,7 @@ export function TeacherList({
         attempted.current = nextCursor
         onMore()
       },
-      { rootMargin: "160px" },
+      { root: scrollport.current, rootMargin: "160px" },
     )
     observer.observe(target)
     return () => observer.disconnect()
@@ -267,7 +273,16 @@ export function TeacherList({
         <h2>可约老师{total === null ? "" : ` · ${total}`}</h2>
         {!expanded ? <p>选择老师，查看可约时段。</p> : null}
       </div>
-      <ScrollArea className="mison-teacher-scroll">
+      <div
+        ref={scrollport}
+        className="mison-teacher-scroll"
+        role="region"
+        aria-label="老师列表"
+        tabIndex={0}
+        onScroll={(event) => {
+          positions.current[expanded ? "sidebar" : "gallery"] = event.currentTarget.scrollTop
+        }}
+      >
         <div className="mison-teacher-grid">
           {teachers.map((teacher) => (
             <Card
@@ -371,7 +386,7 @@ export function TeacherList({
             {loading ? "正在加载更多老师…" : "滚动继续查看老师"}
           </div>
         ) : null}
-      </ScrollArea>
+      </div>
       {!teachers.length ? (
         <Empty
           title={loading ? "正在查找老师…" : nextCursor ? "继续查找匹配的老师" : "没有匹配的老师"}

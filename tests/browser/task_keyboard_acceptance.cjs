@@ -63,6 +63,37 @@ async function exerciseTaskKeyboard({ browser, dad, origin, firstId, out, axe, s
     try {
       await page.goto(`${origin}/children/${firstId}`)
       assert.equal(await page.title(), "成长计划")
+      await page.locator(".calendar-panel").waitFor()
+      // An installed iPad app can report a slightly smaller visual viewport
+      // without a keyboard. It must not leave that difference below the app.
+      const assertLayoutFilled = async () => {
+        const geometry = await page.evaluate(() => {
+          const app = document.querySelector(".app").getBoundingClientRect()
+          const header = document.querySelector(".topbar").getBoundingClientRect()
+          const calendar = document.querySelector(".calendar-panel").getBoundingClientRect()
+          return {
+            appBottom: app.bottom,
+            gaps: [
+              calendar.top - header.bottom,
+              innerWidth - calendar.right,
+              innerHeight - calendar.bottom,
+              calendar.left,
+            ],
+            keyboardOpen: document.documentElement.hasAttribute("data-app-keyboard-open"),
+          }
+        })
+        assert.equal(geometry.keyboardOpen, false)
+        assert.ok(Math.abs(geometry.appBottom - height) <= 1, JSON.stringify(geometry))
+        for (const gap of geometry.gaps)
+          assert.ok(Math.abs(gap - 16) <= 1, JSON.stringify(geometry))
+      }
+      await setViewport({ height: height - 54 })
+      await page.waitForFunction(
+        () =>
+          document.documentElement.style.getPropertyValue("--app-visible-height") ===
+          `${visualViewport.height}px`,
+      )
+      await assertLayoutFilled()
       await page.locator("#newTaskBtn").click()
       await page.locator("#taskTitle").fill("键盘弹出时保留完整表单")
       await page.locator('[aria-controls="taskNotePanel"]').click()
@@ -106,7 +137,9 @@ async function exerciseTaskKeyboard({ browser, dad, origin, firstId, out, axe, s
       await insideVisibleArea(page.locator("#taskNote"))
       // Native focus can reveal the textarea before the app's scheduled focus
       // adjustment runs. Start manual-scroll assertions after that frame settles.
-      await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))))
+      await page.evaluate(
+        () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
+      )
       await dialog.evaluate((el) => {
         el.scrollTop = 0
       })
@@ -125,7 +158,16 @@ async function exerciseTaskKeyboard({ browser, dad, origin, firstId, out, axe, s
       assert.equal(await page.locator("#monthCalendar").evaluate((el) => el.scrollTop), background)
       assert.equal(await page.evaluate(() => scrollY), 0, "Background document stays locked")
       await page.locator("#taskTitle").focus()
-      await page.waitForFunction(() => document.querySelector("#taskDialog").scrollTop < 100)
+      // WebKit may reveal the field natively before ViewportBounds runs. The
+      // requirement is a visible focused field, not a browser-specific offset.
+      await page.waitForFunction(() => {
+        const field = document.querySelector("#taskTitle").getBoundingClientRect()
+        return (
+          field.top >= visualViewport.offsetTop &&
+          field.bottom <= visualViewport.offsetTop + visualViewport.height
+        )
+      })
+      await insideVisibleArea(page.locator("#taskTitle"))
       if (width === 1180) await axe(page, "task-keyboard-landscape")
       // Clearly mark the emulated keyboard space in screenshot evidence.
       await page.evaluate(
@@ -170,6 +212,14 @@ async function exerciseTaskKeyboard({ browser, dad, origin, firstId, out, axe, s
         Math.abs((await footer.boundingBox()).y - before.y) < 1,
         "After keyboard hides, ordinary fixed actions are restored",
       )
+      // Keyboard dismissal can restore the same smaller visual viewport.
+      await setViewport({ height: height - 54 })
+      await page.waitForFunction(
+        () =>
+          document.documentElement.style.getPropertyValue("--app-visible-height") ===
+          `${visualViewport.height}px`,
+      )
+      await assertLayoutFilled()
 
       // Zoom alone must not trigger the keyboard layout.
       await setViewport({ height: height / 2, scale: 2 })
@@ -181,6 +231,25 @@ async function exerciseTaskKeyboard({ browser, dad, origin, firstId, out, axe, s
       await page.waitForFunction(() => document.activeElement?.id === "newTaskBtn")
       assert.deepEqual(errors, [])
       results.push({ width, height, visibleHeight, passed: true })
+    } catch (error) {
+      await page.screenshot({ path: path.join(out, `task-keyboard-failure-${width}.png`) })
+      const geometry = await page.evaluate(() => ({
+        focused: document.activeElement?.id,
+        viewport: { height: visualViewport.height, top: visualViewport.offsetTop },
+        documentScroll: scrollY,
+        fields: ["taskDialog", "taskTitle", "taskNote"].map((id) => {
+          const element = document.getElementById(id)
+          return (
+            element && {
+              id,
+              bounds: element.getBoundingClientRect().toJSON(),
+              scroll: element.scrollTop,
+            }
+          )
+        }),
+      }))
+      console.error("Keyboard failure geometry", JSON.stringify(geometry), "Evidence:", out)
+      throw error
     } finally {
       await context.close()
     }

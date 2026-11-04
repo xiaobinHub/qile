@@ -161,6 +161,7 @@ export function CalendarPage({
   return (
     <section
       className="calendar-panel"
+      data-viewport-contained
       data-calendar-mode={mode}
       data-quick-edit={quickEdit.active || undefined}
     >
@@ -243,7 +244,12 @@ export function CalendarPage({
               id="newTaskBtn"
               variant="outline"
               disabled={quickEdit.active}
-              onClick={() => openTask({ date: today() })}
+              onClick={(event) => {
+                // Safari touch clicks do not focus buttons automatically. Keep
+                // the actual opener available when the editor restores focus.
+                event.currentTarget.focus({ preventScroll: true })
+                openTask({ date: today() })
+              }}
             >
               <Plus />
               新建任务

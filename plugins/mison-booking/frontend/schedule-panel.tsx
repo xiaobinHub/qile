@@ -3,7 +3,6 @@ import { Checkbox } from "@shared/components/ui/checkbox"
 import { Field, FieldLabel } from "@shared/components/ui/field"
 import { Badge } from "@shared/components/ui/badge"
 import { Separator } from "@shared/components/ui/separator"
-import { ScrollArea } from "@shared/components/ui/scroll-area"
 import { ToggleGroup, ToggleGroupItem } from "@shared/components/ui/toggle-group"
 import {
   Card,
@@ -161,7 +160,7 @@ export function SchedulePanel({
       </header>
       <Separator />
       {step === "success" ? (
-        <ScrollArea className="mison-stage-scroll">
+        <div className="mison-stage-scroll" role="region" aria-label="约课内容" tabIndex={0}>
           <Empty title="预约成功" icon={<Check />}>
             <p>
               {teacherName(teacher.name)} · {schedule ? dateLabel(schedule.date) : ""}
@@ -174,10 +173,10 @@ export function SchedulePanel({
               <Button onClick={onBookings}>查看我的预约</Button>
             </div>
           </Empty>
-        </ScrollArea>
+        </div>
       ) : step === "confirm" ? (
         <>
-          <ScrollArea className="mison-stage-scroll">
+          <div className="mison-stage-scroll" role="region" aria-label="约课内容" tabIndex={0}>
             <div className="mison-stage-body">
               <div className="mison-section-heading">
                 <h3>{draft ? dateLabel(draft.date) : "确认课件"}</h3>
@@ -247,7 +246,7 @@ export function SchedulePanel({
                 </Notice>
               ) : null}
             </div>
-          </ScrollArea>
+          </div>
           <Separator />
           <footer className="mison-stage-footer">
             <span>
@@ -265,7 +264,7 @@ export function SchedulePanel({
         </>
       ) : (
         <>
-          <ScrollArea className="mison-stage-scroll">
+          <div className="mison-stage-scroll" role="region" aria-label="约课内容" tabIndex={0}>
             <div className="mison-stage-body">
               <div className="mison-section-heading">
                 <div className="mison-date-heading">
@@ -397,7 +396,7 @@ export function SchedulePanel({
                 <Notice error>{disabledReason}</Notice>
               ) : null}
             </div>
-          </ScrollArea>
+          </div>
           <Separator />
           <footer className="mison-stage-footer">
             <div>

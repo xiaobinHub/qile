@@ -21,6 +21,9 @@
     "check:demo-plugins": "tsc -p plugins/demo-page/tsconfig.json && node scripts/build_plugin.mjs demo-page && node scripts/build_plugin.mjs demo-service",
     "check:mison": "tsc -p plugins/mison-booking/tsconfig.json --noEmit",
     "test:mison:ui": "npm run check:mison && npm run plugin:build -- mison-booking && node tests/browser/mison_frontend_acceptance.cjs",
+    "test:ipad": "npm run check:parent && npm run check:mison && npm run plugin:build -- mison-booking && npm run test:ipad:chromium && npm run test:ipad:webkit",
+    "test:ipad:chromium": "IPAD_TOUCH_ACCEPTANCE=1 node tests/browser/mison_frontend_acceptance.cjs",
+    "test:ipad:webkit": "TOUCH_BROWSER=webkit IPAD_TOUCH_ACCEPTANCE=1 node tests/browser/mison_frontend_acceptance.cjs",
     "test:demo-plugins": "PYTHONPATH=backend .venv/bin/python -m unittest discover -s tests/backend -p test_demo_plugins.py && node tests/browser/demo_plugins_acceptance.cjs",
     "plugin:dev": "node scripts/plugin_dev.mjs"
   },

@@ -13,7 +13,15 @@
 - 教师档案展示简介与原生视频播放器，不展示课时时长或复制入口；视频支持暂停、进度拖动和全屏。
 - 教师日期筛选复用主应用日历的共享DatePicker；具体时段以多选面板展示，选择后发送逗号拼接的times查询。
 - 课件确认在右侧工作区；我的预约和教师档案使用抽屉；更换课件使用分类选择弹窗。
-- 全部基础控件复用共享shadcn/ui源码：Card、Button、Field/InputGroup、Popover、Checkbox、ToggleGroup、Tabs、Dialog/Sheet/AlertDialog、RadioGroup、ScrollArea、Avatar、Badge、Alert、Empty等；日期复用共享DatePicker，窄屏约课时通过收起按钮返回列表。原生video/iframe仅承担媒体播放和内容显示。
+- 全部基础控件复用共享shadcn/ui源码：Card、Button、Field/InputGroup、Popover、Checkbox、ToggleGroup、Tabs、Dialog/Sheet/AlertDialog、RadioGroup、ScrollArea、Avatar、Badge、Alert、Empty等；日期复用共享DatePicker，窄屏约课时通过收起按钮返回列表。视频使用原生video；PDF复用共享PDF.js预览，连续页面在原生滚动区域内浏览，支持适合宽度、缩放、失败重试及按需释放画布。
+
+## iPad 触控验收
+
+`npm run test:ipad` 使用隔离 HTTP 样例检查老师全屏/侧边列表、课件分类及内容、预约抽屉、PDF 多页与缩放、月历/周历、任务表单和时间滚轮。Chromium 使用原生触摸输入；WebKit 使用带触控能力的桌面上下文与原生滚轮检查布局和阅读器（Playwright 的移动 WebKit 不支持滚轮或滑动手势接口）。证据写入系统临时目录。
+
+主应用固定在可见视口内，根页面不滚动。工作区由宿主分配高度，老师列表与约课内容各自使用单一原生滚动容器，切换全屏/侧栏保留各自位置；设置、商城等长内容由 main 区域滚动。打印样式不锁定文档。抽屉跟随可见视口；PDF 使用同源模块 worker，插件构建资源保持相对路径和 `.js` 白名单。
+
+自动化不能替代物理 iPad 添加主屏幕后对系统回弹、软键盘及恢复前台的验收。触控表单回归会单独记录 Radix Switch/Popover 的既有开发环境 `flushSync` 警告，其余控制台错误和页面异常均使测试失败。
 
 ## 检查与构建
 
@@ -29,7 +37,11 @@ npm run check:layout
 
 验收覆盖全宽/分栏切换、筛选与异步竞态、草稿保留、换老师确认、连续时段、课件选择、写入结果核对、预约分类、档案抽屉、键盘焦点、多屏宽布局，以及插件页面外壳不再显示重复标题和设置快捷按钮。该验收不代表真实美森接口闭环。
 
-插件构建输出：`output/plugin-releases/mison-booking/1.0.10/build/`。已安装版本不可原地覆盖；本机开发环境通过原插件注册及资源校验链更新到1.0.10，保留现有发布范围、儿童安装、配置和Token。旧版1.0.9保留，未操作生产。
+插件构建输出：`output/plugin-releases/mison-booking/1.0.11/build/`。已安装版本不可原地覆盖；本机开发环境通过正常插件部署链更新到1.0.11，保留现有发布范围、儿童安装、配置、登录绑定和加密Token。旧版1.0.10保留，未操作生产。
+
+1.0.11 移除插件自行测高、负边距及滑动时更新高度的逻辑，改为填满主应用分配的空间；老师列表和约课内容使用原生滚动。该版本须与包含固定视口布局的家长端配套发布。
+
+对正在运行的本地主应用构建验收：`PARENT_ACCEPTANCE_ORIGIN=http://chenxiaobin.cn:18787 IPAD_TOUCH_ACCEPTANCE=1 node tests/browser/mison_frontend_acceptance.cjs`，添加 `TOUCH_BROWSER=webkit` 检查 WebKit。主应用静态资源从实际服务读取，业务 API 全部拦截为隔离样例，不调用真实美森接口。
 
 ## 真实接入状态
 

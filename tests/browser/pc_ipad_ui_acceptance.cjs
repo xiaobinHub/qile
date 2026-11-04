@@ -66,7 +66,7 @@ async function exercisePCIPad({ browser, dad, admin, origin, adminOrigin, firstI
       assert.equal(await page.locator('.settings-nav-item[aria-current="page"]').evaluate(el=>getComputedStyle(el).backgroundColor),'rgb(255, 240, 179)','Selected settings entry has the approved pale yellow surface');
       if(width===1487){
         const detail=await page.locator('.settings-detail').boundingBox();
-        assert.ok(Math.abs(detail.x-252)<2&&Math.abs(detail.y-88)<2,'Compact settings frame uses the 72px header and 24px page inset');
+        assert.ok(Math.abs(detail.x-244)<2&&Math.abs(detail.y-88)<2,'Compact settings frame uses the 72px header and 16px page inset');
       }
       await shot(page,`reference-${tag}-child-profile`);
       await shot(page,`pc-ipad-${tag}-settings`);

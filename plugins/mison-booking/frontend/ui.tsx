@@ -34,7 +34,6 @@ import {
   SheetTitle,
 } from "@shared/components/ui/sheet"
 import { Separator } from "@shared/components/ui/separator"
-import { ScrollArea } from "@shared/components/ui/scroll-area"
 import { DatePicker as SharedDatePicker } from "@shared/components/date-picker"
 import { PopoverContent as SharedPopoverContent } from "@shared/components/ui/popover"
 import { cn } from "@shared/lib/utils"
@@ -290,9 +289,9 @@ export function Overlay({
             <div className="mison-overlay-body is-contained">{children}</div>
           </div>
         ) : (
-          <ScrollArea className="mison-overlay-scroll">
+          <div className="mison-overlay-scroll">
             <div className="mison-overlay-body">{children}</div>
-          </ScrollArea>
+          </div>
         )}
         {footer ? (
           <>

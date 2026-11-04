@@ -4,7 +4,7 @@
     "src": "../../node_modules/@fontsource-variable/inter/files/inter-latin-wght-normal.woff2"
   },
   "index.html": {
-    "file": "index-B2bKNBcw.js",
+    "file": "index-D0s0aCns.js",
     "name": "index",
     "src": "index.html",
     "isEntry": true,
@@ -13,7 +13,7 @@
       "src/features/print.tsx"
     ],
     "css": [
-      "index-DjCw3LwB.css"
+      "index-3Ct8tMRZ.css"
     ],
     "assets": [
       "body-pK_vdBQA.webp",
@@ -30,7 +30,7 @@
     "src": "src/assets/quick-trash/lid.webp"
   },
   "src/features/print.tsx": {
-    "file": "print-CkcaWdj9.js",
+    "file": "print-CV7vEqoV.js",
     "name": "print",
     "src": "src/features/print.tsx",
     "isDynamicEntry": true,
@@ -39,7 +39,7 @@
     ]
   },
   "src/features/store.tsx": {
-    "file": "store-CKwVrB48.js",
+    "file": "store-BfpaTITE.js",
     "name": "store",
     "src": "src/features/store.tsx",
     "isDynamicEntry": true,

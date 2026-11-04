@@ -1,11 +1,12 @@
 import { operationId as newOperationId } from "./operation-id"
-import { useEffect, useState } from "react"
+import { lazy, Suspense, useEffect, useState } from "react"
 import { Play, Star } from "lucide-react"
 import { Skeleton } from "@shared/components/ui/skeleton"
 import { Badge } from "@shared/components/ui/badge"
 import { request } from "./api"
 import { Avatar, Button, Empty, Notice, Overlay, teacherName } from "./ui"
 import type { Connection, PluginContext, Resource, Teacher, TeacherProfile } from "./types"
+const PdfPreview = lazy(() => import("@shared/components/pdf-preview"))
 export function ProfileDrawer({
   context,
   teacher,
@@ -129,11 +130,16 @@ export function safeResourceUrl(resource: Resource) {
 }
 export function ResourceViewer({ resource, onClose }: { resource: Resource; onClose(): void }) {
   const url = safeResourceUrl(resource)
+  const pdf = resource.action === "inline" && resource.mimeType === "application/pdf" && !!url
   return (
-    <Overlay wide title={resource.title} onClose={onClose}>
+    <Overlay wide contained={pdf} title={resource.title} onClose={onClose}>
       {resource.action === "inline" && url ? (
         resource.mimeType?.startsWith("video/") ? (
           <video controls autoPlay={false} src={url} />
+        ) : pdf ? (
+          <Suspense fallback={<p role="status">正在打开 PDF…</p>}>
+            <PdfPreview key={url} url={url} title={resource.title} />
+          </Suspense>
         ) : (
           <iframe title={resource.title} src={url} />
         )

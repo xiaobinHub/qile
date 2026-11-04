@@ -1,5 +1,5 @@
 import { operationId as newOperationId } from "./operation-id"
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Card, CardHeader, CardContent } from "@shared/components/ui/card"
 import { Badge } from "@shared/components/ui/badge"
 import { Separator } from "@shared/components/ui/separator"
@@ -71,41 +71,8 @@ export function App({ context }: { context: PluginContext }) {
   const listGeneration = useRef(0),
     draftOperationId = useRef<string | null>(null)
   const submitId = useRef<string | null>(null),
-    writeLock = useRef(false),
-    galleryScroll = useRef(0)
+    writeLock = useRef(false)
   const root = useRef<HTMLDivElement>(null)
-  useLayoutEffect(() => {
-    const element = root.current
-    if (!element) return
-    let frame = 0
-    const measure = () => {
-      const top = element.getBoundingClientRect().top + window.scrollY
-      const main = element.closest("main") ?? element.parentElement
-      const bottom = main ? parseFloat(getComputedStyle(main).paddingBottom) || 0 : 0
-      element.style.setProperty("--mison-host-bottom-padding", `${bottom}px`)
-      const height = Math.max(0, (window.visualViewport?.height ?? window.innerHeight) - top)
-      const value = `${height}px`
-      if (element.style.getPropertyValue("--mison-viewport-height") !== value)
-        element.style.setProperty("--mison-viewport-height", value)
-    }
-    const scheduleMeasure = () => {
-      cancelAnimationFrame(frame)
-      frame = requestAnimationFrame(measure)
-    }
-    measure()
-    const observer = new ResizeObserver(scheduleMeasure)
-    observer.observe(element.parentElement ?? element)
-    const main = element.closest("main")
-    if (main) observer.observe(main)
-    window.addEventListener("resize", scheduleMeasure)
-    window.visualViewport?.addEventListener("resize", scheduleMeasure)
-    return () => {
-      cancelAnimationFrame(frame)
-      observer.disconnect()
-      window.removeEventListener("resize", scheduleMeasure)
-      window.visualViewport?.removeEventListener("resize", scheduleMeasure)
-    }
-  }, [])
   const live = useRef(true)
   useEffect(() => {
     live.current = true
@@ -229,7 +196,6 @@ export function App({ context }: { context: PluginContext }) {
     if (!value.nickname) setSearch("")
   }
   function applySwitch(next: Switch) {
-    if (!expanded) galleryScroll.current = window.scrollY
     setScheduleLoading(true)
     setScheduleError("")
     setTeacher(next.teacher)
@@ -248,7 +214,6 @@ export function App({ context }: { context: PluginContext }) {
       return
     }
     if (teacher?.id === next.id && (!nextDate || nextDate === schedule?.date)) {
-      if (!expanded) galleryScroll.current = window.scrollY
       setExpanded(true)
       return
     }
@@ -258,7 +223,6 @@ export function App({ context }: { context: PluginContext }) {
   function collapse() {
     setExpanded(false)
     requestAnimationFrame(() => {
-      window.scrollTo({ top: galleryScroll.current })
       root.current
         ?.querySelector<HTMLButtonElement>(`[data-book-teacher="${CSS.escape(teacher?.id ?? "")}"]`)
         ?.focus({ preventScroll: true })
@@ -599,7 +563,7 @@ export function App({ context }: { context: PluginContext }) {
     void reloadBootstrap()
   }
   return (
-    <Card className="mison-booking gap-0 py-0" ref={root}>
+    <Card className="mison-booking gap-0 py-0" data-viewport-contained ref={root}>
       {connected ? (
         <CardHeader className="mison-header">
           <Button variant="outline" disabled={!connected} onClick={() => setBookingsOpen(true)}>

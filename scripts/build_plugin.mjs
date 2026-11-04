@@ -26,6 +26,7 @@ mkdirSync(output, { recursive: true })
 if (manifest.frontend) {
   await build({
     ...pluginViteConfig(root, id),
+    base: "./",
     mode: "production",
     define: {
       "process.env.NODE_ENV": JSON.stringify("production"),
@@ -39,7 +40,9 @@ if (manifest.frontend) {
         formats: ["es"],
         fileName: () => "entry.js",
       },
-      rollupOptions: { output: { assetFileNames: "style.[ext]" } },
+      rollupOptions: {
+        output: { assetFileNames: "style.[ext]", chunkFileNames: "[name]-[hash].js" },
+      },
       minify: true,
       cssCodeSplit: false,
     },

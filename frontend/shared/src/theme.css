@@ -272,6 +272,13 @@
       env(safe-area-inset-bottom, 0px)
   );
 }
+[data-slot="sheet-content"][data-side="left"],
+[data-slot="sheet-content"][data-side="right"] {
+  top: var(--app-visible-top, 0px);
+  bottom: auto;
+  height: var(--app-visible-height, 100dvh);
+  max-height: var(--app-visible-height, 100dvh);
+}
 .ui-modal-frame {
   display: flex;
   flex-direction: column;

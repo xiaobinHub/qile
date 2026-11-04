@@ -3,12 +3,7 @@
   container-type: inline-size;
   container-name: mison;
   min-width: 0;
-  --mison-bottom-gap: max(16px, env(safe-area-inset-bottom, 0px));
-  height: max(
-    0px,
-    calc(var(--mison-viewport-height, calc(100dvh - 140px)) - var(--mison-bottom-gap))
-  );
-  margin-bottom: calc(var(--mison-bottom-gap) - var(--mison-host-bottom-padding, 24px));
+  height: 100%;
   min-height: 0;
   overflow: hidden;
   font: 400 var(--text-body)/var(--text-body--line-height) var(--font-sans, sans-serif);
@@ -140,13 +135,10 @@
 }
 .mison-teacher-scroll {
   flex: 1;
-  height: 0;
   min-height: 0;
+  overflow-y: auto;
   overscroll-behavior: contain;
-}
-.mison-teacher-scroll [data-slot="scroll-area-viewport"],
-.mison-stage-scroll [data-slot="scroll-area-viewport"] {
-  overscroll-behavior: contain;
+  touch-action: pan-y pinch-zoom;
 }
 .mison-list-heading {
   display: flex;
@@ -238,7 +230,6 @@
 }
 .is-sidebar .mison-teacher-scroll {
   flex: 1;
-  height: 0;
   min-height: 0;
 }
 .is-sidebar .mison-list-heading {
@@ -284,7 +275,9 @@
 .mison-stage-scroll {
   flex: 1;
   min-height: 0;
-  height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-x pan-y pinch-zoom;
 }
 .mison-stage-header {
   display: flex;
@@ -420,11 +413,13 @@
   gap: 0;
   padding: 0;
   min-width: 0;
+  overflow: hidden;
+  overscroll-behavior: contain;
 }
 .mison-overlay.is-modal {
   width: min(560px, calc(100vw - 32px));
   max-width: calc(100vw - 32px);
-  max-height: 85dvh;
+  max-height: min(85dvh, calc(var(--app-visible-height, 100dvh) - 32px));
 }
 .mison-overlay.is-wide {
   width: min(980px, calc(100vw - 32px));
@@ -433,11 +428,16 @@
 .mison-overlay.is-drawer {
   width: min(640px, 100vw);
   max-width: 100vw;
-  height: 100dvh;
-  max-height: 100dvh;
+  top: var(--app-visible-top, 0px);
+  bottom: auto;
+  height: var(--app-visible-height, 100dvh);
+  max-height: var(--app-visible-height, 100dvh);
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 .mison-overlay.is-modal.is-contained {
-  height: min(720px, 85dvh);
+  height: min(720px, 85dvh, calc(var(--app-visible-height, 100dvh) - 32px));
 }
 .mison-overlay-header {
   display: flex;
@@ -451,9 +451,12 @@
 .mison-overlay-scroll {
   flex: 1;
   min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-x pan-y pinch-zoom;
 }
 .mison-overlay.is-modal .mison-overlay-scroll {
-  max-height: calc(85dvh - 144px);
+  max-height: min(calc(85dvh - 144px), calc(var(--app-visible-height, 100dvh) - 176px));
 }
 .mison-overlay.is-contained .mison-overlay-scroll,
 .mison-overlay-scroll.is-contained {
@@ -467,9 +470,6 @@
   height: 100%;
   min-height: 0;
   overflow: hidden;
-}
-.mison-overlay-scroll > [data-slot="scroll-area-viewport"] {
-  max-height: inherit;
 }
 .mison-overlay-body {
   padding: 20px;
@@ -517,6 +517,7 @@
   min-height: 0;
   overflow: auto;
   overscroll-behavior: contain;
+  touch-action: pan-y pinch-zoom;
   padding-top: 12px;
 }
 .mison-booking-card {
@@ -652,6 +653,7 @@
   min-height: 0;
   overflow: auto;
   overscroll-behavior: contain;
+  touch-action: pan-x pan-y pinch-zoom;
 }
 .mison-course-picker nav {
   padding: 8px;

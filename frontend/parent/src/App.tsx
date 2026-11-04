@@ -253,7 +253,14 @@ function Application() {
               </>
             )}
           </header>
-          <main id="main">
+          <main
+            id="main"
+            data-scroll-mode={
+              child && (snapshot.view === "calendar" || typeof snapshot.view === "object")
+                ? "workspace"
+                : "page"
+            }
+          >
             {child && !plugins.confirmed && plugins.error && (
               <div className="plugin-status-notice" role="status">
                 <p>应用状态暂未确认，插件操作已暂停。</p>
@@ -349,8 +356,7 @@ function Application() {
               知道了
             </Button>
           }
-        >
-        </Modal>
+        ></Modal>
       )}
       {editor && data && child && (
         <>

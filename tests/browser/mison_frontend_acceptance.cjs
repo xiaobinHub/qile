@@ -3,11 +3,14 @@ const assert = require("node:assert/strict")
 const fs = require("node:fs")
 const os = require("node:os")
 const path = require("node:path")
-const { chromium } = require("playwright")
+const { chromium, webkit } = require("playwright")
 const AxeBuilder = require("@axe-core/playwright").default
 const root = path.resolve(__dirname, "../..")
 const out = fs.mkdtempSync(path.join(os.tmpdir(), "mison-frontend-"))
 async function main() {
+  const touchAcceptance = process.env.IPAD_TOUCH_ACCEPTANCE === "1"
+  const installedBuild = process.env.PARENT_ACCEPTANCE_ORIGIN
+  const engine = process.env.TOUCH_BROWSER === "webkit" ? webkit : chromium
   const { createServer } = await import("vite")
   const development = process.env.PLUGIN_DEV_ACCEPTANCE === "1"
   const session = "acceptance-dev-session"
@@ -101,7 +104,14 @@ async function main() {
     data: {
       schemaVersion: 2,
       settings: { childName: "乐乐", weekStartsOn: 1 },
-      categories: [],
+      categories: touchAcceptance
+        ? Array.from({ length: 40 }, (_, i) => ({
+            id: `touch-category-${i}`,
+            name: `触控测试类型 ${i + 1}`,
+            color: "#facc15",
+            active: true,
+          }))
+        : [],
       series: [],
       exceptions: [],
       completions: [],
@@ -112,14 +122,17 @@ async function main() {
     },
   }
   const errors = [],
-    requests = []
+    requests = [],
+    knownWarnings = []
   try {
     await server.listen()
-    const origin = `http://127.0.0.1:${server.httpServer.address().port}`
-    browser = await chromium.launch({ headless: true })
+    const origin = installedBuild || `http://127.0.0.1:${server.httpServer.address().port}`
+    const entryUrl = `${origin}${installedBuild ? "/" : "/parent-assets/"}`
+    browser = await engine.launch({ headless: true })
     const browserContext = await browser.newContext({
       viewport: { width: 1440, height: 1000 },
       locale: "zh-CN",
+      ...(touchAcceptance ? { hasTouch: true, isMobile: engine.name() !== "webkit" } : {}),
     })
     // HTTP custom domains do not expose randomUUID; exercise all plugin writes.
     await browserContext.addInitScript(() => {
@@ -128,10 +141,14 @@ async function main() {
         configurable: true,
       })
     })
-    await browserContext.route("**/api/**", async (route) => {
+    const apiRoute = async (route) => {
       const req = route.request(),
         url = new URL(req.url()),
         json = (value) => route.fulfill({ json: value })
+      if (touchAcceptance && url.pathname.endsWith("/media/fixture-pdf")) {
+        const data = require("./ipad_touch_acceptance.cjs").pdfFixture()
+        return route.fulfill({ contentType: "application/pdf", body: data })
+      }
       if (url.pathname.endsWith("/media/fixture-video")) {
         const data = fs.readFileSync(path.join(root, "tests/fixtures/mison/teacher-intro.mp4"))
         const range = req.headers().range?.match(/^bytes=(\d+)-(\d*)$/)
@@ -239,6 +256,43 @@ async function main() {
             })
         }
         const response = await fixtureApi(relative, options)
+        if (touchAcceptance) {
+          const name = relative.split("?")[0]
+          if (name === "teachers" || (name === "bookings" && req.method() === "GET")) {
+            const items = response.data.items
+            const count = !items.length
+              ? 0
+              : name === "teachers" &&
+                  new URLSearchParams(relative.split("?")[1]).get("nickname") === "Jenyy"
+                ? 1
+                : 60
+            response.data.items = Array.from({ length: count }, (_, i) => ({
+              ...items[i % items.length],
+              ...(name === "teachers"
+                ? { id: i < items.length ? items[i].id : `touch-teacher-${i}`, avatarUrl: null }
+                : { key: `touch-booking-${i}` }),
+            }))
+            response.data.total = count
+          }
+          if (name.endsWith("/resources"))
+            response.data.items = [
+              {
+                id: "touch-pdf",
+                title: "触控课件",
+                action: "inline",
+                url: "/api/children/a/plugins/mison-booking/media/fixture-pdf",
+                mimeType: "application/pdf",
+              },
+            ]
+          if (name === "courseware/categories")
+            response.data.nodes.push(
+              ...Array.from({ length: 40 }, (_, i) => ({
+                id: `touch-category-${i}`,
+                name: `课件分类 ${i + 1}`,
+                children: [],
+              })),
+            )
+        }
         if (paginationProbe && relative.split("?")[0] === "teachers") {
           paginationCalls++
           const cursor = new URLSearchParams(relative.split("?")[1]).get("cursor")
@@ -312,22 +366,34 @@ async function main() {
       }
       assert.equal(req.method(), "GET", "test must not mutate parent application")
       return json({ avatars: [], members: [], invitations: [] })
-    })
+    }
+    await browserContext.route("**/api/**", apiRoute)
     await browserContext.route("**/plugin-assets/mison-booking/**", async (route) => {
-      const name = new URL(route.request().url()).pathname.split("/").pop()
-      assert.ok(["entry.js", "style.css"].includes(name))
+      const name = new URL(route.request().url()).pathname.split("/frontend/")[1]
+      assert.ok(name && !name.includes("..") && /\.(js|css)$/.test(name))
       return route.fulfill({
         path: path.join(build, "frontend", name),
         contentType: name.endsWith(".css") ? "text/css" : "application/javascript",
       })
     })
     const page = await browserContext.newPage()
+    page.setDefaultTimeout(20000)
     page.on("pageerror", (e) => errors.push(e.message))
     page.on("console", (msg) => {
-      if (msg.type() === "error") errors.push(msg.text())
+      if (msg.type() !== "error") return
+      // Radix Switch's hidden input dispatches a click in a passive effect;
+      // an open Popover handles it with flushSync. Record this pre-existing
+      // development warning separately from page exceptions/application errors.
+      if (
+        touchAcceptance &&
+        msg.text().startsWith("flushSync was called from inside a lifecycle method.")
+      )
+        knownWarnings.push(msg.text())
+      else errors.push(msg.text())
     })
     page.on("request", (req) => requests.push(req.url()))
-    const ready = () => page.getByRole("heading", { name: "可约老师 · 6" }).waitFor()
+    const ready = () =>
+      page.getByRole("heading", { name: `可约老师 · ${touchAcceptance ? 60 : 6}` }).waitFor()
     const count = (n) =>
       page.waitForFunction((n) => document.querySelectorAll(".mison-teacher-card").length === n, n)
     const slot = (time) => page.getByRole("button", { name: time, exact: true })
@@ -362,7 +428,7 @@ async function main() {
           ].map((key) => [key, style[key]]),
         )
       })
-    await page.goto(`${origin}/parent-assets/`)
+    await page.goto(entryUrl)
     await page.locator('[data-view="settings"]').waitFor()
     await page.locator('[data-view="calendar"]').click()
     await page.locator(".calendar-panel").waitFor()
@@ -481,6 +547,78 @@ async function main() {
     await loginForm.getByRole("button", { name: "登录", exact: true }).dblclick()
     await ready()
     assert.equal(loginCalls, 2, "double click sends one request")
+    if (touchAcceptance) {
+      await require("./ipad_touch_acceptance.cjs")
+        .exerciseMisonTouch({
+          page,
+          browserContext,
+          origin,
+          entryUrl,
+          out,
+          engine: engine.name(),
+        })
+        .catch(async (error) => {
+          await page.screenshot({ path: path.join(out, "touch-failure.png") })
+          console.error({
+            evidence: out,
+            errors,
+            body: (await page.locator("body").innerText()).slice(-600),
+          })
+          throw error
+        })
+      await require("./task_keyboard_acceptance.cjs").exerciseTaskKeyboard({
+        browser: {
+          newContext: async (options) => {
+            const context = await browser.newContext(options)
+            return {
+              route: context.route.bind(context),
+              close: context.close.bind(context),
+              newPage: async () => {
+                const target = await context.newPage()
+                // Page routes take priority over the keyboard helper's context
+                // routes: all GETs stay in fixtures, all writes stay rejected.
+                await target.route("**/api/**", (route) =>
+                  route.request().method() === "GET"
+                    ? apiRoute(route)
+                    : route.fulfill({ status: 503, json: { error: "隔离键盘验收禁止写入。" } }),
+                )
+                return target
+              },
+            }
+          },
+        },
+        dad: page,
+        origin: installedBuild ? origin : `${origin}/parent-assets`,
+        firstId: "a",
+        out,
+        axe: async (target) => {
+          const result = await new AxeBuilder({ page: target })
+            .include("#taskDialog")
+            .withTags(["wcag2a", "wcag2aa"])
+            .analyze()
+          assert.deepEqual(
+            result.violations.map((item) => item.id),
+            [],
+          )
+        },
+        stage: console.log,
+      })
+      assert.deepEqual(errors, [])
+      console.log(
+        JSON.stringify(
+          {
+            passed: true,
+            engine: engine.name(),
+            evidence: out,
+            pageErrors: errors,
+            knownRadixDevelopmentWarnings: knownWarnings,
+          },
+          null,
+          2,
+        ),
+      )
+      return
+    }
     assert.equal(await page.locator(".mison-header").count(), 1)
     await page.waitForTimeout(500)
     assert.equal(avatarFailures, 0, "read-only avatar uses one bounded retry")
@@ -516,7 +654,7 @@ async function main() {
       const image = document.querySelector(".mison-teacher-card .mison-avatar img")
       return image?.complete && image.naturalWidth > 0
     })
-    await page.goto(`${origin}/parent-assets/`)
+    await page.goto(entryUrl)
     await page.locator('[data-view="plugin:mison-booking"]').click()
     await ready()
     assert.equal(loginCalls, 2, "refresh reuses saved session")
@@ -720,7 +858,7 @@ async function main() {
       Math.abs((await sidebar.boundingBox()).height - sidebarHeightBeforeLongList) < 2,
       "sidebar height independent of teacher count",
     )
-    const sidebarViewport = sidebar.locator('[data-slot="scroll-area-viewport"]')
+    const sidebarViewport = sidebar.locator(".mison-teacher-scroll")
     assert.equal(await sidebarViewport.evaluate((el) => el.scrollHeight > el.clientHeight), true)
     const pageScrollBefore = await page.evaluate(() => scrollY)
     await sidebarViewport.evaluate((el) => {
@@ -952,7 +1090,10 @@ async function main() {
     assert.equal(await bookingsSheet.getByRole("button", { name: "继续约课" }).count(), 0)
     assert.equal(await bookingsSheet.getByRole("button", { name: "去上课" }).count(), 0)
     assert.equal(await bookingsSheet.locator(".mison-booking-date").count(), 0)
-    await bookingsSheet.getByText(/11月4日/).first().waitFor()
+    await bookingsSheet
+      .getByText(/11月4日/)
+      .first()
+      .waitFor()
     const bookingActions = bookingsSheet.locator(".mison-booking-toolbar .mison-actions button")
     assert.equal(await bookingActions.nth(0).getAttribute("aria-label"), "预约日期筛选")
     assert.equal(await bookingActions.nth(1).getAttribute("aria-label"), "刷新预约")
@@ -1144,7 +1285,7 @@ async function main() {
     await ready()
     assert.equal(loginCalls, 4)
     restoredPending = lastBookingOperationId
-    await page.goto(`${origin}/parent-assets/`)
+    await page.goto(entryUrl)
     await page.locator('[data-view="plugin:mison-booking"]').click()
     await ready()
     await page.getByRole("button", { name: "核对上次操作", exact: true }).click()
@@ -1166,7 +1307,7 @@ async function main() {
     // Reload the real parent route with a failed plugin API: never show fake connected data.
     bootstrapFailure = true
     await page.setViewportSize({ width: 1440, height: 1000 })
-    await page.goto(`${origin}/parent-assets/`)
+    await page.goto(entryUrl)
     await page.locator('[data-view="plugin:mison-booking"]').click()
     await page.getByText("暂时无法连接美森约课", { exact: true }).waitFor()
     assert.equal(await page.locator(".mison-teacher-card").count(), 0)
