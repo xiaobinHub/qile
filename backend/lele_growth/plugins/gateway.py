@@ -121,7 +121,8 @@ class PluginGateway:
             current, user = self._authenticate(cur, plugin_id, child_id, token, csrf, origin, surface, write)
             require(isinstance(release_id, str) and release_id == current['releaseId'], 409,
                     '应用版本已改变，请重新进入。', 'plugin_version_changed')
-            context = self.signer.issue(current, actor=user[0])
+            declared = (current['manifest'].get('backend') or {}).get('requestTimeoutSeconds', 10)
+            context = self.signer.issue(current, actor=user[0], ttl=min(120, declared + 30))
             record_route = re.fullmatch(r'records/([A-Za-z0-9_-]{1,64})(?:/([^/]{1,128}))?', endpoint)
             if record_route:
                 from . import state_store
@@ -146,11 +147,12 @@ class PluginGateway:
                 return ('done', state_store.put_record(cur, current, collection, record_id, body['payload'],
                               expected_revision=body.get('expectedRevision'), operation_id=operation_id, actor_id=user[0]))
             require(bool(current['manifest'].get('backend')), 404, '应用接口不存在。')
-            return ('call', context)
+            return ('call', (context, declared))
         kind, value = self.service.transaction(initial)
         if kind == 'done':
             return value
-        result = self.runtime.call(value, 'handle_request', {'path': endpoint, 'method': method, 'body': body})
+        value, declared = value
+        result = self.runtime.call(value, 'handle_request', {'path': endpoint, 'method': method, 'body': body}, timeout=declared)
         def finish(cur):
             current, _ = self._authenticate(cur, plugin_id, child_id, token, csrf, origin, surface, write)
             assert_fences(current, self.signer.verify(value))

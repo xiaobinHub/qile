@@ -78,9 +78,12 @@ def eligibility_reason(context, *, require_enabled=True):
     from .configuration import validate_config
     try:
         validate_manifest(context['manifest'],config_schema=context['config_schema'])
-        validate_config(context['config_schema'], context['config'])
     except ApiError:
-        return 'plugin_config_required'
+        return 'plugin_manifest_invalid'
+    try:
+        validate_config(context['config_schema'], context['config'])
+    except ApiError as error:
+        return 'plugin_config_required' if error.kind == 'plugin_config_required' else 'plugin_config_invalid'
     return None
 
 

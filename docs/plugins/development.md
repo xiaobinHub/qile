@@ -78,3 +78,11 @@ npm run plugin:build -- reminder-demo
 后端包内包括锁定 SDK 和插件 wheel；首期不接受原生平台 wheel。主系统发布包不携带插件源目录，插件构建也不重新构建主系统。
 
 参考插件仅用于验证平台：成长随记记录文字；提醒示例只记录执行，不向真实联系人发送消息。公开上架前需完善介绍与使用说明并选择儿童范围。
+
+## 源码热更新
+
+本地开发可使用 `npm run plugin:dev -- mison-booking`，接口联调追加 `--with-backend`。参见[本地开发模式](development-mode.md)。
+
+## 私有记录读取兼容
+
+具备 `plugin.private-state` 的后端可通过 Bridge 调用 `private.get`。请求中的 `includeExpired` 为可选布尔值，默认 `false`，此时仍隐藏超过 `expiresAt` 的记录。显式传 `true` 可读取本儿童、本插件下保留的旧记录，用于取消旧业务 TTL 等兼容场景；不跳过安装、权限、生命周期或账号凭据校验，调用方仍须校验业务账号范围和提交资格。`private.put` 传 `expiresAt: null` 取消该条记录的存储 TTL。美森草稿使用此方式兼容旧数据，登录会话、凭据及其他记录的到期规则不变。

@@ -115,7 +115,8 @@ def package_plugin(root, plugin_id, *, allow_dirty=False):
         sdk = {path.relative_to(sdk_root).as_posix(): path.read_bytes() for path in sdk_root.rglob('*.py') if '__pycache__' not in path.parts}
         if not sdk:
             raise ValueError('插件 Python SDK 尚未准备。')
-        filename, wheel = pure_wheel('lele-plugin-sdk', '1.0.0', sdk)
+        sdk_version = re.search(r'^version\s*=\s*["\']([^"\']+)', (root / 'packages/plugin-sdk-python/pyproject.toml').read_text(), re.M).group(1)
+        filename, wheel = pure_wheel('lele-plugin-sdk', sdk_version, sdk)
         contents['wheels/' + filename] = wheel
     descriptor = {'format': 1, 'pluginId': manifest['id'], 'version': manifest['version'],
                   'sourceCommit': commit, 'purpose': 'development' if dirty else 'release',

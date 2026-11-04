@@ -8,10 +8,12 @@ from lele_growth.child_service import require
 from .configuration import validate_schema
 
 PLATFORM_API_MAJOR = 1
-PLATFORM_API_MINOR = 0
+PLATFORM_API_MINOR = 1
+FRONTEND_API_MINOR = 0
 SUPPORTED_CAPABILITIES = frozenset({'plugin.state.read','plugin.state.write','plugin.jobs.schedule','plugin.events.subscribe'})
+SUPPORTED_PLUGIN_CAPABILITIES = frozenset({'plugin.private-state','plugin.credentials','plugin.external-operations','plugin.resources'})
 SUPPORTED_EVENTS = frozenset({'task.completed'})
-MANIFEST_KEYS = {'manifestVersion','id','version','type','name','description','instructions','platformApi','frontendApi','frontend','backend','configSchema','dataSchemaVersion','capabilities','tasks','events','icons'}
+MANIFEST_KEYS = {'manifestVersion','id','version','type','name','description','instructions','platformApi','frontendApi','frontend','backend','configSchema','dataSchemaVersion','capabilities','resourceOrigins','tasks','events','icons'}
 
 
 def safe_relative_path(value):
@@ -29,9 +31,15 @@ def icon_urls(plugin_id, version, manifest):
     return {prefix+safe_relative_path(path):path for path in manifest.get('icons',[])}
 
 
-def _api(value):
-    require(isinstance(value,dict) and set(value)=={'major','minMinor'} and type(value['major']) is int and type(value['minMinor']) is int and value['major']==1 and 0<=value['minMinor']<=0,
+def _api(value, minor_limit=PLATFORM_API_MINOR):
+    require(isinstance(value,dict) and set(value)=={'major','minMinor'} and type(value['major']) is int and type(value['minMinor']) is int and value['major']==1 and 0<=value['minMinor']<=minor_limit,
             400,'插件协议与平台不兼容。','plugin_incompatible')
+
+
+def _origin(value):
+    require(isinstance(value,str) and re.fullmatch(r'https://[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+',value) is not None,
+            400,'插件资源来源不正确。','plugin_invalid_manifest')
+    return value
 
 
 def _schedule_time(value):
@@ -99,17 +107,19 @@ def validate_manifest(data, *, config_schema=None):
     _api(data.get('platformApi'))
     frontend=data.get('frontend')
     if data['type']=='page':
-        _api(data.get('frontendApi'))
+        _api(data.get('frontendApi'), FRONTEND_API_MINOR)
         require(isinstance(frontend,dict) and set(frontend)<={'entry','styles'},400,'页面型插件缺少入口。','plugin_invalid_manifest')
         safe_relative_path(frontend.get('entry'))
         require(isinstance(frontend.get('styles',[]),list),400,'样式列表不正确。','plugin_invalid_manifest')
         for value in frontend.get('styles',[]): safe_relative_path(value)
     else:
         require(frontend is None,400,'后台型插件不能声明页面入口。','plugin_invalid_manifest')
-        if data.get('frontendApi') is not None: _api(data['frontendApi'])
+        if data.get('frontendApi') is not None: _api(data['frontendApi'], FRONTEND_API_MINOR)
     backend=data.get('backend')
     if backend is not None:
-        require(isinstance(backend,dict) and set(backend)=={'entryModule'} and isinstance(backend['entryModule'],str) and re.fullmatch(r'[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*',backend['entryModule']) is not None,400,'后端入口不正确。','plugin_invalid_manifest')
+        require(isinstance(backend,dict) and set(backend)<={'entryModule','requestTimeoutSeconds'} and 'entryModule' in backend and isinstance(backend['entryModule'],str) and re.fullmatch(r'[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*',backend['entryModule']) is not None,400,'后端入口不正确。','plugin_invalid_manifest')
+        if 'requestTimeoutSeconds' in backend:
+            require(type(backend['requestTimeoutSeconds']) is int and 1<=backend['requestTimeoutSeconds']<=45,400,'后端请求预算不正确。','plugin_invalid_manifest')
     require(data['type']!='service' or backend is not None,400,'后台型插件缺少后端入口。','plugin_invalid_manifest')
     schema=data.get('configSchema')
     if isinstance(schema,dict): validate_schema(schema)
@@ -121,7 +131,11 @@ def validate_manifest(data, *, config_schema=None):
         resolved_schema=schema if isinstance(schema,dict) else None if isinstance(schema,str) else {'type':'object','properties':{}}
     require(type(data.get('dataSchemaVersion')) is int and data['dataSchemaVersion']>=1,400,'数据版本不正确。','plugin_invalid_manifest')
     capabilities=data.get('capabilities',[])
-    require(isinstance(capabilities,list) and all(isinstance(c,str) and c in SUPPORTED_CAPABILITIES for c in capabilities) and len(capabilities)==len(set(capabilities)),400,'插件请求未支持的能力。','plugin_incompatible')
+    require(isinstance(capabilities,list) and all(isinstance(c,str) and c in SUPPORTED_CAPABILITIES|SUPPORTED_PLUGIN_CAPABILITIES for c in capabilities) and len(capabilities)==len(set(capabilities)),400,'插件请求未支持的能力。','plugin_incompatible')
+    resource_origins=data.get('resourceOrigins',[])
+    require(isinstance(resource_origins,list) and len(resource_origins)<=16 and len(resource_origins)==len(set(resource_origins)),400,'插件资源来源不正确。','plugin_invalid_manifest')
+    for origin in resource_origins: _origin(origin)
+    require(not resource_origins or 'plugin.resources' in capabilities,400,'资源来源需要资源能力。','plugin_incompatible')
     icons=data.get('icons',[])
     require(isinstance(icons,list) and len(icons)<=16,400,'图标列表不正确。','plugin_invalid_manifest')
     for icon in icons: safe_relative_path(icon)

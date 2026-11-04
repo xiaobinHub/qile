@@ -20,6 +20,8 @@
 
 本机开发库可显式执行 `.venv/bin/python scripts/dev.py plugins-setup`，再执行 `.venv/bin/python scripts/dev.py restart`；该入口固定使用本机 development 配置。
 
+本机 `start` / `restart` 会同时启动家长端、管理端和私有插件运行服务；`stop` 会停止三者。只需恢复插件连接时执行 `.venv/bin/python scripts/dev.py plugins-runtime-start`，不用重启主应用。`status` 返回 `pluginRuntime` 就绪状态。运行服务通过带身份校验的 Unix socket `/ready` 检查，不把残留 socket 文件当成已启动；现有健康进程会复用。本机 `plugins-deploy` 使用相同的运行目录和 socket，并在部署后保持服务运行。
+
 隔离测试配置的显式初始化示例：
 
 ```sh

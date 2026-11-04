@@ -1,0 +1,44 @@
+{
+  "manifestVersion": 1,
+  "id": "mison-booking",
+  "version": "1.0.10",
+  "type": "page",
+  "name": "美森约课",
+  "description": "查看老师档期、预约一对一课程并管理课程资料。",
+  "instructions": "连接美森账号后，可在PC查看老师、选择连续课时并管理预约。",
+  "platformApi": {
+    "major": 1,
+    "minMinor": 1
+  },
+  "frontendApi": {
+    "major": 1,
+    "minMinor": 0
+  },
+  "frontend": {
+    "entry": "frontend/entry.js",
+    "styles": [
+      "frontend/style.css"
+    ]
+  },
+  "backend": {
+    "entryModule": "mison_booking",
+    "requestTimeoutSeconds": 45
+  },
+  "configSchema": "schemas/config.json",
+  "dataSchemaVersion": 1,
+  "capabilities": [
+    "plugin.private-state",
+    "plugin.credentials",
+    "plugin.external-operations",
+    "plugin.resources"
+  ],
+  "resourceOrigins": [
+    "https://file.mison.cn",
+    "https://mp.mison.cn"
+  ],
+  "tasks": [],
+  "events": [],
+  "icons": [
+    "assets/icon.png"
+  ]
+}

@@ -286,10 +286,6 @@ function Application() {
                   epoch={snapshot.epoch}
                   pluginId={snapshot.view.pluginId}
                   notify={notify}
-                  openSettings={() => {
-                    settingsInitialPage.current = "applications"
-                    runtime.setView("settings")
-                  }}
                 />
               </PluginBoundary>
             ) : (

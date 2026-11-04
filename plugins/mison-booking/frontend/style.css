@@ -1,0 +1,979 @@
+/* Business geometry only. Control appearance comes from shared shadcn/ui. */
+.mison-booking {
+  container-type: inline-size;
+  container-name: mison;
+  min-width: 0;
+  --mison-bottom-gap: max(16px, env(safe-area-inset-bottom, 0px));
+  height: max(
+    0px,
+    calc(var(--mison-viewport-height, calc(100dvh - 140px)) - var(--mison-bottom-gap))
+  );
+  margin-bottom: calc(var(--mison-bottom-gap) - var(--mison-host-bottom-padding, 24px));
+  min-height: 0;
+  overflow: hidden;
+  font: 400 var(--text-body)/var(--text-body--line-height) var(--font-sans, sans-serif);
+}
+.mison-booking > :not(.mison-workspace) {
+  flex-shrink: 0;
+}
+.mison-booking > .mison-login,
+.mison-booking > .mison-empty {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+.mison-booking :where(h2, h3, p, ol, ul),
+.mison-overlay :where(h2, h3, p, ol, ul) {
+  margin: 0;
+}
+.mison-booking h2 {
+  font-size: var(--text-section);
+  line-height: var(--text-section--line-height);
+  font-weight: 600;
+}
+.mison-booking h3 {
+  font-size: var(--text-card);
+  line-height: var(--text-card--line-height);
+  font-weight: 600;
+}
+.mison-booking small,
+.mison-overlay small,
+.mison-caption {
+  font-size: var(--text-caption);
+  line-height: var(--text-caption--line-height);
+  color: var(--muted-foreground);
+}
+.mison-header,
+.mison-filters,
+.mison-connection,
+.mison-actions,
+.mison-tags,
+.mison-section-heading,
+.mison-person {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.mison-header {
+  justify-content: flex-end;
+  min-height: 64px;
+  padding: 16px 20px;
+}
+.mison-connection,
+.mison-actions,
+.mison-tags {
+  flex-wrap: wrap;
+}
+.mison-header b {
+  margin-left: 8px;
+}
+.mison-filters {
+  flex-wrap: wrap;
+  padding: 16px 20px;
+}
+.mison-search {
+  flex: 1 1 240px;
+  max-width: 360px;
+  min-width: 180px;
+}
+.mison-date-picker {
+  width: 180px;
+  flex-shrink: 0;
+}
+.mison-time-trigger {
+  min-width: 140px;
+}
+.mison-favorites-field {
+  width: auto;
+}
+.mison-reset {
+  margin-left: auto;
+}
+.mison-label-popover {
+  width: min(320px, calc(100vw - 32px));
+}
+.mison-label-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.mison-time-popover {
+  width: min(360px, calc(100vw - 32px));
+}
+.mison-time-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  width: 100%;
+  gap: 8px;
+}
+.mison-time-scroll {
+  height: min(360px, 45dvh);
+}
+.mison-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+.mison-workspace.is-expanded {
+  grid-template-columns: 340px minmax(0, 1fr);
+  align-items: stretch;
+}
+.mison-workspace-divider {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 340px;
+  height: 100%;
+}
+.mison-teachers {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 20px;
+}
+.mison-teacher-scroll {
+  flex: 1;
+  height: 0;
+  min-height: 0;
+  overscroll-behavior: contain;
+}
+.mison-teacher-scroll [data-slot="scroll-area-viewport"],
+.mison-stage-scroll [data-slot="scroll-area-viewport"] {
+  overscroll-behavior: contain;
+}
+.mison-list-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+  flex-shrink: 0;
+}
+.mison-list-heading > p {
+  color: var(--muted-foreground);
+}
+.mison-teacher-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
+  gap: 16px;
+  min-width: 0;
+  padding: 2px;
+}
+.mison-teacher-main {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+}
+.mison-teacher-main > [data-slot="card-action"] {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  grid-column: auto;
+  grid-row: auto;
+}
+.mison-teacher-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.mison-teacher-copy [data-slot="card-title"] {
+  padding-right: 32px;
+}
+.mison-teacher-card {
+  position: relative;
+  max-width: 380px;
+  gap: 4px;
+  padding-bottom: 8px;
+}
+.mison-teacher-copy [data-slot="card-title"] button {
+  max-width: 100%;
+  white-space: normal;
+  text-align: left;
+}
+.mison-teacher-card .mison-card-footer {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px;
+}
+.mison-card-footer > small {
+  flex: 1 1 100%;
+}
+.mison-card-footer .mison-actions {
+  margin-left: auto;
+  gap: 4px;
+}
+.mison-tags {
+  gap: 6px;
+}
+.mison-load-more {
+  display: flex;
+  justify-content: center;
+  padding: 20px 0;
+  color: var(--muted-foreground);
+}
+.mison-teachers.is-sidebar {
+  padding: 16px 16px 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  contain: size;
+  overflow: hidden;
+}
+.is-sidebar .mison-teacher-grid {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+}
+.is-sidebar .mison-list-heading > p {
+  display: none;
+}
+.is-sidebar .mison-teacher-scroll {
+  flex: 1;
+  height: 0;
+  min-height: 0;
+}
+.is-sidebar .mison-list-heading {
+  flex-shrink: 0;
+}
+.is-sidebar .mison-teacher-card {
+  padding: 12px 0;
+}
+.is-sidebar .mison-teacher-main {
+  padding-inline: 12px;
+  gap: 10px;
+}
+.is-sidebar .mison-teacher-copy {
+  gap: 4px;
+}
+.mison-sidebar-card-trigger {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+}
+.mison-sidebar-card-trigger:hover {
+  background-color: transparent;
+}
+.is-sidebar .mison-teacher-main {
+  pointer-events: none;
+}
+.is-sidebar .mison-star {
+  pointer-events: auto;
+}
+
+.mison-stage {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.mison-stage > :not(.mison-stage-scroll) {
+  flex-shrink: 0;
+}
+.mison-stage-scroll {
+  flex: 1;
+  min-height: 0;
+  height: 0;
+}
+.mison-stage-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 20px;
+}
+.mison-stage-header .mison-person > div,
+.mison-profile-heading > div {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.mison-stage-tools {
+  display: flex;
+  align-items: flex-end;
+  flex-direction: column;
+  gap: 8px;
+}
+.mison-stage-tools > div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.mison-stage-body {
+  padding: 20px;
+}
+.mison-section-heading {
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+.mison-section-heading .mison-actions {
+  gap: 8px;
+}
+.mison-dates {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  width: 100%;
+  gap: 6px;
+}
+.mison-dates [data-slot="toggle-group-item"] {
+  height: 60px;
+  min-height: 60px;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.mison-dates strong {
+  font-size: var(--text-section);
+}
+.mison-dates small {
+  font-size: var(--text-meta);
+}
+.mison-slots {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 104px), 1fr));
+  width: 100%;
+  gap: 8px;
+}
+.mison-slots [data-slot="toggle-group-item"] {
+  min-height: 56px;
+  height: 56px;
+  display: flex;
+  flex-wrap: wrap;
+  padding: 6px;
+  gap: 2px;
+}
+.mison-slots small {
+  flex-basis: 100%;
+}
+.mison-stage-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 20px;
+}
+.mison-stage-footer small {
+  display: block;
+  margin-top: 6px;
+}
+.mison-course-row {
+  display: grid;
+  grid-template-columns: 120px auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  margin: 16px 0;
+}
+.mison-course-time {
+  padding-right: 0;
+}
+.mison-course-copy {
+  min-width: 0;
+  gap: 4px;
+  padding-left: 0;
+  padding-right: 0;
+}
+.mison-course-tools {
+  gap: 8px;
+  flex-wrap: wrap;
+  padding-left: 0;
+}
+.mison-document {
+  display: grid;
+  place-items: center;
+}
+.mison-notice {
+  margin: 16px 20px;
+  width: auto;
+}
+.mison-learning-progress {
+  margin-inline: 0;
+  background-color: color-mix(in srgb, var(--primary) 16%, var(--card));
+  border-color: color-mix(in srgb, var(--primary) 35%, var(--border));
+}
+.mison-notice [data-slot="alert-description"] {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+.mison-empty {
+  min-height: 260px;
+}
+.mison-overlay {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 0;
+  min-width: 0;
+}
+.mison-overlay.is-modal {
+  width: min(560px, calc(100vw - 32px));
+  max-width: calc(100vw - 32px);
+  max-height: 85dvh;
+}
+.mison-overlay.is-wide {
+  width: min(980px, calc(100vw - 32px));
+  max-width: min(980px, calc(100vw - 32px));
+}
+.mison-overlay.is-drawer {
+  width: min(640px, 100vw);
+  max-width: 100vw;
+  height: 100dvh;
+  max-height: 100dvh;
+}
+.mison-overlay.is-modal.is-contained {
+  height: min(720px, 85dvh);
+}
+.mison-overlay-header {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px;
+  flex-shrink: 0;
+}
+.mison-overlay-scroll {
+  flex: 1;
+  min-height: 0;
+}
+.mison-overlay.is-modal .mison-overlay-scroll {
+  max-height: calc(85dvh - 144px);
+}
+.mison-overlay.is-contained .mison-overlay-scroll,
+.mison-overlay-scroll.is-contained {
+  max-height: none;
+  overflow: hidden;
+}
+.mison-overlay-body.is-contained {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+.mison-overlay-scroll > [data-slot="scroll-area-viewport"] {
+  max-height: inherit;
+}
+.mison-overlay-body {
+  padding: 20px;
+}
+.mison-overlay-footer {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 16px 20px;
+  margin-top: 0;
+  flex-shrink: 0;
+}
+.mison-overlay-footer > small {
+  margin-right: auto;
+}
+.mison-overlay-body .mison-notice {
+  margin: 16px 0;
+}
+.mison-booking-sheet {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+.mison-booking-pinned {
+  flex: none;
+  background: var(--popover);
+}
+.mison-booking-tabs {
+  width: 100%;
+  margin-bottom: 4px;
+}
+.mison-booking-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 8px 0 0;
+}
+.mison-booking-list {
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding-top: 12px;
+}
+.mison-booking-card {
+  --card-spacing: 14px;
+  margin: 10px 0;
+  gap: 12px;
+}
+.mison-booking-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-block: 2px;
+}
+.mison-booking-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.mison-booking-when {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+  font-size: var(--text-card);
+  font-weight: 600;
+  line-height: var(--text-card--line-height);
+}
+.mison-booking-when time {
+  color: var(--muted-foreground);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+.mison-booking-meta [data-slot="badge"] {
+  margin-left: auto;
+}
+.mison-booking-person {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.mison-booking-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+.mison-booking-copy h3,
+.mison-booking-copy p {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mison-booking-copy p {
+  color: var(--muted-foreground);
+  font-size: var(--text-caption);
+  line-height: 1.35;
+}
+.mison-booking-card .mison-avatar {
+  width: 56px;
+  height: 56px;
+  flex: none;
+}
+.mison-booking-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+.mison-profile-heading {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.mison-profile-heading > button {
+  margin-left: auto;
+}
+.mison-profile-section {
+  margin-top: 28px;
+}
+.mison-profile-section h3 {
+  margin-bottom: 12px;
+  font-size: var(--text-section);
+  font-weight: 600;
+}
+.mison-profile-section p {
+  line-height: 1.8;
+  overflow-wrap: anywhere;
+}
+.mison-profile-section video,
+.mison-overlay-body > video {
+  width: 100%;
+  border-radius: var(--radius-card, 8px);
+}
+.mison-overlay-body > iframe {
+  width: 100%;
+  height: 60dvh;
+}
+.mison-course-source {
+  flex: none;
+  align-self: flex-start;
+}
+.mison-course-picker {
+  display: grid;
+  grid-template-columns: 248px minmax(0, 1fr);
+  flex: 1;
+  min-height: 0;
+  margin-top: 16px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--card);
+}
+.mison-course-picker.is-single {
+  grid-template-columns: minmax(0, 1fr);
+}
+.mison-course-picker ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.mison-course-picker ul ul {
+  padding-left: 12px;
+}
+.mison-course-picker nav,
+.mison-course-picker > section {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.mison-course-picker nav {
+  padding: 8px;
+  border-right: 1px solid var(--border);
+  background: color-mix(in srgb, var(--muted) 40%, var(--popover));
+}
+.mison-course-picker > section {
+  padding: 8px;
+}
+.mison-category-item {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  justify-content: flex-start;
+  min-height: 36px;
+  height: auto;
+  padding-top: 6px;
+  padding-bottom: 6px;
+}
+.mison-category-item > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+}
+.mison-course-picker .mison-load-more {
+  min-height: 28px;
+  color: var(--muted-foreground);
+  font-size: var(--text-caption);
+  text-align: center;
+}
+.mison-course-option {
+  align-items: center;
+  margin: 2px 0;
+  padding: 8px 10px;
+  border-radius: 10px;
+}
+.mison-course-option:hover {
+  background: var(--muted);
+}
+.mison-course-option:has([data-state="checked"]) {
+  background: color-mix(in srgb, var(--primary) 16%, var(--card));
+}
+.mison-course-option[data-disabled="true"] {
+  opacity: 0.55;
+}
+.mison-course-choice {
+  flex: 1;
+  min-width: 0;
+  gap: 12px;
+}
+.mison-course-choice > div {
+  min-width: 0;
+}
+.mison-course-choice svg {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  margin-top: 2px;
+}
+.mison-course-choice [data-slot="field-description"] {
+  margin: 0;
+  line-height: 1.35;
+}
+.mison-login {
+  display: grid;
+  place-items: start center;
+  padding: clamp(40px, 8vw, 96px) 24px 48px;
+}
+.mison-login-panel {
+  width: min(100%, 360px);
+}
+.mison-login-panel > h2 {
+  font-size: var(--text-page);
+  line-height: var(--text-page--line-height);
+  text-align: center;
+  margin-bottom: 28px;
+}
+.mison-login-panel > .mison-caption {
+  text-align: center;
+}
+.mison-login-recovery {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.mison-account-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin: 20px 0;
+}
+.mison-login-feedback {
+  height: var(--text-body--line-height);
+  min-height: var(--text-body--line-height);
+}
+.mison-connected-account {
+  margin-top: 16px !important;
+}
+@container mison (max-width:1100px) {
+  .mison-workspace.is-expanded {
+    grid-template-columns: 300px minmax(0, 1fr);
+  }
+  .mison-workspace-divider {
+    left: 300px;
+  }
+}
+@container mison (max-width:740px) {
+  .mison-workspace.is-expanded {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .mison-workspace.is-expanded > .mison-teachers,
+  .mison-workspace-divider {
+    display: none;
+  }
+  .mison-filters {
+    padding: 12px;
+    gap: 8px;
+  }
+  .mison-search {
+    flex-basis: 100%;
+    max-width: none;
+  }
+  .mison-date-picker {
+    flex: 1;
+    width: auto;
+    min-width: 140px;
+  }
+  .mison-time-trigger {
+    flex: 1;
+  }
+  .mison-reset {
+    margin-left: 0;
+  }
+  .mison-stage-header {
+    flex-wrap: wrap;
+    padding: 16px;
+  }
+  .mison-stage-tools {
+    width: 100%;
+    flex-direction: row;
+    justify-content: space-between;
+    flex-wrap: wrap;
+  }
+  .mison-stage-body,
+  .mison-stage-footer {
+    padding: 16px;
+  }
+  .mison-dates {
+    gap: 4px;
+  }
+  .mison-dates [data-slot="toggle-group-item"] {
+    min-height: 68px;
+  }
+  .mison-stage-footer > .mison-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+  .mison-course-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .mison-course-row > * {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+  .mison-document {
+    display: none;
+  }
+}
+@media (max-width: 740px) {
+  .mison-course-picker,
+  .mison-course-picker.is-single {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(140px, 36%) minmax(0, 1fr);
+  }
+  .mison-course-picker.is-single {
+    grid-template-rows: minmax(0, 1fr);
+  }
+  .mison-course-picker nav {
+    max-height: none;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .mison-booking-toolbar > small {
+    display: none;
+  }
+  .mison-booking-when {
+    gap: 6px;
+    font-size: var(--text-body);
+  }
+  .mison-booking-card .mison-avatar {
+    width: 48px;
+    height: 48px;
+  }
+  .mison-overlay-header,
+  .mison-overlay-footer,
+  .mison-overlay-body {
+    padding: 16px;
+  }
+  .mison-overlay-footer > small {
+    flex-basis: 100%;
+  }
+}
+
+.mison-teacher-card > [data-slot="card-content"] {
+  margin-top: auto;
+}
+
+/* Favorite state stays visible even when the upstream mutation is unavailable. */
+.mison-star[aria-pressed="true"] {
+  color: var(--primary);
+  opacity: 1;
+}
+
+.mison-time-grid [data-state="on"],
+.mison-label-options [data-state="checked"] {
+  background-color: var(--primary);
+  border-color: var(--primary);
+  color: var(--primary-foreground);
+}
+.mison-next-available {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.mison-avatar-trigger:hover {
+  background-color: transparent;
+}
+.mison-teacher-copy [data-slot="card-title"] button {
+  font-size: var(--text-card);
+  font-weight: 600;
+}
+.mison-profile-favorite {
+  width: 48px;
+  height: 48px;
+}
+.mison-profile-favorite svg {
+  width: 24px;
+  height: 24px;
+}
+.mison-intro-media {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: var(--radius-card, 8px);
+  background: var(--muted);
+}
+.mison-intro-media video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.mison-video-loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  pointer-events: none;
+}
+.mison-intro-media .mison-empty {
+  min-height: 0;
+  height: 100%;
+  padding: 16px;
+}
+
+.mison-teacher-card[data-selected="true"] {
+  box-shadow: 0 0 0 2px var(--primary);
+}
+.mison-dates [data-unavailable="true"],
+.mison-slots [data-unavailable="true"] {
+  background-color: var(--muted);
+  color: var(--muted-foreground);
+  border-color: var(--border);
+  opacity: 1;
+}
+.mison-slots [data-state="on"],
+.mison-dates [data-state="on"]:not([data-unavailable="true"]) {
+  background-color: var(--accent);
+  color: var(--foreground);
+  border-color: var(--primary);
+  opacity: 1;
+}
+
+.mison-date-heading {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+.mison-available-dates {
+  width: auto;
+}
+.mison-dates {
+  min-height: 60px;
+}
+.mison-no-dates {
+  grid-column: 1 / -1;
+  align-self: center;
+}
+.mison-slots-region {
+  position: relative;
+  min-height: 260px;
+  margin-top: 16px;
+}
+.mison-slots-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 12px;
+  padding: 20px;
+  background: color-mix(in srgb, var(--background) 85%, transparent);
+}
+.mison-stage-footer small {
+  min-height: var(--text-caption--line-height);
+}

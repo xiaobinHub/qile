@@ -12,7 +12,8 @@ from pathlib import Path
 from lele_growth.paths import WEB_ROOT
 
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse, FileResponse, Response
+from fastapi.responses import JSONResponse, FileResponse, Response, StreamingResponse
+from starlette.background import BackgroundTask
 from starlette.concurrency import run_in_threadpool
 from starlette.exceptions import HTTPException
 
@@ -38,6 +39,9 @@ def create_app(config_path, surface='parent'):
     app=FastAPI(docs_url=None,redoc_url=None,openapi_url=None)
     app.state.service=service
     app.state.surface=surface
+    from lele_growth.plugins.dev_mode import DevRegistry, mount_proxy
+    development = DevRegistry(service.config)
+    mount_proxy(app, service, development, surface, cookie_name)
 
     @app.exception_handler(ApiError)
     async def api_error(request,error):
@@ -59,8 +63,8 @@ def create_app(config_path, surface='parent'):
         response.headers['Cache-Control']='private, no-store' if '/assets/' in request.url.path else 'no-store'
         response.headers['X-Content-Type-Options']='nosniff'
         response.headers['Referrer-Policy']='same-origin'
-        response.headers['X-Frame-Options']='DENY'
-        response.headers['Content-Security-Policy']=f"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:{avatar_origin}; connect-src 'self'; frame-src 'self' blob:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
+        response.headers['X-Frame-Options']='SAMEORIGIN' if response.headers.get('Content-Type','').startswith('application/pdf') and '/plugins/' in request.url.path and '/media/' in request.url.path else 'DENY'
+        if 'Content-Security-Policy' not in response.headers: response.headers['Content-Security-Policy']=f"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:{avatar_origin}; connect-src 'self'; frame-src 'self' blob:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
         if production: response.headers['Strict-Transport-Security']='max-age=31536000'
         return response
 
@@ -73,6 +77,14 @@ def create_app(config_path, surface='parent'):
         except (ApiError,StoreError):
             return JSONResponse({**status,'ok':False,'databaseReady':False,'error':'数据库暂时无法访问。'},status_code=503)
         return {**status,'ok':True,'databaseReady':True}
+
+    @app.api_route('/api/children/{child_id}/plugins/{plugin_id}/media/{ticket}', methods=['GET', 'HEAD'])
+    def plugin_video(child_id: str, plugin_id: str, ticket: str, request: Request):
+        from lele_growth.plugins.resources import open_video
+        stream = open_video(service, request.cookies.get(cookie_name), surface, child_id, plugin_id, ticket,
+                            request.method, request.headers.get('range'))
+        return StreamingResponse(stream.body(), status_code=stream.status, headers=stream.headers,
+                                 background=BackgroundTask(stream.close))
 
     @app.api_route('/api/{path:path}',methods=['GET','POST','PATCH','DELETE','PUT','OPTIONS'])
     async def api(path:str,request:Request):
@@ -94,9 +106,22 @@ def create_app(config_path, surface='parent'):
         if request.method=='GET' and ('/plugins' in path or path.startswith('admin/plugin')):
             body={**dict(request.query_params),**body}
         from lele_growth.plugins.gateway import PluginGateway
-        result=await run_in_threadpool(PluginGateway(service).route,request.method,path,body,request.cookies.get(cookie_name),request.headers.get('x-csrf-token'),request.headers.get('origin'),surface,request.headers.get('x-plugin-release'))
+        def invoke_plugin():
+            match = re.fullmatch(r'children/[^/]+/plugins/([^/]+)/runtime(?:/.*)?', path)
+            arguments = (request.method,path,body,request.cookies.get(cookie_name),request.headers.get('x-csrf-token'),request.headers.get('origin'),surface,request.headers.get('x-plugin-release'))
+            if match:
+                with development.admission(match[1], request.headers.get('x-plugin-dev-session'), request.headers.get('x-plugin-dev-revision'),
+                                           release_id=request.headers.get('x-plugin-release')):
+                    return PluginGateway(service).route(*arguments)
+            return PluginGateway(service).route(*arguments)
+        result=await run_in_threadpool(invoke_plugin)
         if result is NotImplemented:
             result=await run_in_threadpool(service.request,request.method,path,body,request.cookies.get(cookie_name),request.headers.get('x-csrf-token'),request.headers.get('origin'),surface,request.client.host if request.client else 'unknown')
+        entry_match = re.fullmatch(r'children/[^/]+/plugins/([^/]+)/entry', path) if request.method == 'GET' else None
+        if entry_match:
+            descriptor = await run_in_threadpool(development.descriptor, entry_match[1], result.get('releaseId'))
+            if descriptor is not None:
+                result = {**result, 'development': descriptor, 'entry': descriptor['base'] + '@plugin-entry', 'styles': []}
         if isinstance(result,ImageResponse):
             return Response(result.content,media_type=result.mime)
         token=result.pop('_cookie',None); clear=result.pop('_clear_cookie',False)

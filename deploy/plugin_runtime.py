@@ -6,7 +6,8 @@ from __future__ import annotations
 
 import argparse
 from concurrent.futures import ThreadPoolExecutor
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, contextmanager, nullcontext
+from contextvars import ContextVar
 import fcntl
 import hmac
 import logging
@@ -29,8 +30,12 @@ from lele_growth.child_service import ApiError, ChildService, require
 from lele_growth.plugins.events import EventDispatcher
 from lele_growth.plugins.gateway import PluginGateway, ContextSigner
 from lele_growth.plugins.policy import active_context, assert_fences, rows_dict
+from lele_growth.plugins.private_bridge import PluginBridge
 from lele_growth.plugins.scheduler import PluginScheduler
 from lele_growth.plugins.supervisor import PluginSupervisor, plugin_root, private_directory, socket_root
+from lele_growth.plugins.dev_mode import DevRegistry, WorkerAdmissions, installed_release
+
+NOT_ADMITTED = object()
 
 
 class PluginRuntimeService:
@@ -38,6 +43,15 @@ class PluginRuntimeService:
         self.service = service
         self.root = Path(root or plugin_root()).resolve()
         self.supervisor = PluginSupervisor(self.root)
+        self.development = DevRegistry(service.config)
+        self.worker_admissions = WorkerAdmissions()
+        self.admitted_generation = ContextVar('runtime_generation', default=NOT_ADMITTED)
+        self.supervisor.development_registry = self.development
+        self.supervisor.invocation_guard = self.worker_admission
+        # Trusted in-process jobs/cancellations use installed workers directly.
+        # Do not point this gateway at self or RuntimeClient: browser development
+        # fences apply to /call, not to the independent installed job lifecycle.
+        # Backend-source mode is separately paused by _loop and supervisor.start.
         self.gateway = PluginGateway(service, runtime=self.supervisor)
         self.scheduler = PluginScheduler(service, self.gateway)
         self.events = EventDispatcher(service, self.scheduler)
@@ -46,10 +60,11 @@ class PluginRuntimeService:
         self.pool = ThreadPoolExecutor(max_workers=8, thread_name_prefix='plugin-jobs')
         self.pending = {}
         self.transport_signer = None
+        self.bridge = PluginBridge(service, self._vault())
         self.stage_errors = {}
         self.enabled = set()
 
-    def call(self, context, action, payload, *, timeout=None):
+    def call(self, context, action, payload, *, timeout=None, development=None):
         require(action in ('handle_request', 'handle_job', 'cancel_job') and isinstance(context, dict) and isinstance(payload, dict), 400)
         (self.transport_signer or self.gateway.signer).verify(context)
         def check(cur):
@@ -58,12 +73,114 @@ class PluginRuntimeService:
             require(current['version'] == context.get('version') and time.time() < context.get('expiresAt', 0), 403)
             require(isinstance(context.get('scopeToken'), str) and set(context.get('capabilities', [])) <= set(current['capabilities']), 403)
             task = next((task for task in current['manifest'].get('tasks', []) if task['id'] == payload.get('task')), None)
-            maximum = task.get('timeoutSeconds', 10) if task and action == 'handle_job' else 10
+            declared = current['manifest'].get('backend', {}).get('requestTimeoutSeconds', 10)
+            maximum = task.get('timeoutSeconds', 10) if task and action == 'handle_job' else declared
             selected = min(10, maximum) if timeout is None else timeout
             require(type(selected) in (int, float) and 0 < selected <= maximum <= 300, 400, '任务超时预算不正确。')
             return selected
-        selected = self.service.transaction(check)
-        return self.supervisor.call(context, action, payload, timeout=selected)
+        require(development is None or isinstance(development, dict), 400)
+        fence = development or {}
+        with self.development.admission(context['pluginId'], fence.get('sessionId'), fence.get('revision')) as session:
+            require(session is None or session.get('releaseId') == context.get('releaseId'), 409,
+                    '安装版本已改变，请停止开发会话。', 'plugin_dev_incompatible')
+            selected = self.service.transaction(check)
+            token = self.admitted_generation.set(session)
+            try:
+                return self.supervisor.call(context, action, payload, timeout=selected,
+                                            development=session if session and session['backend'] else None)
+            finally:
+                self.admitted_generation.reset(token)
+
+    @contextmanager
+    def worker_admission(self, context, development):
+        admitted = self.admitted_generation.get()
+        if admitted is not NOT_ADMITTED:
+            admission = nullcontext(admitted)  # Outer /call holds its reader lock.
+        elif development is not None:
+            admission = self.development.admission(context['pluginId'], development['sessionId'], development['revision'])
+        else:
+            admission = self.development.internal_admission(context['pluginId'])
+        with admission as session:
+            with self.worker_admissions.worker(context, session, self.transport_signer or self.gateway.signer) as sealed:
+                yield sealed
+
+    def handle_bridge(self, context, action, payload):
+        (self.transport_signer or self.gateway.signer).verify(context)
+        with self.worker_admissions.bridge(context):
+            return self.bridge.handle(context, action, payload)
+
+    def control_development(self, operation, body):
+        registry = self.development
+        registry.guard()
+        plugin_id = body.get('pluginId')
+        registry.path(plugin_id)
+        with registry.lock(plugin_id, exclusive=True, control=True):
+            previous = registry.read(plugin_id)
+            if operation in ('dev-stop', 'dev-reload') and body.get('sessionId') is not None:
+                require(previous is not None and body['sessionId'] == previous['sessionId'], 409,
+                        '此终端的开发会话已失效。', 'plugin_dev_session_changed')
+            if operation == 'dev-status':
+                return {'ok': True, 'development': previous}
+            if operation == 'dev-stop' and previous is None:
+                return {'ok': True, 'development': None}
+            if operation == 'dev-register':
+                import re
+                from lele_growth.plugins.dev_mode import SESSION
+                require(isinstance(body.get('sessionId'), str) and re.fullmatch(SESSION, body['sessionId'])
+                        and type(body.get('port')) is int and 1 <= body['port'] <= 65535
+                        and type(body.get('pid')) is int and body['pid'] > 0
+                        and type(body.get('backend')) is bool, 400)
+                require(previous is None, 409, '已有开发会话，请先停止。', 'plugin_dev_session_exists')
+                data = {key: body[key] for key in ('pluginId', 'sessionId', 'port', 'pid', 'backend')}
+                data.update(sourceRoot=str(registry.repo / 'plugins' / plugin_id), revision=1)
+            else:
+                require(previous is not None, 409, '开发会话不存在。', 'plugin_dev_session_changed')
+                data = dict(previous)
+            # Verify compatibility before registration; on reload a mismatch is
+            # recorded as a failed session instead of restoring installed code.
+            if operation == 'dev-register':
+                manifest, schema, release_id = installed_release(self.service, plugin_id)
+                registry.compatible(plugin_id, manifest, schema)
+                require(not data['backend'] or bool(manifest.get('backend')), 409, '插件没有后端。')
+                data.update(version=manifest['version'], releaseId=release_id)
+                registry.live({**data, 'state': 'ready'})
+            data['state'] = 'draining'
+            registry.write(data)
+            try:
+                # Mark first, then wait: new admissions reject immediately.
+                with registry.lock(plugin_id, exclusive=True, wait=True):
+                    if data['backend']:
+                        self.supervisor.drain_development(plugin_id)
+                    if operation == 'dev-stop':
+                        registry.path(plugin_id).unlink()
+                        return {'ok': True, 'development': None}
+                    if operation == 'dev-reload':
+                        data['revision'] += 1
+                    manifest, schema, release_id = installed_release(self.service, plugin_id)
+                    registry.compatible(plugin_id, manifest, schema)
+                    require(release_id == data['releaseId'], 409, '安装版本已改变，请先停止开发会话。', 'plugin_dev_incompatible')
+                    if data['backend']:
+                        data['executable'] = str(registry.prepare_environment(data))
+                        self.supervisor.start(plugin_id, data['version'], development=data)
+                    registry.live({**data, 'state': 'ready'})
+                    data['state'] = 'ready'
+                    data.pop('errorKind', None)
+                    registry.write(data)
+                    return {'ok': True, 'development': data}
+            except Exception as error:
+                data.update(state='failed', errorKind=error.kind if isinstance(error, ApiError) else 'plugin_dev_start_failed')
+                registry.write(data)
+                if isinstance(error, ApiError):
+                    raise
+                raise ApiError(503, '插件开发启动失败，请检查源码后重载。', 'plugin_dev_start_failed') from None
+
+    def _vault(self):
+        from pathlib import Path
+        key_path = Path(os.environ.get('LELE_PLUGIN_VAULT_KEY', '/etc/lele-growth/plugin-vault.txt'))
+        if not key_path.is_file():
+            return None
+        from lele_growth.plugins.credential_vault import CredentialVault
+        return CredentialVault(key_path)
 
     def reconcile(self):
         # Never acquire another plugin's catalog lock while retaining a child's
@@ -91,6 +208,14 @@ class PluginRuntimeService:
             "SELECT d.plugin_id,r.version FROM lele.plugin_deployments d JOIN lele.plugin_releases r ON r.release_id=d.new_release_id WHERE d.status='running' AND d.lease_until>now()")))
         enabled.update((row['plugin_id'], row['version']) for row in prepared)
         for key in list(self.supervisor.workers):
+            try:
+                development = self.development.read(key[0])
+            except ApiError:
+                continue  # A corrupt overlay cannot authorize forced shutdown.
+            if development and development['backend']:
+                # Lifecycle controls alone own source drains. Never let periodic
+                # reconciliation terminate a worker during an in-flight save.
+                continue
             if key not in enabled:
                 self.supervisor.stop(key[0], key[1], timeout=0)
         self.enabled = enabled
@@ -113,6 +238,12 @@ class PluginRuntimeService:
             self._stage('events', self.events.dispatch)
             self._stage('reconcile', self.reconcile)
             for plugin_id in {key[0] for key in self.enabled}:
+                try:
+                    development = self.development.read(plugin_id)
+                except ApiError:
+                    continue  # Fail closed for this plugin, not all schedulers.
+                if development and development['backend']:
+                    continue
                 future = self.pending.get(plugin_id)
                 if future is None or future.done():
                     self.pending[plugin_id] = self.pool.submit(self.scheduler.run_one, plugin_id)
@@ -143,6 +274,15 @@ def create_app(config_path, root=None):
             file.write(credential)
         credential_path.chmod(0o600)
     runtime.transport_signer = ContextSigner(hashlib.sha256(credential.encode()).digest())
+    bridge_token = secrets.token_urlsafe(32)
+    bridge_token_path = directory / 'bridge.token'
+    if bridge_token_path.exists():
+        bridge_token = bridge_token_path.read_text().strip()
+        require(not bridge_token_path.is_symlink() and bridge_token_path.stat().st_mode & 0o077 == 0, 503, '插件Bridge凭证权限不正确。')
+    else:
+        with bridge_token_path.open('x') as file:
+            file.write(bridge_token)
+        bridge_token_path.chmod(0o600)
 
     @asynccontextmanager
     async def lifespan(app):
@@ -166,8 +306,9 @@ def create_app(config_path, root=None):
 
     @app.post('/{operation}')
     async def operate(operation: str, request: Request):
-        require(hmac.compare_digest(request.headers.get('authorization', ''), 'Bearer ' + credential), 403, '运行服务身份校验失败。')
-        require(operation in ('call', 'health', 'stop'), 404)
+        expected = bridge_token if operation == 'bridge' else credential
+        require(hmac.compare_digest(request.headers.get('authorization', ''), 'Bearer ' + expected), 403, '运行服务身份校验失败。')
+        require(operation in ('call', 'bridge', 'health', 'stop', 'ready', 'dev-register', 'dev-reload', 'dev-stop', 'dev-status'), 404)
         chunks = bytearray()
         async for chunk in request.stream():
             chunks.extend(chunk)
@@ -178,8 +319,16 @@ def create_app(config_path, root=None):
         except ValueError:
             raise ApiError(400, '请求格式不正确。') from None
         require(isinstance(body, dict), 400)
+        if operation == 'ready':
+            return {'ok': True, 'protocol': '1.0'}
+        if operation.startswith('dev-'):
+            return await run_in_threadpool(runtime.control_development, operation, body)
+        if operation == 'bridge':
+            require(isinstance(body.get('context'), dict) and isinstance(body.get('action'), str) and isinstance(body.get('payload'), dict), 400)
+            runtime.transport_signer.verify(body['context'])
+            return await run_in_threadpool(runtime.handle_bridge, body['context'], body['action'], body['payload'])
         if operation == 'call':
-            return await run_in_threadpool(runtime.call, body.get('context'), body.get('action'), body.get('payload'), timeout=body.get('timeoutSeconds'))
+            return await run_in_threadpool(runtime.call, body.get('context'), body.get('action'), body.get('payload'), timeout=body.get('timeoutSeconds'), development=body.get('development'))
         require(isinstance(body.get('pluginId'), str) and (isinstance(body.get('version'), str) or operation == 'stop' and body.get('version') is None), 400)
         if operation == 'health':
             return await run_in_threadpool(runtime.supervisor.health, body['pluginId'], body['version'])

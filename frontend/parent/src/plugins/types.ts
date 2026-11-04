@@ -50,7 +50,20 @@ export type Plugin = {
   reason: string | null
   configSchema: JSONSchema
 }
-export type PluginEntry = { entry: string; styles: string[]; releaseId: string; version: string }
+export type PluginDevelopment = {
+  state?: "ready" | "draining"
+  sessionId: string
+  revision: number
+  base: string
+  backend: boolean
+}
+export type PluginEntry = {
+  entry: string
+  styles: string[]
+  releaseId: string
+  version: string
+  development?: PluginDevelopment
+}
 export type ConfigResponse = {
   config: PluginConfig
   schema: JSONSchema

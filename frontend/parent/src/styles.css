@@ -128,19 +128,6 @@ a {
   background: var(--card);
   color: var(--muted-foreground);
 }
-.plugin-page-heading {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-}
-.plugin-page-heading h1 {
-  min-width: 0;
-  overflow-wrap: anywhere;
-  font-size: var(--text-page);
-  line-height: var(--text-page--line-height);
-  font-weight: 600;
-}
 .plugin-placeholder {
   display: flex;
   flex-direction: column;

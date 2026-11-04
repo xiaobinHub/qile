@@ -29,13 +29,11 @@ export function PluginPage({
   child,
   epoch,
   notify,
-  openSettings,
 }: {
   pluginId: string
   child: Child
   epoch: number
   notify: (message: string) => void
-  openSettings: () => void
 }) {
   const state = usePlugins()
   const plugin =
@@ -71,6 +69,8 @@ export function PluginPage({
       epoch,
       signal: controller.signal,
       notify: (message) => notifyRef.current(message),
+      onDevelopmentChange: () => setRetry((value) => value + 1),
+      onDevelopmentError: (message) => setFailure(message),
     })
       .then((cleanup) => {
         if (controller.signal.aborted) cleanup()
@@ -103,12 +103,6 @@ export function PluginPage({
   ])
   return (
     <section className="plugin-page" aria-label={plugin?.name || "应用"}>
-      <div className="plugin-page-heading">
-        <h1>{plugin?.name || "应用"}</h1>
-        <Button variant="outline" onClick={openSettings}>
-          应用设置
-        </Button>
-      </div>
       {!effective ? (
         <div className="plugin-placeholder" role="status">
           <h2>
