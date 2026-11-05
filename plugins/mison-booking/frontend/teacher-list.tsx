@@ -14,7 +14,7 @@ import {
   InputGroupAddon,
   InputGroupButton,
 } from "@shared/components/ui/input-group"
-import { Star, ArrowRight, Clock3, ChevronDown, Search, SlidersHorizontal } from "lucide-react"
+import { Star, ArrowRight, Clock3, ChevronDown, Search, SlidersHorizontal, X } from "lucide-react"
 import { Avatar, Button, Empty, DatePicker, PopoverContent, teacherName, dateLabel } from "./ui"
 import type { Teacher, TeacherFilters } from "./types"
 
@@ -48,6 +48,7 @@ export function TeacherFilterBar({
 }) {
   const prefix = useId()
   const [labelsOpen, setLabelsOpen] = useState(false)
+  const dateFilter = useRef<HTMLDivElement>(null)
   return (
     <form
       className="mison-filters"
@@ -74,13 +75,35 @@ export function TeacherFilterBar({
           </InputGroupButton>
         </InputGroupAddon>
       </InputGroup>
-      <DatePicker
-        aria-label="筛选日期"
-        className="mison-date-picker"
-        placeholder="筛选日期"
-        value={value.date}
-        onChange={(date) => onChange({ ...value, date })}
-      />
+      <div
+        ref={dateFilter}
+        className="mison-date-picker mison-date-filter"
+        data-has-date={!!value.date || undefined}
+      >
+        <DatePicker
+          aria-label="筛选日期"
+          className="mison-date-filter-trigger"
+          placeholder="筛选日期"
+          value={value.date}
+          onChange={(date) => onChange({ ...value, date })}
+        />
+        {value.date ? (
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            className="mison-date-clear"
+            aria-label="清空筛选日期"
+            onClick={() => {
+              onChange({ ...value, date: "" })
+              dateFilter.current
+                ?.querySelector<HTMLButtonElement>(".mison-date-filter-trigger")
+                ?.focus({ preventScroll: true })
+            }}
+          >
+            <X />
+          </Button>
+        ) : null}
+      </div>
       <TimeFilter
         values={value.times}
         options={options?.timeSlots ?? []}

@@ -9,6 +9,11 @@ const root = path.resolve(__dirname, "../..")
 const out = fs.mkdtempSync(path.join(os.tmpdir(), "mison-frontend-"))
 async function main() {
   const touchAcceptance = process.env.IPAD_TOUCH_ACCEPTANCE === "1"
+  const calendarAcceptance = process.env.CALENDAR_ACCEPTANCE === "1"
+  const calendarFixture = calendarAcceptance
+    ? require("./mison_calendar_acceptance.cjs").createCalendarFixture()
+    : null
+  const availabilityAcceptance = process.env.AVAILABILITY_ACCEPTANCE === "1"
   const installedBuild = process.env.PARENT_ACCEPTANCE_ORIGIN
   const engine = process.env.TOUCH_BROWSER === "webkit" ? webkit : chromium
   const { createServer } = await import("vite")
@@ -145,7 +150,7 @@ async function main() {
       const req = route.request(),
         url = new URL(req.url()),
         json = (value) => route.fulfill({ json: value })
-      if (touchAcceptance && url.pathname.endsWith("/media/fixture-pdf")) {
+      if ((touchAcceptance || calendarAcceptance) && url.pathname.endsWith("/media/fixture-pdf")) {
         const data = require("./ipad_touch_acceptance.cjs").pdfFixture()
         return route.fulfill({ contentType: "application/pdf", body: data })
       }
@@ -204,6 +209,16 @@ async function main() {
           method: req.method(),
           body: req.method() === "GET" ? undefined : req.postDataJSON(),
         }
+        if (calendarFixture && /^bookings\/[^/]+\/resources$/.test(relative)) {
+          assert.equal(options.method, "GET")
+          return json(await calendarFixture.resources(relative))
+        }
+        if (
+          calendarFixture &&
+          relative.startsWith("bookings?") &&
+          new URLSearchParams(relative.split("?")[1]).get("pageSize") === "50"
+        )
+          return json(await calendarFixture.handle(relative))
         if (options.body?.operationId)
           assert.match(
             options.body.operationId,
@@ -263,6 +278,26 @@ async function main() {
             })
         }
         const response = await fixtureApi(relative, options)
+        if (scheduleRequest && availabilityAcceptance) {
+          const data = response.data
+          if (scheduleRequestMode === "no-availability") {
+            data.days.forEach((day) => {
+              day.available = false
+            })
+            data.slots.forEach((slot) => {
+              slot.state = "occupied"
+            })
+          } else if (
+            scheduleRequestMode === "unavailable-first-date" &&
+            !new URL(relative, "https://fixture.invalid/").searchParams.has("date")
+          ) {
+            data.date = "2026-11-05"
+            data.slots.forEach((slot) => {
+              slot.state = "occupied"
+            })
+          }
+          data.slots.find((slot) => slot.start === "19:30").state = "unscheduled"
+        }
         if (scheduleRequest && scheduleRequestMode === "race") {
           response.data.slots.find((slot) => slot.start === "10:00").state = relative.startsWith(
             "teachers/demo-1/",
@@ -562,6 +597,64 @@ async function main() {
     await loginForm.getByRole("button", { name: "登录", exact: true }).dblclick()
     await ready()
     assert.equal(loginCalls, 2, "double click sends one request")
+    if (calendarAcceptance) {
+      await require("./mison_calendar_acceptance.cjs")
+        .exerciseCalendar({
+          page,
+          out,
+          fixture: calendarFixture,
+        })
+        .catch(async (error) => {
+          await page.screenshot({ path: path.join(out, "calendar-failure.png") })
+          console.error(
+            JSON.stringify(
+              {
+                evidence: out,
+                errors,
+                body: (await page.locator("body").innerText()).slice(-1600),
+                calls: calendarFixture.calls.slice(-8),
+              },
+              null,
+              2,
+            ),
+          )
+          throw error
+        })
+      assert.deepEqual(errors, [])
+      console.log(
+        JSON.stringify(
+          {
+            passed: true,
+            engine: engine.name(),
+            evidence: out,
+            pageErrors: errors,
+            calendarRequests: calendarFixture.calls.length,
+          },
+          null,
+          2,
+        ),
+      )
+      return
+    }
+    if (availabilityAcceptance) {
+      await require("./mison_availability_acceptance.cjs")({
+        page,
+        out,
+        engine: engine.name(),
+        setMode: (value) => {
+          scheduleMode = value
+        },
+      })
+      assert.deepEqual(errors, [])
+      console.log(
+        JSON.stringify(
+          { passed: true, engine: engine.name(), evidence: out, pageErrors: errors },
+          null,
+          2,
+        ),
+      )
+      return
+    }
     if (process.env.SCHEDULE_TRANSITION_ACCEPTANCE === "1") {
       await page.locator('[data-book-teacher="demo-0"]').click()
       await slot("10:00").waitFor()
@@ -786,7 +879,7 @@ async function main() {
         (url) => /runtime\/teachers\?/.test(url) && new URL(url).searchParams.has("date"),
       ),
     )
-    await page.getByRole("button", { name: "清空筛选" }).click()
+    await page.getByRole("button", { name: "清空筛选", exact: true }).click()
     await page.getByRole("button", { name: "筛选时段", exact: true }).click()
     const timePanel = page.getByRole("dialog", { name: "选择上课时段" })
     await timePanel.getByRole("button", { name: "09:00", exact: true }).click()
@@ -813,15 +906,15 @@ async function main() {
     )
     await timePanel.getByRole("button", { name: "完成", exact: true }).click()
     assert.ok(requests.some((url) => new URL(url).searchParams.get("times") === "09:00,09:30"))
-    await page.getByRole("button", { name: "清空筛选" }).click()
+    await page.getByRole("button", { name: "清空筛选", exact: true }).click()
     await page.getByRole("searchbox", { name: "搜索老师姓名" }).fill("Lewis")
     await page.getByRole("button", { name: "搜索", exact: true }).click()
     await count(1)
-    await page.getByRole("button", { name: "清空筛选" }).click()
+    await page.getByRole("button", { name: "清空筛选", exact: true }).click()
     await count(6)
     await page.getByRole("switch", { name: "仅看收藏" }).check()
     await count(2)
-    await page.getByRole("button", { name: "清空筛选" }).click()
+    await page.getByRole("button", { name: "清空筛选", exact: true }).click()
     assert.equal(await page.getByRole("switch", { name: "仅看收藏" }).isChecked(), true)
     await page.getByRole("switch", { name: "仅看收藏" }).uncheck()
     await count(6)
@@ -834,7 +927,7 @@ async function main() {
     await count(1)
     await page.waitForTimeout(850)
     assert.match(await page.locator(".mison-teacher-card").innerText(), /Rina/)
-    await page.getByRole("button", { name: "清空筛选" }).click()
+    await page.getByRole("button", { name: "清空筛选", exact: true }).click()
     await count(6)
     await page.locator('[data-book-teacher="demo-0"]').click()
     await slot("10:00").waitFor()
@@ -917,7 +1010,9 @@ async function main() {
     )
     await stage.getByRole("button", { name: "上一组日期", exact: true }).click()
 
-    const availableOnly = stage.getByRole("switch", { name: "只看可约日期" })
+    const availableOnly = stage.getByRole("switch", { name: "只看可约日期/时段" })
+    assert.equal(await availableOnly.isChecked(), true)
+    await availableOnly.uncheck()
     const allDateCount = await dateOptions.count()
     await availableOnly.check()
     assert.equal(await stage.locator('.mison-date-option[data-unavailable="true"]').count(), 0)

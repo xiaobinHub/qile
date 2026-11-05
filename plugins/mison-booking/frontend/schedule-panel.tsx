@@ -77,7 +77,7 @@ export function SchedulePanel({
   onReconcile(): void
 }) {
   const onlyAvailableId = useId()
-  const [onlyAvailable, setOnlyAvailable] = useState(false)
+  const [onlyAvailable, setOnlyAvailable] = useState(true)
   const [loadingVisible, setLoadingVisible] = useState(false)
   const staleTeacher = !!schedule && schedule.teacher.id !== teacher.id
   useEffect(() => {
@@ -93,7 +93,7 @@ export function SchedulePanel({
   const activeDate = requestedDate ?? schedule?.date ?? ""
   const filteredDays = schedule?.days.filter((day) => !onlyAvailable || day.available) ?? []
   const slotMap = new Map(schedule?.slots.map((slot) => [slot.start, slot]) ?? [])
-  const slots = Array.from(new Set([...slotTimes, ...slotMap.keys()]))
+  const allSlots = Array.from(new Set([...slotTimes, ...slotMap.keys()]))
     .sort()
     .map(
       (start) =>
@@ -104,6 +104,12 @@ export function SchedulePanel({
           reason: "未排班",
         },
     )
+  const activeDayAvailable = schedule?.days.some((day) => day.date === activeDate && day.available)
+  const slots = onlyAvailable
+    ? activeDayAvailable
+      ? allSlots.filter((slot) => slot.state === "available")
+      : []
+    : allSlots
   const [page, setPage] = useState(0)
   const [datesPerPage, setDatesPerPage] = useState(7)
   const dateStrip = useRef<HTMLDivElement>(null)
@@ -117,11 +123,11 @@ export function SchedulePanel({
     observer.observe(element)
     return () => observer.disconnect()
   }, [step])
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!schedule) return
     const index = filteredDays.findIndex((day) => day.date === activeDate)
     setPage(Math.floor(Math.max(0, index) / datesPerPage))
-  }, [activeDate, schedule?.date, teacher.id, datesPerPage, onlyAvailable])
+  }, [activeDate, schedule, datesPerPage, onlyAvailable])
   const dates = filteredDays.slice(page * datesPerPage, (page + 1) * datesPerPage)
   const unresolved =
     operation &&
@@ -129,6 +135,29 @@ export function SchedulePanel({
       operation.state,
     )
   const scheduleBlocked = blocked || loading || staleTeacher || !!unresolved
+  useEffect(() => {
+    if (
+      !onlyAvailable ||
+      !schedule ||
+      scheduleBlocked ||
+      loadError ||
+      step !== "schedule" ||
+      selected.length ||
+      activeDayAvailable
+    )
+      return
+    const first = schedule.days.find((day) => day.available)
+    if (first) onDate(first.date)
+  }, [
+    onlyAvailable,
+    schedule,
+    scheduleBlocked,
+    loadError,
+    step,
+    selected.length,
+    activeDayAvailable,
+    onDate,
+  ])
   const disabledReason = !selected.length
     ? "请选择时段"
     : !contiguous
@@ -313,7 +342,7 @@ export function SchedulePanel({
                         }
                       }}
                     />
-                    <FieldLabel htmlFor={onlyAvailableId}>只看可约日期</FieldLabel>
+                    <FieldLabel htmlFor={onlyAvailableId}>只看可约日期/时段</FieldLabel>
                   </Field>
                 </div>
                 <div className="mison-actions">

@@ -80,7 +80,7 @@ module.exports = async function exerciseScheduleTransition({ page, stage, out, s
       true,
       "Skeletons do not expose the previous teacher's availability through opacity",
     )
-    assert.equal(await stage.getByRole("switch", { name: "只看可约日期" }).isDisabled(), true)
+    assert.equal(await stage.getByRole("switch", { name: "只看可约日期/时段" }).isDisabled(), true)
     assert.equal(await stage.getByRole("button", { name: "下一组日期" }).isDisabled(), true)
     assert.equal(await stage.getByRole("button", { name: "10:00", exact: true }).isDisabled(), true)
     await page.screenshot({ path: path.join(out, `schedule-loading-${width}.png`) })

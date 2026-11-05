@@ -53,7 +53,8 @@
 .mison-header {
   justify-content: flex-end;
   min-height: 64px;
-  padding: 16px 20px;
+  padding: 0 20px;
+  background: color-mix(in srgb, var(--muted) 35%, var(--card));
 }
 .mison-connection,
 .mison-actions,
@@ -63,24 +64,283 @@
 .mison-header b {
   margin-left: 8px;
 }
+.mison-header > .mison-page-tabs {
+  margin-right: auto;
+  align-self: stretch;
+  align-items: flex-end;
+  height: auto;
+  gap: 6px;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.mison-page-tabs > [role="tab"] {
+  flex: none;
+  height: 44px;
+  margin-bottom: -1px;
+  padding: 0 20px;
+  border: 1px solid var(--border);
+  border-bottom-color: transparent;
+  border-radius: 8px 8px 0 0;
+  background: var(--muted);
+  color: var(--muted-foreground);
+  box-shadow: none;
+}
+.mison-page-tabs > [role="tab"][data-state="active"] {
+  z-index: 1;
+  border-bottom-color: var(--card);
+  background: var(--card);
+  color: var(--foreground);
+  font-weight: 600;
+}
+.mison-booking > .mison-teachers-view,
+.mison-booking > .mison-calendar-tab {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  margin: 0;
+}
+.mison-booking > [role="tabpanel"][hidden] {
+  display: none !important;
+}
+.mison-teachers-view > :not(.mison-workspace) {
+  flex-shrink: 0;
+}
+.mison-course-calendar {
+  --mison-lesson-completed: #fff5cc;
+  --mison-lesson-upcoming: #e6f5e9;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+}
+.mison-calendar-toolbar,
+.mison-calendar-navigation,
+.mison-calendar-legend {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.mison-calendar-toolbar {
+  flex: none;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 12px 20px;
+}
+.mison-calendar-toolbar h2 {
+  min-width: 160px;
+  font-variant-numeric: tabular-nums;
+}
+.mison-calendar-legend {
+  margin-left: auto;
+  gap: 16px;
+  font-size: var(--text-caption);
+}
+.mison-calendar-legend > span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.mison-calendar-legend > span::before {
+  content: "";
+  width: 12px;
+  height: 12px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+}
+.mison-calendar-legend > [data-status="completed"]::before {
+  background: var(--mison-lesson-completed);
+}
+.mison-calendar-legend > [data-status="upcoming"]::before {
+  background: var(--mison-lesson-upcoming);
+}
+.mison-calendar-feedback {
+  flex: none;
+}
+.mison-calendar-feedback > p {
+  padding: 0 20px 8px;
+}
+.mison-calendar-feedback .mison-notice {
+  margin: 0 20px 8px;
+}
+.mison-course-calendar .mison-calendar-weekday-row,
+.mison-course-calendar .mison-calendar-month-grid {
+  min-width: 1120px;
+}
+.mison-calendar-day {
+  display: flex;
+  align-items: center;
+  height: 32px;
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+.mison-calendar-today .mison-calendar-day > span {
+  display: grid;
+  place-items: center;
+  min-width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background: var(--primary);
+  color: var(--primary-foreground);
+}
+.mison-calendar-lessons {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.mison-calendar-lesson {
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr);
+  align-items: flex-start;
+  gap: 2px 7px;
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  border-radius: 8px;
+  color: var(--foreground);
+}
+.mison-calendar-lesson:hover {
+  border-color: var(--ring);
+}
+.mison-calendar-lesson:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+.mison-calendar-lesson[aria-busy="true"] {
+  opacity: 0.65;
+  cursor: progress;
+}
+.mison-calendar-lesson[data-status="completed"] {
+  background: var(--mison-lesson-completed);
+}
+.mison-calendar-lesson[data-status="upcoming"] {
+  background: var(--mison-lesson-upcoming);
+}
+.mison-calendar-lesson .mison-avatar {
+  grid-row: 1 / 3;
+  flex: none;
+  width: 40px;
+  height: 40px;
+}
+.mison-calendar-lesson-copy {
+  display: contents;
+  font-size: var(--text-caption);
+  line-height: 1.4;
+}
+.mison-calendar-lesson-copy strong {
+  grid-column: 2;
+  align-self: end;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mison-calendar-lesson-copy time {
+  grid-column: 2;
+  align-self: start;
+  white-space: nowrap;
+  font-size: var(--text-meta);
+  font-variant-numeric: tabular-nums;
+}
+.mison-calendar-courseware {
+  grid-column: 1 / -1;
+  margin-top: 4px;
+  font-size: var(--text-meta);
+  line-height: var(--text-meta--line-height);
+  color: var(--muted-foreground);
+  overflow-wrap: anywhere;
+}
+@container mison (max-width: 600px) {
+  .mison-header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+    padding: 8px 12px 0;
+  }
+  .mison-header > .mison-page-tabs {
+    grid-area: 2 / 1 / 3 / 3;
+    width: 100%;
+    height: 44px;
+  }
+  .mison-header > .mison-page-tabs + button {
+    grid-area: 1 / 1;
+    justify-self: end;
+  }
+  .mison-header > button:last-child {
+    grid-area: 1 / 2;
+  }
+  .mison-page-tabs > [role="tab"] {
+    flex: 1;
+    padding-inline: 12px;
+  }
+  .mison-calendar-toolbar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    padding: 12px;
+    gap: 8px;
+  }
+  .mison-calendar-toolbar h2 {
+    grid-area: 1 / 1;
+    min-width: 0;
+    white-space: nowrap;
+  }
+  .mison-calendar-navigation {
+    grid-area: 1 / 2 / 2 / 4;
+  }
+  .mison-calendar-legend {
+    grid-area: 2 / 1 / 3 / 3;
+    margin-left: 0;
+    flex: 1;
+    justify-content: flex-start;
+    gap: 10px;
+  }
+  .mison-calendar-toolbar > button {
+    grid-area: 2 / 3;
+  }
+}
 .mison-filters {
   flex-wrap: wrap;
   padding: 16px 20px;
 }
-.mison-search {
-  flex: 1 1 240px;
-  max-width: 360px;
-  min-width: 180px;
-}
-.mison-date-picker {
-  width: 180px;
-  flex-shrink: 0;
-}
+.mison-search,
+.mison-date-picker,
 .mison-time-trigger {
-  min-width: 140px;
+  flex: 0 0 200px;
+  width: 200px;
+  min-width: 0;
+  max-width: none;
+  transition-property: color, background-color, border-color, box-shadow;
 }
 .mison-favorites-field {
   width: auto;
+}
+.mison-date-filter {
+  position: relative;
+}
+.mison-date-filter-trigger {
+  width: 100%;
+}
+.mison-date-filter[data-has-date] .mison-date-filter-trigger {
+  padding-right: 44px;
+}
+.mison-date-clear {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  transform: translateY(-50%);
+}
+.mison-date-clear::after {
+  content: "";
+  position: absolute;
+  inset: -2px;
 }
 .mison-reset {
   margin-left: auto;
@@ -214,7 +474,7 @@
   color: var(--muted-foreground);
 }
 .mison-teachers.is-sidebar {
-  padding: 16px 16px 0;
+  padding: 16px 0 0 16px;
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -231,9 +491,11 @@
 .is-sidebar .mison-teacher-scroll {
   flex: 1;
   min-height: 0;
+  padding-right: 16px;
 }
 .is-sidebar .mison-list-heading {
   flex-shrink: 0;
+  padding-right: 16px;
 }
 .is-sidebar .mison-teacher-card {
   padding: 12px 0;
@@ -514,7 +776,8 @@
   overflow: auto;
   overscroll-behavior: contain;
   touch-action: pan-y pinch-zoom;
-  padding-top: 12px;
+  /* Card rings and shadows paint outside the box; keep them inside the scrollport. */
+  padding: 12px 4px 4px;
 }
 .mison-booking-card {
   --card-spacing: 14px;
@@ -770,17 +1033,11 @@
     padding: 12px;
     gap: 8px;
   }
-  .mison-search {
-    flex-basis: 100%;
-    max-width: none;
-  }
-  .mison-date-picker {
-    flex: 1;
-    width: auto;
-    min-width: 140px;
-  }
+  .mison-search,
+  .mison-date-picker,
   .mison-time-trigger {
-    flex: 1;
+    flex-basis: calc((100% - 16px) / 3);
+    width: calc((100% - 16px) / 3);
   }
   .mison-reset {
     margin-left: 0;
@@ -1012,4 +1269,12 @@
   gap: 12px;
   padding: 20px;
   background: color-mix(in srgb, var(--background) 85%, transparent);
+}
+@container mison (max-width:540px) {
+  .mison-search,
+  .mison-date-picker,
+  .mison-time-trigger {
+    flex-basis: 100%;
+    width: 100%;
+  }
 }

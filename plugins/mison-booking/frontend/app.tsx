@@ -1,3 +1,5 @@
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@shared/components/ui/tabs"
+import { CourseCalendar } from "./course-calendar"
 import { operationId as newOperationId } from "./operation-id"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Card, CardHeader, CardContent } from "@shared/components/ui/card"
@@ -35,6 +37,9 @@ import type {
 
 type Switch = { teacher: Teacher; date?: string }
 export function App({ context }: { context: PluginContext }) {
+  const [view, setView] = useState("teachers")
+  const [calendarVisited, setCalendarVisited] = useState(false)
+  const [calendarRefresh, setCalendarRefresh] = useState(0)
   const [bootstrap, setBootstrap] = useState<Bootstrap | null>(null),
     [bootstrapError, setBootstrapError] = useState("")
   const [teachers, setTeachers] = useState<Teacher[]>([]),
@@ -325,6 +330,7 @@ export function App({ context }: { context: PluginContext }) {
     setOperation(r)
     if (r.state === "failed" || r.state === "cancelled") submitId.current = null
     if (r.state === "succeeded") {
+      setCalendarRefresh((value) => value + 1)
       setStep("success")
       setRefresh((v) => v + 1)
       void reloadBootstrap()
@@ -495,6 +501,7 @@ export function App({ context }: { context: PluginContext }) {
       if (operation?.operationId === pending.operationId) acceptOperation(value)
       if (value.result?.resource) setResource(value.result.resource)
       if (value.state === "succeeded" && ["book", "cancel"].includes(pending.kind ?? "")) {
+        setCalendarRefresh((value) => value + 1)
         setBookingsOpen(true)
         setScheduleRefresh((n) => n + 1)
       }
@@ -550,6 +557,8 @@ export function App({ context }: { context: PluginContext }) {
     }
   }
   function accountChanged(connection: Connection) {
+    setView("teachers")
+    setCalendarVisited(false)
     setBootstrap((old) => (old ? { ...old, connection } : old))
     setError("")
     setAccountOpen(false)
@@ -565,286 +574,333 @@ export function App({ context }: { context: PluginContext }) {
     void reloadBootstrap()
   }
   return (
-    <Card className="mison-booking gap-0 py-0" data-viewport-contained ref={root}>
-      {connected ? (
-        <CardHeader className="mison-header">
-          <Button variant="outline" disabled={!connected} onClick={() => setBookingsOpen(true)}>
-            <CalendarDays />
-            我的预约{bootstrap?.upcomingCount != null ? <b>{bootstrap.upcomingCount}</b> : null}
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label="账号设置"
-            title="账号设置"
-            onClick={() => setAccountOpen(true)}
-            disabled={!bootstrap || frozen}
-          >
-            <Settings />
-          </Button>
-        </CardHeader>
-      ) : null}
-      {connected ? <Separator /> : null}
-      {bootstrapError ? (
-        <Notice error>
-          {bootstrapError}
-          <Button variant="outline" onClick={() => void reloadBootstrap()}>
-            <RefreshCw />
-            重试连接
-          </Button>
-        </Notice>
-      ) : null}
-      {connected ? (
-        <>
-          {bootstrap.readError ? <Notice error>{bootstrap.readError}</Notice> : null}
-          {bootstrap.unresolvedOperations?.map((item) => (
-            <Notice key={item.operationId}>
-              {item.kind === "book"
-                ? "上次预约"
-                : item.kind === "cancel"
-                  ? "上次取消"
-                  : "上次课件操作"}
-              结果待核对，请勿重复操作。
-              <Button
-                variant="outline"
-                disabled={busy}
-                onClick={() => void checkSavedOperation(item)}
-              >
-                核对上次操作
-              </Button>
-              <Button variant="ghost" disabled={busy} onClick={() => setEndPending(item)}>
-                结束核对
-              </Button>
-            </Notice>
-          ))}
-          <TeacherFilterBar
-            value={filters}
-            onChange={changeFilters}
-            options={options}
-            onSearch={() => {
-              setSearch(filters.nickname.trim())
-              setRefresh((v) => v + 1)
-            }}
-            onReset={() => {
-              setFilters({ ...emptyFilters, favoritesOnly: filters.favoritesOnly })
-              setSearch("")
-            }}
-          />
-          <Separator />
-          {error ? (
-            <Notice error>
-              {error}
-              {coursePending ? (
-                <Button variant="outline" disabled={busy} onClick={() => void reconcileCourse()}>
-                  核对课件操作
+    <Tabs
+      asChild
+      value={view}
+      onValueChange={(value) => {
+        setView(value)
+        if (value === "calendar") setCalendarVisited(true)
+      }}
+    >
+      <Card className="mison-booking gap-0 py-0" data-viewport-contained ref={root}>
+        {connected ? (
+          <CardHeader className="mison-header">
+            <TabsList aria-label="美森约课功能" className="mison-page-tabs">
+              <TabsTrigger value="teachers">教师与约课</TabsTrigger>
+              <TabsTrigger value="calendar">课程日历</TabsTrigger>
+            </TabsList>
+            <Button variant="outline" disabled={!connected} onClick={() => setBookingsOpen(true)}>
+              <CalendarDays />
+              我的预约{bootstrap?.upcomingCount != null ? <b>{bootstrap.upcomingCount}</b> : null}
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="账号设置"
+              title="账号设置"
+              onClick={() => setAccountOpen(true)}
+              disabled={!bootstrap || frozen}
+            >
+              <Settings />
+            </Button>
+          </CardHeader>
+        ) : null}
+        {connected ? <Separator /> : null}
+        {bootstrapError ? (
+          <Notice error>
+            {bootstrapError}
+            <Button variant="outline" onClick={() => void reloadBootstrap()}>
+              <RefreshCw />
+              重试连接
+            </Button>
+          </Notice>
+        ) : null}
+        {connected ? (
+          <>
+            {bootstrap.readError ? <Notice error>{bootstrap.readError}</Notice> : null}
+            {bootstrap.unresolvedOperations?.map((item) => (
+              <Notice key={item.operationId}>
+                {item.kind === "book"
+                  ? "上次预约"
+                  : item.kind === "cancel"
+                    ? "上次取消"
+                    : "上次课件操作"}
+                结果待核对，请勿重复操作。
+                <Button
+                  variant="outline"
+                  disabled={busy}
+                  onClick={() => void checkSavedOperation(item)}
+                >
+                  核对上次操作
                 </Button>
-              ) : null}
-            </Notice>
-          ) : null}
-          <CardContent className={`mison-workspace p-0${expanded ? " is-expanded" : ""}`}>
-            <TeacherList
-              teachers={teachers}
-              selectedId={teacher?.id ?? null}
-              expanded={expanded}
-              total={total}
-              loading={listLoading}
-              nextCursor={nextCursor}
-              paginationKey={`${query}:${refresh}`}
-              onMore={() => void loadTeachers(nextCursor)}
-              onBook={book}
-              onProfile={setProfile}
-              onFavorite={(t) => void favorite(t)}
-              favoriteBusy={favoriteBusy}
-            />
-            {expanded ? (
-              <Separator orientation="vertical" className="mison-workspace-divider" />
-            ) : null}
-            {expanded && teacher ? (
-              <SchedulePanel
-                teacher={teacher}
-                schedule={schedule}
-                selected={selected}
-                step={step}
-                draft={draft}
-                loading={scheduleLoading}
-                requestedDate={date}
-                slotTimes={options?.timeSlots ?? []}
-                loadError={scheduleError}
-                onRetry={() => setScheduleRefresh((n) => n + 1)}
-                busy={busy}
-                blocked={frozen}
-                contiguous={contiguous}
-                limit={bootstrap.bookingLimits.maxContiguousLessons}
-                operation={operation}
-                onSlot={(start) => {
-                  if (frozen || scheduleLoading || scheduleError || selectionBeforeWarning !== null)
-                    return
-                  const nextSelected = selected.includes(start)
-                    ? selected.filter((value) => value !== start)
-                    : [...selected, start].sort()
-                  const nextContiguous = nextSelected.every(
-                    (value, index) =>
-                      index === 0 ||
-                      minutes(value) - minutes(nextSelected[index - 1]) ===
-                        schedule?.slotStepMinutes,
-                  )
-                  if (!nextContiguous) setSelectionBeforeWarning(selected)
-                  setSelected(nextSelected)
-                  draftOperationId.current = null
-                  submitId.current = null
+                <Button variant="ghost" disabled={busy} onClick={() => setEndPending(item)}>
+                  结束核对
+                </Button>
+              </Notice>
+            ))}
+            <TabsContent
+              value="teachers"
+              forceMount
+              hidden={view !== "teachers"}
+              className="mison-teachers-view"
+            >
+              <TeacherFilterBar
+                value={filters}
+                onChange={changeFilters}
+                options={options}
+                onSearch={() => {
+                  setSearch(filters.nickname.trim())
+                  setRefresh((v) => v + 1)
                 }}
-                onDate={(value) => book(teacher, value)}
-                onClear={() => {
-                  if (frozen) return
-                  setSelected([])
-                  setDraft(null)
-                  draftOperationId.current = null
+                onReset={() => {
+                  setFilters({ ...emptyFilters, favoritesOnly: filters.favoritesOnly })
+                  setSearch("")
                 }}
-                onNext={() => void next()}
-                onBack={() => setStep("schedule")}
-                onSubmit={() => void submit()}
-                onCollapse={collapse}
-                onProfile={() => setProfile(teacher)}
-                onChange={(start) => {
-                  if (!coursePending) setCourseStart(start)
-                }}
-                onPreview={(start) => void previewCourse(start)}
-                onContinue={() => {
-                  setError("")
-                  setScheduleRefresh((v) => v + 1)
-                  setSelected([])
-                  setDraft(null)
-                  setOperation(null)
-                  setStep("schedule")
-                  submitId.current = null
-                  draftOperationId.current = null
-                  setDate(schedule?.date)
-                }}
-                onBookings={() => setBookingsOpen(true)}
-                onReconcile={() => void reconcile()}
               />
-            ) : null}
-          </CardContent>
-        </>
-      ) : bootstrap ? (
-        <section className="mison-login" aria-labelledby="mison-login-title">
-          <div className="mison-login-panel">
-            <h2 id="mison-login-title">请登录美森网课账号</h2>
-            {bootstrap.connection.status === "reconnect_required" ? (
-              <p className="mison-caption">登录已过期，请重新登录。</p>
-            ) : null}
-            <LoginForm
-              context={context}
-              connection={bootstrap.connection}
-              onSuccess={accountChanged}
-            />
-          </div>
-        </section>
-      ) : (
-        <Empty title={bootstrapError ? "暂时无法连接美森约课" : "正在读取美森约课…"} />
-      )}
-      {profile ? (
-        <ProfileDrawer
-          context={context}
-          teacher={profile}
-          onClose={() => setProfile(null)}
-          onBook={() => {
-            book(profile)
-            setProfile(null)
-          }}
-          onFavorite={() => void favorite(profile)}
-          favoriteBusy={favoriteBusy !== null}
-        />
-      ) : null}
-      {bookingsOpen && bootstrap ? (
-        <BookingsDrawer
-          context={context}
-          bindingRevision={bindingRevision}
-          onClose={() => {
-            setBookingsOpen(false)
-            void reloadBootstrap()
-          }}
-          onResource={setResource}
-        />
-      ) : null}
-      {accountOpen && bootstrap ? (
-        <AccountDialog
-          context={context}
-          connection={bootstrap.connection}
-          onClose={() => setAccountOpen(false)}
-          onChanged={accountChanged}
-        />
-      ) : null}
-      {courseStart && draft ? (
-        <CoursewarePicker
-          context={context}
-          draft={draft}
-          start={courseStart}
-          busy={busy}
-          externalError={error}
-          pending={!!coursePending}
-          onReconcile={() => void reconcileCourse()}
-          onClose={() => setCourseStart(null)}
-          onUse={(course) => void changeCourse(course)}
-        />
-      ) : null}
-      {endPending ? (
-        <Overlay
-          confirm
-          title="结束操作核对"
-          busy={busy}
-          onClose={() => setEndPending(null)}
-          footer={
-            <>
-              <Button variant="outline" disabled={busy} onClick={() => setEndPending(null)}>
-                继续核对
-              </Button>
-              <Button disabled={busy} onClick={() => void endSavedOperation()}>
-                已在美森App核实，结束核对
-              </Button>
-            </>
-          }
-        >
-          <p>
-            请先在美森App确认课程和预览次数的实际状态。结束核对只关闭本次跟踪，不会取消课程、退还次数或重发请求。
-          </p>
-        </Overlay>
-      ) : null}
-      {resource ? <ResourceViewer resource={resource} onClose={() => setResource(null)} /> : null}
-      {selectionBeforeWarning !== null ? (
-        <Overlay
-          confirm
-          title="时段选择提示"
-          onClose={dismissSlotWarning}
-          footer={<Button onClick={dismissSlotWarning}>确定</Button>}
-        >
-          <p>不能选择不连续的时段，请调整。</p>
-        </Overlay>
-      ) : null}
-      {switchTo ? (
-        <Overlay
-          confirm
-          title="切换预约对象"
-          onClose={() => setSwitchTo(null)}
-          footer={
-            <>
-              <Button variant="outline" onClick={() => setSwitchTo(null)}>
-                保留当前选择
-              </Button>
-              <Button
-                onClick={() => {
-                  applySwitch(switchTo)
-                  setSwitchTo(null)
-                }}
-              >
-                清空并切换
-              </Button>
-            </>
-          }
-        >
-          <p>切换老师或日期后，将清空本次已选时段与课件。</p>
-        </Overlay>
-      ) : null}
-    </Card>
+              <Separator />
+              {error ? (
+                <Notice error>
+                  {error}
+                  {coursePending ? (
+                    <Button
+                      variant="outline"
+                      disabled={busy}
+                      onClick={() => void reconcileCourse()}
+                    >
+                      核对课件操作
+                    </Button>
+                  ) : null}
+                </Notice>
+              ) : null}
+              <CardContent className={`mison-workspace p-0${expanded ? " is-expanded" : ""}`}>
+                <TeacherList
+                  teachers={teachers}
+                  selectedId={teacher?.id ?? null}
+                  expanded={expanded}
+                  total={total}
+                  loading={listLoading}
+                  nextCursor={nextCursor}
+                  paginationKey={`${query}:${refresh}`}
+                  onMore={() => void loadTeachers(nextCursor)}
+                  onBook={book}
+                  onProfile={setProfile}
+                  onFavorite={(t) => void favorite(t)}
+                  favoriteBusy={favoriteBusy}
+                />
+                {expanded ? (
+                  <Separator orientation="vertical" className="mison-workspace-divider" />
+                ) : null}
+                {expanded && teacher ? (
+                  <SchedulePanel
+                    teacher={teacher}
+                    schedule={schedule}
+                    selected={selected}
+                    step={step}
+                    draft={draft}
+                    loading={scheduleLoading}
+                    requestedDate={date}
+                    slotTimes={options?.timeSlots ?? []}
+                    loadError={scheduleError}
+                    onRetry={() => setScheduleRefresh((n) => n + 1)}
+                    busy={busy}
+                    blocked={frozen}
+                    contiguous={contiguous}
+                    limit={bootstrap.bookingLimits.maxContiguousLessons}
+                    operation={operation}
+                    onSlot={(start) => {
+                      if (
+                        frozen ||
+                        scheduleLoading ||
+                        scheduleError ||
+                        selectionBeforeWarning !== null
+                      )
+                        return
+                      const nextSelected = selected.includes(start)
+                        ? selected.filter((value) => value !== start)
+                        : [...selected, start].sort()
+                      const nextContiguous = nextSelected.every(
+                        (value, index) =>
+                          index === 0 ||
+                          minutes(value) - minutes(nextSelected[index - 1]) ===
+                            schedule?.slotStepMinutes,
+                      )
+                      if (!nextContiguous) setSelectionBeforeWarning(selected)
+                      setSelected(nextSelected)
+                      draftOperationId.current = null
+                      submitId.current = null
+                    }}
+                    onDate={(value) => book(teacher, value)}
+                    onClear={() => {
+                      if (frozen) return
+                      setSelected([])
+                      setDraft(null)
+                      draftOperationId.current = null
+                    }}
+                    onNext={() => void next()}
+                    onBack={() => setStep("schedule")}
+                    onSubmit={() => void submit()}
+                    onCollapse={collapse}
+                    onProfile={() => setProfile(teacher)}
+                    onChange={(start) => {
+                      if (!coursePending) setCourseStart(start)
+                    }}
+                    onPreview={(start) => void previewCourse(start)}
+                    onContinue={() => {
+                      setError("")
+                      setScheduleRefresh((v) => v + 1)
+                      setSelected([])
+                      setDraft(null)
+                      setOperation(null)
+                      setStep("schedule")
+                      submitId.current = null
+                      draftOperationId.current = null
+                      setDate(schedule?.date)
+                    }}
+                    onBookings={() => setBookingsOpen(true)}
+                    onReconcile={() => void reconcile()}
+                  />
+                ) : null}
+              </CardContent>
+            </TabsContent>
+            <TabsContent
+              value="calendar"
+              forceMount
+              hidden={view !== "calendar"}
+              className="mison-calendar-tab"
+            >
+              {calendarVisited ? (
+                <CourseCalendar
+                  key={bindingRevision}
+                  context={context}
+                  serverDate={bootstrap.serverDate}
+                  active={view === "calendar"}
+                  refresh={calendarRefresh}
+                  onResource={setResource}
+                />
+              ) : null}
+            </TabsContent>
+          </>
+        ) : bootstrap ? (
+          <section className="mison-login" aria-labelledby="mison-login-title">
+            <div className="mison-login-panel">
+              <h2 id="mison-login-title">请登录美森网课账号</h2>
+              {bootstrap.connection.status === "reconnect_required" ? (
+                <p className="mison-caption">登录已过期，请重新登录。</p>
+              ) : null}
+              <LoginForm
+                context={context}
+                connection={bootstrap.connection}
+                onSuccess={accountChanged}
+              />
+            </div>
+          </section>
+        ) : (
+          <Empty title={bootstrapError ? "暂时无法连接美森约课" : "正在读取美森约课…"} />
+        )}
+        {profile ? (
+          <ProfileDrawer
+            context={context}
+            teacher={profile}
+            onClose={() => setProfile(null)}
+            onBook={() => {
+              book(profile)
+              setProfile(null)
+            }}
+            onFavorite={() => void favorite(profile)}
+            favoriteBusy={favoriteBusy !== null}
+          />
+        ) : null}
+        {bookingsOpen && bootstrap ? (
+          <BookingsDrawer
+            context={context}
+            bindingRevision={bindingRevision}
+            onClose={() => {
+              setBookingsOpen(false)
+              setCalendarRefresh((value) => value + 1)
+              void reloadBootstrap()
+            }}
+            onResource={setResource}
+          />
+        ) : null}
+        {accountOpen && bootstrap ? (
+          <AccountDialog
+            context={context}
+            connection={bootstrap.connection}
+            onClose={() => setAccountOpen(false)}
+            onChanged={accountChanged}
+          />
+        ) : null}
+        {courseStart && draft ? (
+          <CoursewarePicker
+            context={context}
+            draft={draft}
+            start={courseStart}
+            busy={busy}
+            externalError={error}
+            pending={!!coursePending}
+            onReconcile={() => void reconcileCourse()}
+            onClose={() => setCourseStart(null)}
+            onUse={(course) => void changeCourse(course)}
+          />
+        ) : null}
+        {endPending ? (
+          <Overlay
+            confirm
+            title="结束操作核对"
+            busy={busy}
+            onClose={() => setEndPending(null)}
+            footer={
+              <>
+                <Button variant="outline" disabled={busy} onClick={() => setEndPending(null)}>
+                  继续核对
+                </Button>
+                <Button disabled={busy} onClick={() => void endSavedOperation()}>
+                  已在美森App核实，结束核对
+                </Button>
+              </>
+            }
+          >
+            <p>
+              请先在美森App确认课程和预览次数的实际状态。结束核对只关闭本次跟踪，不会取消课程、退还次数或重发请求。
+            </p>
+          </Overlay>
+        ) : null}
+        {resource ? <ResourceViewer resource={resource} onClose={() => setResource(null)} /> : null}
+        {selectionBeforeWarning !== null ? (
+          <Overlay
+            confirm
+            title="时段选择提示"
+            onClose={dismissSlotWarning}
+            footer={<Button onClick={dismissSlotWarning}>确定</Button>}
+          >
+            <p>不能选择不连续的时段，请调整。</p>
+          </Overlay>
+        ) : null}
+        {switchTo ? (
+          <Overlay
+            confirm
+            title="切换预约对象"
+            onClose={() => setSwitchTo(null)}
+            footer={
+              <>
+                <Button variant="outline" onClick={() => setSwitchTo(null)}>
+                  保留当前选择
+                </Button>
+                <Button
+                  onClick={() => {
+                    applySwitch(switchTo)
+                    setSwitchTo(null)
+                  }}
+                >
+                  清空并切换
+                </Button>
+              </>
+            }
+          >
+            <p>切换老师或日期后，将清空本次已选时段与课件。</p>
+          </Overlay>
+        ) : null}
+      </Card>
+    </Tabs>
   )
 }
