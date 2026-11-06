@@ -51,7 +51,7 @@ def manifest(plugin_id='runtime-demo', version='1.0.0', *, backend=True):
             'tasks': [{'id': 'remind', 'intervalSeconds': 60, 'misfirePolicy': 'skip'}] if backend else [], 'events': [], 'icons': []}
 
 
-def make_package(directory, data=None, *, worker=WORKER, schema=None):
+def make_package(directory, data=None, *, worker=WORKER, schema=None, sdk_version='1.0.0'):
     from scripts.package_plugin import pure_wheel
     data = copy.deepcopy(data or manifest())
     schema = schema or {'type': 'object', 'properties': {'message': {'type': 'string', 'default': 'ok'}}}
@@ -60,7 +60,7 @@ def make_package(directory, data=None, *, worker=WORKER, schema=None):
         files['backend/runtime_demo.py'] = worker.encode()
         name, wheel = pure_wheel(data['id'], data['version'], {'runtime_demo.py': worker.encode()})
         files['wheels/' + name] = wheel
-        name, wheel = pure_wheel('lele-plugin-sdk', '1.0.0', {p.relative_to(SDK).as_posix(): p.read_bytes() for p in SDK.rglob('*.py')})
+        name, wheel = pure_wheel('lele-plugin-sdk', sdk_version, {p.relative_to(SDK).as_posix(): p.read_bytes() for p in SDK.rglob('*.py')})
         files['wheels/' + name] = wheel
     else:
         files['frontend/entry.js'] = b'export function mount(){return ()=>{}}'
@@ -133,6 +133,26 @@ class WorkerTests(unittest.TestCase):
         self.assertIn('include-system-site-packages = false', (self.release / '.venv/pyvenv.cfg').read_text())
         self.assertEqual(self.supervisor.stop('runtime-demo')['stopped'], 1)
         self.assertFalse(self.supervisor.workers)
+
+    def test_concurrent_requests_survive_bounded_cache_allocation(self):
+        source = '''import threading,time
+cache=bytearray(64*1024*1024)
+barrier=threading.Barrier(4)
+def health(): return {'ok':True}
+def handle_request(context,path,method,body):
+    barrier.wait(timeout=3)
+    time.sleep(.05)
+    return {'ok':True,'cacheBytes':len(cache)}
+'''
+        package = make_package(self.temp.name, manifest(version='1.0.2'), worker=source, sdk_version='1.1.1')
+        prepare_release(inspect_package(package), self.root)
+        context = ContextSigner().issue({**scope(), 'version': '1.0.2'})
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            futures = [executor.submit(self.supervisor.call, context, 'handle_request', {'path': 'read'}, timeout=5)
+                       for _ in range(4)]
+            results = [future.result(timeout=8) for future in futures]
+        self.assertEqual(results, [{'ok': True, 'cacheBytes': 64*1024*1024}] * 4)
+        self.assertTrue(self.supervisor.health('runtime-demo', '1.0.2')['ok'])
 
     def test_crash_timeout_and_failed_health_are_bounded(self):
         start = time.monotonic()

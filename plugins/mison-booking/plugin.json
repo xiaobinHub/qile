@@ -1,7 +1,7 @@
 {
   "manifestVersion": 1,
   "id": "mison-booking",
-  "version": "1.0.34",
+  "version": "1.0.35",
   "type": "page",
   "name": "美森约课",
   "description": "查看老师档期、预约一对一课程并管理课程资料。",

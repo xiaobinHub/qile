@@ -31,6 +31,15 @@ class PackageValidationTests(unittest.TestCase):
         self.assertEqual(len([p for p in info['files'] if p.endswith('.whl')]), 2)
         self.assertTrue(info['descriptor']['buildPlatform']['purePython'])
 
+    def test_supported_sdk_patch_keeps_previous_sdk_versions_compatible(self):
+        for version in ('1.0.0', '1.1.0', '1.1.1'):
+            with self.subTest(version=version):
+                package = make_package(self.temp.name, sdk_version=version)
+                self.assertTrue(inspect_package(package)['manifest']['backend'])
+        package = make_package(self.temp.name, sdk_version='1.2.0')
+        with self.assertRaises(ApiError):
+            inspect_package(package)
+
     def test_task_configuration_references_are_validated_before_prepare(self):
         data = manifest()
         data['tasks'] = [{'id': 'remind', 'schedule': {'configTime': 'missingTime'}, 'misfirePolicy': 'skip'}]

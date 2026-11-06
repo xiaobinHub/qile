@@ -116,7 +116,7 @@ def main(argv=None):
     # address-space limits on Linux, where production workers run. CPU seconds
     # cap a runaway process independently of the runtime's aggregate cgroup.
     if sys.platform.startswith('linux'):
-        resource.setrlimit(resource.RLIMIT_AS, (192 * 1024 * 1024, 192 * 1024 * 1024))
+        resource.setrlimit(resource.RLIMIT_AS, (512 * 1024 * 1024, 512 * 1024 * 1024))
     resource.setrlimit(resource.RLIMIT_CPU, (60, 61))
     resource.setrlimit(resource.RLIMIT_FSIZE, (8 * 1024 * 1024, 8 * 1024 * 1024))
     module = importlib.import_module(args.module)
