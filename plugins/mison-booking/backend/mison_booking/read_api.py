@@ -296,3 +296,41 @@ def bookings(client, query):
     return {'queryId': state['queryId'], 'state': 'ready', 'items': selected,
             'nextCursor': next_cursor,
             'total': len(state['items']), 'sourceComplete': True}
+
+
+def _ordered(status, items):
+    stamps = [item['startsAt'] for item in items]
+    pairs = zip(stamps, stamps[1:])
+    ordered = all(left <= right for left, right in pairs) if status == 'upcoming' else all(left >= right for left, right in pairs)
+    if not ordered: schema('美森课程顺序已改变，请刷新列表。')
+
+def booking_page(client, query):
+    if set(query) - {'status', 'page'}: invalid()
+    status = query.get('status', 'upcoming')
+    if status not in ('upcoming', 'completed', 'cancelled'): invalid()
+    raw_page = query.get('page', '1')
+    if not isinstance(raw_page, (str, int)) or isinstance(raw_page, bool) or not str(raw_page).isdecimal() or not 1 <= int(raw_page) <= 100: invalid()
+    page = int(raw_page)
+    contract = contracts(client)
+    if status == 'cancelled':
+        response = client.call('onevoneGetCancelLesson', {'userid': client.userid, 'classid': contract['id'], 'page': page, 'limit': 100})
+        source = rows(response.get('data'))
+        count = response.get('count')
+        complete = page * 100 >= count if type(count) is int else len(source) < 100
+    else:
+        response = client.call('getLiveList' if status == 'upcoming' else 'getBackList',
+            {'classid': contract['classId'], 'page_size': 100, 'page_no': page, 'courseway': 0, 'blockid': 0,
+             **({'is_lesson_status': 1} if status == 'completed' else {})})
+        data = response.get('data')
+        if not isinstance(data, dict) or type(data.get('allPage')) is not int or data['allPage'] < 0: schema()
+        source = rows(data.get('list'))
+        complete = data.get('lastPage') is True or page >= data['allPage']
+        if data.get('lastPage') is not False and len(source) < 100: complete = True
+    items, seen = [], set()
+    for row in source:
+        value = booking(client, contract, status, row)
+        if value['key'] in seen: continue
+        seen.add(value['key']); items.append(value)
+    _ordered(status, items)
+    for item in items: item['teacher']['avatarUrl'] = images.reference(client, item['teacher']['avatarUrl'])
+    return {'status': status, 'page': page, 'pageSize': 100, 'complete': complete or not items, 'items': items}

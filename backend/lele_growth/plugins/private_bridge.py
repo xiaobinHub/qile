@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import uuid
 
 from lele_growth.child_service import require
 from . import private_store
@@ -23,16 +24,19 @@ class PluginBridge:
         plugin_id = context.get('pluginId')
         child_id = context.get('childId')
         actor_id = context.get('actorId')
-        require(isinstance(plugin_id, str) and isinstance(child_id, str) and isinstance(actor_id, str),
+        job = actor_id is None and isinstance(context.get('jobId'), str)
+        require(isinstance(plugin_id, str) and isinstance(child_id, str) and (isinstance(actor_id, str) or job),
                 403, '插件上下文不正确。', 'plugin_context_invalid')
 
         def work(cur):
             current = active_context(cur, plugin_id, child_id)
             assert_fences(current, context)
+            if job:
+                self._job_access(cur, current, context, action)
             require(action in ('actor.info', 'private.get', 'private.put', 'private.delete',
                                'credential.get', 'session.get', 'session.begin', 'session.finish', 'session.fail', 'session.disconnect', 'session.invalidate', 'operation.begin', 'operation.mark-dispatch',
                                'operation.stage', 'operation.finish', 'operation.get', 'operation.list', 'resource.issue',
-                               'courseSync.get', 'courseSync.preview', 'courseSync.save', 'courseSync.run', 'courseSync.purge'),
+                               'courseSync.get', 'courseSync.check', 'courseSync.preview', 'courseSync.save', 'courseSync.run', 'courseSync.purge'),
                     400, '插件Bridge动作不存在。', 'plugin_bridge_action_unavailable')
             if action == 'actor.info':
                 cur.execute('SELECT owner_id FROM lele.children WHERE id=%s', (child_id,))
@@ -42,6 +46,11 @@ class PluginBridge:
                 return {'ok': True, 'data': issue(cur, current, context, payload)}
             if action.startswith('courseSync.'):
                 require(plugin_id == 'mison-booking', 403, '此插件不能同步课程。', 'plugin_capability_denied')
+                self._capability(current, 'plugin.private-state')
+                self._capability(current, 'plugin.credentials')
+                if not job:
+                    cur.execute("SELECT 1 FROM lele.memberships m JOIN lele.users u ON u.id=m.user_id WHERE m.child_id=%s AND m.user_id=%s AND u.status='active'", (child_id, actor_id))
+                    require(cur.fetchone() is not None, 403, '当前用户无权同步该儿童的课程。', 'OWNER_REQUIRED')
                 from lele_growth.course_sync_host import handle as sync_courses
                 return sync_courses(self.service, cur, current, context, action, payload)
             if action.startswith('session.'):
@@ -86,6 +95,27 @@ class PluginBridge:
                 return {'ok': True, 'data': {'token': credential_vault.token(cur, current, payload.get('credentialId'), self._vault_available(self.vault))}}
             return self._operation(cur, current, context, action, payload)
         return self.service.transaction(work)
+
+    @staticmethod
+    def _job_access(cur, current, context, action):
+        # Runtime signature and active invocation admission are checked before
+        # this bridge. Recheck the live DB lease/attempt in the write transaction.
+        require(current['plugin_id'] == 'mison-booking' and action in (
+            'session.get', 'session.invalidate', 'courseSync.get', 'courseSync.run')
+            and {'plugin.jobs.schedule', 'plugin.credentials', 'plugin.private-state'} <= set(context.get('capabilities', [])),
+            403, '后台任务不能执行此动作。', 'plugin_capability_denied')
+        try:
+            job_id = str(uuid.UUID(context['jobId']))
+        except (ValueError, TypeError, AttributeError):
+            require(False, 403, '后台任务身份不正确。', 'plugin_job_revoked')
+        attempt = context.get('jobAttempt')
+        require(type(attempt) is int and attempt > 0, 403, '后台任务身份不正确。', 'plugin_job_revoked')
+        cur.execute("""SELECT 1 FROM lele.plugin_jobs WHERE id=%s AND plugin_id=%s AND child_id=%s
+AND task_id='sync-courses' AND status='running' AND NOT cancel_requested AND lease_until>now()
+AND attempt=%s AND generation=%s AND config_revision=%s AND release_epoch=%s AND release_id=%s FOR SHARE""",
+            (job_id, current['plugin_id'], current['child_id'], attempt, current['generation'],
+             current['configRevision'], current['releaseEpoch'], current['releaseId']))
+        require(cur.fetchone() is not None, 409, '后台任务租约或运行资格已失效。', 'plugin_job_revoked')
 
     @staticmethod
     def _capability(current, capability):

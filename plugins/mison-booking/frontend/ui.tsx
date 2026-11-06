@@ -7,6 +7,7 @@ import {
 } from "@shared/components/ui/alert-dialog"
 import { useContext, useEffect, useRef, useState, type ReactNode } from "react"
 import { request } from "./api"
+import { forgetAvatar, loadAvatar, peekAvatar } from "./avatar-cache"
 import type { PluginContext } from "./types"
 import { X, UserRound } from "lucide-react"
 import { Button as SharedButton } from "@shared/components/ui/button"
@@ -51,42 +52,24 @@ export function NumberPicker(props: React.ComponentProps<typeof SharedNumberPick
 export function PopoverContent(props: React.ComponentProps<typeof SharedPopoverContent>) {
   return <SharedPopoverContent {...props} portalContainer={useContext(PortalContext)} />
 }
-const imageListeners = new WeakMap<PluginContext, Map<string, Set<(data: string) => void>>>()
-const imageRequests = new WeakMap<PluginContext, Map<string, Promise<string>>>()
 const imageLanes = new WeakMap<PluginContext, { next: number; lanes: Promise<unknown>[] }>()
 function loadImage(context: PluginContext, reference: string) {
-  const cache = imageRequests.get(context) ?? new Map<string, Promise<string>>()
-  imageRequests.set(context, cache)
-  let pending = cache.get(reference)
-  if (!pending) {
+  return loadAvatar(reference, () => {
     const queue = imageLanes.get(context) ?? {
       next: 0,
       lanes: [Promise.resolve(), Promise.resolve()],
     }
     imageLanes.set(context, queue)
     const lane = queue.next++ % queue.lanes.length
-    pending = queue.lanes[lane]
+    const pending = queue.lanes[lane]
       .catch(() => undefined)
       .then(() => {
         if (context.signal.aborted) throw new Error("页面已关闭")
         return fetchImage(context, reference)
       })
-      .then((data) => {
-        imageListeners
-          .get(context)
-          ?.get(reference)
-          ?.forEach((listener) => listener(data))
-        return data
-      })
-      .catch((error) => {
-        cache.delete(reference)
-        throw error
-      })
     queue.lanes[lane] = pending
-    cache.set(reference, pending)
-    if (cache.size > 128) cache.delete(cache.keys().next().value!)
-  }
-  return pending
+    return pending
+  })
 }
 
 type ImagePart =
@@ -155,32 +138,35 @@ export function Avatar({
   compact?: boolean
 }) {
   const [failedUrl, setFailedUrl] = useState<string | null>(null)
-  const [loaded, setLoaded] = useState<{ reference: string; data: string } | null>(null)
   const context = useContext(ImageContext)
   const target = useRef<HTMLSpanElement>(null)
   const internal = url?.startsWith("mison-image:") ?? false
+  const remembered = internal && url ? peekAvatar(url) : null
+  const [loaded, setLoaded] = useState<{ reference: string; data: string } | null>(
+    remembered && url ? { reference: url, data: remembered } : null,
+  )
   useEffect(() => {
     if (!internal || !url || !context || !target.current) return
     let alive = true
-    const listeners = imageListeners.get(context) ?? new Map<string, Set<(data: string) => void>>()
-    imageListeners.set(context, listeners)
-    const subscribers = listeners.get(url) ?? new Set<(data: string) => void>()
-    listeners.set(url, subscribers)
     const accept = (data: string) => {
       if (alive && !context.signal.aborted) {
         setFailedUrl(null)
         setLoaded({ reference: url, data })
       }
     }
-    subscribers.add(accept)
+    const cached = peekAvatar(url)
+    if (cached) {
+      accept(cached)
+      return () => {
+        alive = false
+      }
+    }
     const observer = new IntersectionObserver(
       (entries) => {
         if (!entries.some((entry) => entry.isIntersecting)) return
         observer.disconnect()
         void loadImage(context, url)
-          .then((data) => {
-            accept(data)
-          })
+          .then(accept)
           .catch(() => {
             if (alive) setFailedUrl(url)
           })
@@ -190,12 +176,12 @@ export function Avatar({
     observer.observe(target.current)
     return () => {
       alive = false
-      subscribers.delete(accept)
-      if (!subscribers.size) listeners.delete(url)
       observer.disconnect()
     }
   }, [context, internal, url])
-  const source = internal ? (loaded && loaded.reference === url ? loaded.data : null) : url
+  const source = internal
+    ? peekAvatar(url ?? "") || (loaded && loaded.reference === url ? loaded.data : null)
+    : url
   return (
     <SharedAvatar
       ref={target}
@@ -203,7 +189,14 @@ export function Avatar({
       aria-hidden="true"
     >
       {source && url !== failedUrl ? (
-        <AvatarImage src={source} alt="" onError={() => setFailedUrl(url ?? null)} />
+        <AvatarImage
+          src={source}
+          alt=""
+          onError={() => {
+            if (url?.startsWith("mison-image:")) forgetAvatar(url)
+            setFailedUrl(url ?? null)
+          }}
+        />
       ) : null}
       <AvatarFallback>
         {name ? (

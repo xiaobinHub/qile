@@ -54,10 +54,8 @@ export function pluginReason(plugin: Plugin) {
   if (plugin.operationState === "updating")
     return "应用正在更新，完成后会自动刷新；期间可停用或卸载。"
   if (plugin.operationState === "failed") return "应用暂时无法运行，请稍后刷新。"
-  if (plugin.reason === "plugin_manifest_invalid")
-    return "应用版本定义无效，请联系管理员更新应用。"
-  if (plugin.reason === "plugin_config_invalid")
-    return "应用配置无效，请负责人重新检查配置。"
+  if (plugin.reason === "plugin_manifest_invalid") return "应用版本定义无效，请联系管理员更新应用。"
+  if (plugin.reason === "plugin_config_invalid") return "应用配置无效，请负责人重新检查配置。"
   if (plugin.configRequired) return "请由负责人完成配置后启用。"
   if (plugin.requiresReenable) return "应用恢复可用后，需要负责人手动重新启用。"
   if (plugin.reason === "out_of_scope" || plugin.reason === "plugin_out_of_scope")
@@ -65,6 +63,8 @@ export function pluginReason(plugin: Plugin) {
   return plugin.enabled && !plugin.effectiveEnabled ? "当前应用暂不可用，请刷新状态。" : ""
 }
 export function pluginError(error: unknown) {
+  if (error instanceof ApiError && error.code === "plugin_frontend_incompatible")
+    return error.message
   if (error instanceof ApiError && error.status === 409)
     return "应用或配置已被更新，请重新读取并核对后再操作。"
   return error instanceof Error ? error.message : "请求未完成，请稍后重试。"

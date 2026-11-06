@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { ChevronLeft, ChevronRight, RefreshCw } from "lucide-react"
+import { CalendarDays, ChevronLeft, ChevronRight, RefreshCw } from "lucide-react"
 import { Avatar, Button, Notice, Overlay } from "./ui"
 import { request } from "./api"
 import {
@@ -9,42 +9,10 @@ import {
   type CalendarPosition,
 } from "./calendar-views"
 import { fmtFull, parseDate, rangeDates, shiftMonth } from "./calendar-date"
-import { readCalendarBookings, type CalendarStatus } from "./calendar-bookings"
+import { reloadBookingSource, useBookingSource } from "./booking-source"
 import type { Booking, PluginContext, Resource } from "./types"
 
 const labels = { upcoming: "已预约", completed: "已上课" }
-function useCalendarBookings(
-  context: PluginContext,
-  status: CalendarStatus,
-  from: string,
-  to: string,
-  active: boolean,
-  refresh: number,
-) {
-  const [retry, setRetry] = useState(0)
-  const key = `${from}:${to}:${refresh}:${retry}`
-  const [state, setState] = useState({ key: "", items: [] as Booking[], loading: true, error: "" })
-  useEffect(() => {
-    if (!active) return
-    let alive = true
-    const current = () => alive && !context.signal.aborted
-    setState((old) => ({ key, items: old.key === key ? old.items : [], loading: true, error: "" }))
-    readCalendarBookings(context, status, from, to, current)
-      .then((items) => {
-        if (current()) setState({ key, items, loading: false, error: "" })
-      })
-      .catch((error: Error) => {
-        if (current()) setState({ key, items: [], loading: false, error: error.message })
-      })
-    return () => {
-      alive = false
-    }
-  }, [context, status, from, to, active, key])
-  return {
-    ...(state.key === key ? state : { items: [], loading: true, error: "" }),
-    retry: () => setRetry((value) => value + 1),
-  }
-}
 
 function Lesson({
   booking,
@@ -89,15 +57,19 @@ function Lesson({
 
 export function CourseCalendar({
   context,
+  bindingRevision,
   serverDate,
   active,
-  refresh,
+  upcomingCount,
+  onBookings,
   onResource,
 }: {
   context: PluginContext
+  bindingRevision: number
   serverDate: string
   active: boolean
-  refresh: number
+  upcomingCount: number | null
+  onBookings(): void
   onResource(resource: Resource): void
 }) {
   const [opening, setOpening] = useState<string | null>(null)
@@ -157,8 +129,21 @@ export function CourseCalendar({
   const [monthRange, setMonthRange] = useState(() => monthWindowDates(monthWindow(serverDate)))
   const monthPosition = useRef<CalendarPosition | undefined>(undefined)
   const { from, to } = monthRange
-  const upcoming = useCalendarBookings(context, "upcoming", from, to, active, refresh)
-  const completed = useCalendarBookings(context, "completed", from, to, active, refresh)
+  const scope = `${context.child.id}:${bindingRevision}`
+  const upcoming = useBookingSource({
+    context,
+    scope,
+    status: "upcoming",
+    enabled: active,
+    edge: to,
+  })
+  const completed = useBookingSource({
+    context,
+    scope,
+    status: "completed",
+    enabled: active,
+    edge: from,
+  })
   const loading = upcoming.loading || completed.loading
   const byDay = useMemo(() => {
     const result = new Map<string, Booking[]>()
@@ -222,18 +207,21 @@ export function CourseCalendar({
           <span data-status="completed">已上课</span>
           <span data-status="upcoming">已预约</span>
         </div>
-        <Button
-          variant="ghost"
-          size="icon"
-          aria-label="刷新课程"
-          disabled={loading}
-          onClick={() => {
-            upcoming.retry()
-            completed.retry()
-          }}
-        >
-          <RefreshCw />
-        </Button>
+        <div className="mison-calendar-actions">
+          <Button variant="outline" onClick={onBookings}>
+            <CalendarDays />
+            我的预约{upcomingCount != null ? <b>{upcomingCount}</b> : null}
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="刷新课程"
+            disabled={loading}
+            onClick={() => reloadBookingSource(scope, ["upcoming", "completed"])}
+          >
+            <RefreshCw />
+          </Button>
+        </div>
       </div>
       <div className="mison-calendar-feedback" aria-live="polite">
         {pdfError ? <Notice error>{pdfError}</Notice> : null}
@@ -246,7 +234,7 @@ export function CourseCalendar({
           state.error ? (
             <Notice key={status} error>
               {labels[status]}课程读取失败：{state.error}
-              <Button variant="outline" onClick={state.retry}>
+              <Button variant="outline" onClick={() => reloadBookingSource(scope, [status])}>
                 重试{labels[status]}课程
               </Button>
             </Notice>

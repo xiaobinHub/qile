@@ -247,7 +247,7 @@ class WorkerAdmissions:
     def worker(self, context, session, signer):
         ttl = max(1, min(360, int(context.get('expiresAt', 0) - time.time())))
         sealed = signer.issue(context, actor=context.get('actorId'), job_id=context.get('jobId'),
-                              capabilities=context.get('capabilities'), ttl=ttl)
+                              job_attempt=context.get('jobAttempt'), capabilities=context.get('capabilities'), ttl=ttl)
         # Extend the normal signed claims without changing the shared gateway
         # contract. ContextSigner.verify authenticates every added claim too.
         claims = signer.verify(sealed)

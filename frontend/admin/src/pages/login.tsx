@@ -40,8 +40,8 @@ export function LoginPage() {
     }
   }
   return (
-    <main className="flex min-h-svh flex-col items-center justify-center px-5 py-10">
-      <Card className="w-full max-w-[420px] gap-0 overflow-hidden rounded-xl border-border/90 py-0 shadow-[0_12px_48px_-24px_rgba(24,56,39,0.22)]">
+    <main className="flex min-h-svh flex-col items-center px-5 py-6">
+      <Card className="my-auto w-full max-w-[420px] gap-0 overflow-hidden rounded-xl border-border/90 py-0 shadow-[0_12px_48px_-24px_rgba(24,56,39,0.22)]">
         <CardContent className="p-6 sm:p-7">
           <PageHeading title="管理员登录" description="登录后，开通与维护家长账号。" />
           <form id="loginForm" onSubmit={submit} className="space-y-5">
@@ -97,6 +97,16 @@ export function LoginPage() {
           乐乐成长 · 账号管理
         </div>
       </Card>
+      <p className="pb-1 text-center text-caption text-muted-foreground">
+        <a
+          href="https://beian.miit.gov.cn/"
+          target="_blank"
+          rel="noreferrer"
+          className="underline-offset-4 hover:underline focus-visible:underline"
+        >
+          粤ICP备2025454655号
+        </a>
+      </p>
     </main>
   )
 }

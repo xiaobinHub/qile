@@ -175,7 +175,7 @@ class PluginScheduler:
                 lease = now + timedelta(seconds=max(self.lease_seconds, task.get('timeoutSeconds', 10) + 5))
                 cur.execute("UPDATE lele.plugin_jobs SET status='running',lease_owner=%s,lease_until=%s,attempt=attempt+1,release_id=%s,release_epoch=%s,updated_at=now() WHERE id=%s RETURNING *", (self.owner, lease, context['releaseId'], context['releaseEpoch'], job['id']))
                 job = row_dict(cur)
-                job['context'] = self.gateway.issue_job_context(context, job['id'])
+                job['context'] = self.gateway.issue_job_context(context, job['id'], attempt=job['attempt'])
                 job['timeoutSeconds'] = task.get('timeoutSeconds', 10)
                 self._sync_event(cur, job, 'running', lease=lease)
                 return job

@@ -1,5 +1,7 @@
 # 美森约课插件
 
+当前源码候选版本为 **1.0.31**（以 `plugin.json` 为准），要求插件平台结构 v3、前端协议 1.1。源码构建、隔离回归与真实上游验收分别记录；本说明不代表当前安装版本或生产发布状态。当前能力及证据边界见 [上游核验记录](../../docs/plugins/mison-booking/upstream-verification.md)，部署顺序见 [插件部署说明](../../docs/plugins/deployment.md)。
+
 本次直接重构现有插件的前端，入口保持 `frontend/entry.ts → frontend/app.tsx`。没有额外页面、独立预览应用或另一套导航。
 
 在当前项目主应用的导航中打开“美森约课”，即可由原插件加载器加载本插件前端。按用户要求，主应用插件页面外壳不再显示重复标题和“应用设置”快捷按钮；顶部主导航保持原样。
@@ -7,8 +9,8 @@
 ## 页面结构
 
 - 未登录时隐藏插件顶部栏，显示“请登录美森网课账号”和账号、密码、登录按钮；失败保留密码，密码框右侧可切换显示/隐藏，密码仅保留在当前表单内存。
-- 登录成功后顶部左侧提供“教师与约课 / 课程日历”两个 tab，默认教师与约课；右侧保留我的预约和账号设置。教师页保持全宽老师卡片网格，点击预约后收为左侧栏、右侧展开约课区。
-- 课程日历由插件内部的 `course-calendar.tsx`、`calendar-views.tsx`、`calendar-bookings.ts`、`calendar-date.ts` 和局部 CSS 独立实现，只借鉴主日历布局，不导入主应用日历、不依赖共享日历组件，也不要求重建宿主。仅保留连续月历，支持前后月份导航、今天及刷新；课程卡片显示头像、教师、时间段、课件与状态，已上课浅黄、已预约浅绿，取消课程不显示。
+- 登录成功后顶部左侧提供“教师与约课 / 课程日历”两个 tab，默认教师与约课；右侧保留账号设置。我的预约放在课程日历工具栏，位于刷新按钮左侧。教师页保持全宽老师卡片网格，点击预约后收为左侧栏、右侧展开约课区。
+- 课程日历由插件内部的 `course-calendar.tsx`、`calendar-views.tsx`、`calendar-bookings.ts`、`calendar-date.ts` 和局部 CSS 独立实现，只借鉴主日历布局，不导入主应用日历、不依赖共享日历组件，也不要求重建宿主。仅保留连续月历，支持前后月份导航、今天、我的预约及刷新；课程卡片显示头像、教师、时间段、课件与状态，已上课浅黄、已预约浅绿，取消课程不显示。
 - 切换 tab 保留筛选、档期、已选课时和日历位置；按账号绑定隔离数据，预约成功或关闭预约抽屉后刷新课程。两种课程状态独立读取，遍历同步及结果分页，失败单独重试。月份位置按可见日期锚定，避免数据加载和窗口缩放导致跳月。窄屏日历在内部横向滚动。
 - “收起约课区”恢复全宽网格，保留筛选、浏览位置和当前时段/课件选择。
 - 切换教师时保留日期/时段的布局及滚动位置；120ms 内完成的请求直接更新，较慢请求显示共享 Skeleton。加载期间禁用日期、时段及下一步；失败后保留占位与重试，避免把旧教师档期当作新数据。
@@ -17,11 +19,11 @@
 - 教师档案展示简介与原生视频播放器，不展示课时时长或复制入口；视频支持暂停、进度拖动和全屏。
 - 教师日期筛选复用主应用日历的共享DatePicker；具体时段以多选面板展示，选择后发送逗号拼接的times查询。
 - 课件确认在右侧工作区；我的预约和教师档案使用抽屉；更换课件使用分类选择弹窗。
-- 全部基础控件复用共享shadcn/ui源码：Card、Button、Field/InputGroup、Popover、Checkbox、ToggleGroup、Tabs、Dialog/Sheet/AlertDialog、RadioGroup、ScrollArea、Avatar、Badge、Alert、Empty等；日期复用共享DatePicker，窄屏约课时通过收起按钮返回列表。视频使用原生video；PDF复用共享PDF.js预览，连续页面在原生滚动区域内浏览，支持适合宽度、缩放、失败重试及按需释放画布。
+- 全部基础控件复用共享shadcn/ui源码：Card、Button、Field/InputGroup、Popover、Checkbox、ToggleGroup、Tabs、Dialog/Sheet/AlertDialog、RadioGroup、ScrollArea、Avatar、Badge、Alert、Empty等；日期复用共享DatePicker，窄屏约课时通过收起按钮返回列表。视频使用原生video；PDF复用共享PDF.js预览，连续页面在原生滚动区域内浏览，支持适合宽度、旋转屏幕后重新排版、失败重试、下载及按需释放画布。
 
 ## iPad 触控验收
 
-`npm run test:ipad` 使用隔离 HTTP 样例检查老师全屏/侧边列表、课件分类及内容、预约抽屉、PDF 多页与缩放、月历/周历、任务表单和时间滚轮。Chromium 使用原生触摸输入；WebKit 使用带触控能力的桌面上下文与原生滚轮检查布局和阅读器（Playwright 的移动 WebKit 不支持滚轮或滑动手势接口）。证据写入系统临时目录。
+`npm run test:ipad` 使用隔离 HTTP 样例检查老师全屏/侧边列表、课件分类及内容、预约抽屉、PDF 多页/横竖屏及完整文件下载、主应用月历/周历、任务表单和时间滚轮。切出插件时检查原实例保留、页面与弹层隐藏且 inert、焦点/滚动锁释放，返回后检查原实例与位置恢复；切换儿童、停用和卸载的真正销毁由 `npm run test:plugins:ui` 验证。Chromium 使用原生触摸输入；WebKit 使用带触控能力的桌面上下文与原生滚轮检查布局和阅读器（Playwright 的移动 WebKit 不支持滚轮或滑动手势接口）。证据写入系统临时目录。
 
 主应用固定在可见视口内，根页面不滚动。工作区由宿主分配高度，老师列表与约课内容各自使用单一原生滚动容器，切换全屏/侧栏保留各自位置；设置、商城等长内容由 main 区域滚动。打印样式不锁定文档。抽屉跟随可见视口；PDF 使用同源模块 worker，插件构建资源保持相对路径和 `.js` 白名单。
 
@@ -41,7 +43,7 @@ npm run check:layout
 
 验收覆盖全宽/分栏切换、筛选与异步竞态、草稿保留、换老师确认、连续时段、课件选择、写入结果核对、预约分类、档案抽屉、键盘焦点、多屏宽布局，以及插件页面外壳不再显示重复标题和设置快捷按钮。该验收不代表真实美森接口闭环。
 
-插件构建输出：`output/plugin-releases/mison-booking/1.0.21/build/`。已安装版本不可原地覆盖；本机开发环境通过正常插件部署链更新，保留现有发布范围、儿童安装、配置、登录绑定和加密Token。旧版保留，未操作生产。
+插件构建输出：`output/plugin-releases/mison-booking/<plugin.json 中的 version>/build/`，当前候选对应 `1.0.31/build/`。已安装版本不可原地覆盖；本机开发环境通过正常插件部署链更新，保留现有发布范围、儿童安装、配置、登录绑定和加密Token。开发包不代表已部署；正式发布包须从干净且已提交的工作区生成。
 
 1.0.11 移除插件自行测高、负边距及滑动时更新高度的逻辑，改为填满主应用分配的空间；老师列表和约课内容使用原生滚动。该版本须与包含固定视口布局的家长端配套发布。
 
@@ -63,13 +65,15 @@ npm run check:layout
 
 1.0.18 精简课程日历卡片：仅显示姓名，月历头像增至 40px、周历增至 32px，时间放在姓名下方且位于头像右侧；课件使用更小、更淡的文字，移除卡片内重复状态文字，保留背景色与顶部图例。
 
-1.0.17 增加插件独立课程日历与功能 tab。专项入口为 `CALENDAR_ACCEPTANCE=1 node tests/browser/mison_frontend_acceptance.cjs`，添加 `TOUCH_BROWSER=webkit` 检查 WebKit；可设置 `PARENT_ACCEPTANCE_ORIGIN=http://chenxiaobin.cn:18787` 验证已运行的宿主构建。测试使用完整宿主加载器与隔离课程数据，覆盖同步游标、超过 50 节课程、多状态、跨午夜日期、错误重试、过期响应、分页不推进、空态、重叠课程、保留选择/滚动位置及桌面/手机布局。
+1.0.17 增加插件独立课程日历与功能 tab。专项入口为 `CALENDAR_ACCEPTANCE=1 node tests/browser/mison_frontend_acceptance.cjs`，添加 `TOUCH_BROWSER=webkit` 检查 WebKit；可设置 `PARENT_ACCEPTANCE_ORIGIN=http://chenxiaobin.cn:18787` 验证已运行的宿主构建。测试使用完整宿主加载器与隔离课程数据，覆盖共享分页、超过 50 节课程、多状态、跨午夜日期、错误重试、过期响应、顺序变化、空态、重叠课程、关闭预约弹窗不重复请求、保留选择/滚动位置及桌面/手机布局。
 
 2026-11-05 课程日历验证：Chromium/WebKit 日历专项、axe、当前实际宿主构建上的日历专项与美森完整功能回归通过，页面异常与控制台错误为零。本机 development 已更新至 1.0.17、ready；安装、配置、凭据及登录绑定摘要一致。用户当前浏览器的真实课程已只读展示；未操作真实预约/取消，未修改或重建主应用，未部署生产。物理 iPad 仍需设备复核。
 
 2026-11-05 验证：Chromium 完整功能回归及 Chromium/WebKit 切换专项通过，专项页面异常为零；WebKit 完整功能回归仍在课件弹窗关闭后的焦点恢复断言失败，已用原 1.0.11 构建复核为既有问题。本机 development 已更新至 1.0.12、状态 ready，安装/配置/凭据/登录绑定的前后指纹一致；未部署生产，未操作真实预约。物理 iPad 主屏幕模式仍需设备复核。
 
 对正在运行的本地主应用构建验收：`PARENT_ACCEPTANCE_ORIGIN=http://chenxiaobin.cn:18787 IPAD_TOUCH_ACCEPTANCE=1 node tests/browser/mison_frontend_acceptance.cjs`，添加 `TOUCH_BROWSER=webkit` 检查 WebKit。主应用静态资源从实际服务读取，业务 API 全部拦截为隔离样例，不调用真实美森接口。
+
+该入口通过本机测试服务器读取指定服务的主应用页面/静态资源，浏览器使用本机夹具来源，API 与插件业务请求不转发到指定服务。合成 PDF 由夹具服务器提供真实 HTTP 响应，避免 Chromium 原生下载绕过 Playwright 拦截后落到真实服务；验收必须检查下载状态及完整文件字节。
 
 ## 真实接入状态
 
@@ -83,7 +87,7 @@ npm run check:layout
 
 2026-11-03使用用户已保存Token完成真实只读验收；登录调用0次、预约/取消/扣额度调用0次。另有合成上游单元测试、隔离数据库登录回归，以及原宿主加载器的浏览器回归。测试输出只记录数量、结构和端点名，不复制个人资料或Token。
 
-1.0.10已接通推荐课件、分类/分页选择、待补学内容查询、预览、单/多连续课时预约、结果核对、两阶段取消和学生PDF资料。收藏修改与批量顺延仍不可用。上课/回放/课后作业提供明确的美森App操作说明，尚未实现PC原生学习协议。自动识别限唯一有效一对一合约，多合约明确报错，不能静默选错课程。
+自1.0.10已接通推荐课件、分类/分页选择、待补学内容查询、预览、单/多连续课时预约、结果核对、两阶段取消和学生PDF资料。当前源码也已接通教师收藏修改；批量顺延仍不可用。上课/回放/预习/课后作业提供明确的美森App操作说明，尚未实现PC原生学习协议。自动识别限唯一有效一对一合约，多合约明确报错，不能静默选错课程。原生预约协议和取消状态机已在隔离样例中验证，真实预约/取消闭环仍待单独授权验收。
 
 
 登录回归检查：
@@ -143,4 +147,14 @@ PYTHONPATH=backend:packages/plugin-sdk-python/src:plugins/mison-booking/backend 
 LELE_TEST_CONFIG=data/testing/backend/config.json PYTHONPATH=backend:packages/plugin-sdk-python/src:plugins/mison-booking/backend .venv/bin/python -m unittest tests.backend.test_mison_booking tests.backend.test_mison_reads tests.backend.test_mison_login tests.backend.test_plugin_video
 ```
 
-当前源码开发版已接通 `teacherCollect` 收藏/取消收藏，采用明确目标状态和持久化操作回执。推荐教师按 App 同传 `user1v1_id`。写入结果未知时仅通过 `getTeacherCollect` 核对，不自动重发。卡片和教师档案同步收藏状态；此变更尚未打包发布。
+当前源码已接通 `teacherCollect` 收藏/取消收藏，采用明确目标状态和持久化操作回执。推荐教师按 App 同传 `user1v1_id`。写入结果未知时仅通过 `getTeacherCollect` 核对，不自动重发。卡片和教师档案同步收藏状态；构建验收不等于真实收藏写入验收或生产部署。
+
+## 1.0.30 发布审查修复
+
+课程同步在宿主写入事务内核对当前账号、登录绑定、凭据编号/修订及有效期，拒绝退出、换号或重新登录前采集的迟到结果。自动运行只使用已保存的积分和起始日；采集期间设置改变时放弃该次旧结果。
+
+保存设置携带 `operationId`、`expectedRevision` 和 `bindingRevision`。宿主使用现有私有记录表原子保存课程/积分、设置和持久回执；原请求重试返回原回执，不重复采集或执行积分变更。新的过期修订请求返回 `REVISION_CONFLICT`，同编号不同参数返回 `OPERATION_CONFLICT`。前端保留未确认请求的完整参数供重试，成功后重新读取当前设置。
+
+定时同步每天 06:00（北京时间）跑一次，错过时只补最近一次，不回补更早的次数；保存设置仍会立即同步。定时任务使用签名任务身份及当前数据库任务租约/执行次数，只有同步读取、执行和对应的会话失效处理可用；后台任务不能登录、退出账号或保存同步设置。前端协议最低要求调整为 1.1，入口及运行接口检查宿主版本，旧页面明确提示刷新。
+
+新增隔离集成验收：`tests/backend/test_mison_sync_integration.py`、`tests/backend/test_plugin_frontend_protocol.py`。浏览器完整验收包含同步设置的未确认重试、冲突后新请求及最新设置回读。无需新增数据库结构；本轮没有部署或执行真实预约、取消操作。

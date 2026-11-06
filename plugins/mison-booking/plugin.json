@@ -1,7 +1,7 @@
 {
   "manifestVersion": 1,
   "id": "mison-booking",
-  "version": "1.0.29",
+  "version": "1.0.31",
   "type": "page",
   "name": "美森约课",
   "description": "查看老师档期、预约一对一课程并管理课程资料。",
@@ -12,13 +12,11 @@
   },
   "frontendApi": {
     "major": 1,
-    "minMinor": 0
+    "minMinor": 1
   },
   "frontend": {
     "entry": "frontend/entry.js",
-    "styles": [
-      "frontend/style.css"
-    ]
+    "styles": ["frontend/style.css"]
   },
   "backend": {
     "entryModule": "mison_booking",
@@ -33,20 +31,18 @@
     "plugin.resources",
     "plugin.jobs.schedule"
   ],
-  "resourceOrigins": [
-    "https://file.mison.cn",
-    "https://mp.mison.cn"
-  ],
+  "resourceOrigins": ["https://file.mison.cn", "https://mp.mison.cn"],
   "tasks": [
     {
       "id": "sync-courses",
-      "intervalSeconds": 600,
+      "schedule": {
+        "time": "06:00",
+        "timezone": "Asia/Shanghai"
+      },
       "misfirePolicy": "latest",
       "timeoutSeconds": 60
     }
   ],
   "events": [],
-  "icons": [
-    "assets/icon.png"
-  ]
+  "icons": ["assets/icon.png"]
 }

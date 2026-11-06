@@ -56,7 +56,7 @@ exports.createCalendarFixture = function () {
         title: `课程PDF-${key}`,
         action: "inline",
         mimeType: "application/pdf",
-        url: "/api/children/a/plugins/mison-booking/runtime/media/fixture-pdf",
+        url: "/api/children/a/plugins/mison-booking/media/fixture-pdf",
         instructions: null,
         reason: null,
       }
@@ -90,69 +90,54 @@ exports.createCalendarFixture = function () {
     },
     async handle(relative) {
       const query = new URL(relative, "http://fixture").searchParams
-      const status = query.get("status"),
-        from = query.get("from"),
-        to = query.get("to"),
-        cursor = query.get("cursor")
-      assert.ok(from && to && from <= to)
-      assert.equal(query.get("pageSize"), "50")
+      const status = query.get("status")
+      const page = Number(query.get("page") || "1")
+      assert.ok(page >= 1)
       const captured = mode
-      calls.push({ status, from, to, cursor, mode: captured })
+      calls.push({ status, page, mode: captured })
       if (captured === "stale") await new Promise((resolve) => setTimeout(resolve, 700))
       if (captured === "failure" && status === "completed")
         return {
           ok: false,
           error: { code: "UPSTREAM_UNAVAILABLE", message: "模拟历史课程读取失败" },
         }
-      if (captured === "stalled")
+      if (captured === "stalled") {
+        const newer = lesson("stall-new", "2026-11-20", "19:00", status)
+        const older = lesson("stall-old", "2026-11-10", "19:00", status)
         return {
           ok: true,
           data: {
-            state: "building",
-            items: [],
-            nextCursor: "repeated",
-            total: null,
-            sourceComplete: false,
+            status,
+            page,
+            pageSize: 100,
+            complete: false,
+            items: status === "upcoming" ? [newer, older] : [older, newer],
           },
         }
+      }
       const items =
         captured === "empty"
           ? []
-          : records.filter(
-              (item) =>
-                item.status === status &&
-                item.startsAt.slice(0, 10) >= from &&
-                item.startsAt.slice(0, 10) <= to,
-            )
-      if (!cursor && captured !== "stale")
-        return {
-          ok: true,
-          data: {
-            queryId: status,
-            state: "building",
-            items: [],
-            nextCursor: "build",
-            total: null,
-            sourceComplete: false,
-          },
-        }
-      const offset = cursor === "build" || !cursor ? 0 : Number(cursor)
-      const page = items
-        .slice(offset, offset + 50)
-        .map((item) =>
-          captured === "stale"
-            ? { ...item, courseware: { ...item.courseware, title: "过期响应" } }
-            : item,
-        )
+          : records
+              .filter((item) => item.status === status)
+              .sort((left, right) =>
+                status === "upcoming"
+                  ? left.startsAt.localeCompare(right.startsAt)
+                  : right.startsAt.localeCompare(left.startsAt),
+              )
+              .map((item) =>
+                captured === "stale"
+                  ? { ...item, courseware: { ...item.courseware, title: "过期响应" } }
+                  : item,
+              )
       return {
         ok: true,
         data: {
-          queryId: status,
-          state: "ready",
-          items: page,
-          nextCursor: offset + 50 < items.length ? String(offset + 50) : null,
-          total: items.length,
-          sourceComplete: true,
+          status,
+          page,
+          pageSize: 100,
+          complete: true,
+          items,
         },
       }
     },
@@ -203,7 +188,18 @@ exports.exerciseCalendar = async function ({ page, out, fixture }) {
       .first()
       .evaluate((el) => getComputedStyle(el).backgroundColor),
   )
-  assert.ok(fixture.calls.some((call) => call.cursor === "50"))
+  assert.deepEqual(
+    fixture.calls.map((call) => `${call.status}:${call.page}`).sort(),
+    ["completed:1", "upcoming:1"],
+    "calendar loads one page of each visible status",
+  )
+  const sharedCalls = fixture.calls.length
+  await page.getByRole("button", { name: /我的预约/ }).click()
+  const sharedDrawer = page.getByRole("dialog", { name: "我的预约", exact: true })
+  await sharedDrawer.locator(".mison-booking-card").first().waitFor()
+  await sharedDrawer.getByRole("button", { name: "关闭我的预约", exact: true }).click()
+  await sharedDrawer.waitFor({ state: "hidden" })
+  assert.equal(fixture.calls.length, sharedCalls, "the bookings drawer reuses the calendar pages")
   await mixed.locator('[data-booking-key="calendar-0"]').scrollIntoViewIfNeeded()
   await mixed.locator('[data-booking-key="calendar-0"] img').waitFor()
   await screenshot("calendar-month-desktop")
@@ -309,12 +305,10 @@ exports.exerciseCalendar = async function ({ page, out, fixture }) {
   assert.equal(await calendar.locator('[data-status="completed"].mison-calendar-lesson').count(), 3)
 
   fixture.setMode("stale")
-  const before = fixture.calls.length
   await calendar.getByRole("button", { name: "刷新课程", exact: true }).click()
-  while (fixture.calls.length === before) await page.waitForTimeout(20)
+  await calendar.getByText("过期响应", { exact: true }).first().waitFor()
   fixture.setMode("normal")
-  await calendar.getByRole("button", { name: "下个月", exact: true }).click()
-  await page.waitForTimeout(900)
+  await calendar.getByRole("button", { name: "刷新课程", exact: true }).click()
   await ready()
   assert.equal(await calendar.getByText("过期响应", { exact: true }).count(), 0)
   await calendar.getByRole("button", { name: "今天", exact: true }).click()
@@ -323,14 +317,11 @@ exports.exerciseCalendar = async function ({ page, out, fixture }) {
   fixture.setMode("stalled")
   await calendar.getByRole("button", { name: "刷新课程", exact: true }).click()
   await calendar
-    .getByText(/课程分页未推进/)
+    .getByText(/美森课程顺序已改变/)
     .first()
     .waitFor()
   fixture.setMode("empty")
-  await page.getByRole("button", { name: /我的预约/ }).click()
-  const drawer = page.getByRole("dialog", { name: "我的预约", exact: true })
-  await drawer.waitFor()
-  await drawer.getByRole("button", { name: "关闭我的预约", exact: true }).click()
+  await calendar.getByRole("button", { name: "刷新课程", exact: true }).click()
   await calendar.getByText("本月暂无已上课或已预约的课程。", { exact: true }).waitFor()
   assert.equal(await calendar.locator(".mison-calendar-lesson").count(), 0)
   await screenshot("calendar-empty")

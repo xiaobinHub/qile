@@ -20,7 +20,7 @@ def current(cur, scope, vault, owner):
     credential_id = saved.get('credentialId')
     if not credential_id:
         return result
-    cur.execute("SELECT expires_at,state FROM lele.plugin_credentials WHERE id=%s AND child_id=%s AND plugin_id=%s",
+    cur.execute("SELECT expires_at,state,revision FROM lele.plugin_credentials WHERE id=%s AND child_id=%s AND plugin_id=%s",
                 (credential_id, scope['child_id'], scope['plugin_id']))
     credential = row_dict(cur)
     if not credential or credential['state'] != 'active' or not credential['expires_at'] or credential['expires_at'] <= datetime.now(timezone.utc):
@@ -28,13 +28,14 @@ def current(cur, scope, vault, owner):
         return result
     require(vault is not None, 503, '美森登录服务尚未配置，请联系管理员。', 'plugin_vault_unavailable')
     result.update(status='connected', userid=saved['userid'], credentialId=credential_id,
+                  credentialRevision=credential['revision'],
                   token=credential_vault.token(cur, scope, credential_id, vault))
     return result
 
 
 def handle(cur, scope, context, action, payload, vault):
     # A signed plugin job has no user actor, but may read the saved Mison session.
-    job_reader = action == 'session.get' and bool(context.get('jobId')) and not context.get('actorId')
+    job_reader = action in ('session.get', 'session.invalidate') and bool(context.get('jobId')) and context.get('actorId') is None
     if job_reader:
         owner = False
     else:

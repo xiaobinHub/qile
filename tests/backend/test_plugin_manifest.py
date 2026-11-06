@@ -24,7 +24,7 @@ class PluginManifestTests(unittest.TestCase):
 
     def test_invalid_identity_version_api_capability_unknown_fields_and_entries(self):
         edits=[{'id':'../escape'},{'id':'Upper'},{'version':'01.0.0'},{'version':'1.0.0/dev'},
-               {'platformApi':{'major':2,'minMinor':0}},{'frontendApi':{'major':1,'minMinor':1}},
+               {'platformApi':{'major':2,'minMinor':0}},{'frontendApi':{'major':1,'minMinor':2}},
                {'capabilities':['raw.sql']},{'dependencies':['other']},{'frontend':None},
                {'frontend':{'entry':'frontend/../escape.js'}},{'backend':{'entryModule':'x;exec'}},
                {'capabilities':['plugin.state.read','plugin.state.read']},{'events':['user.all']}]

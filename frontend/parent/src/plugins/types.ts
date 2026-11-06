@@ -62,6 +62,7 @@ export type PluginEntry = {
   styles: string[]
   releaseId: string
   version: string
+  frontendApi?: { major: number; minMinor: number }
   development?: PluginDevelopment
 }
 export type ConfigResponse = {

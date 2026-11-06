@@ -1,10 +1,10 @@
 {
   "manifestVersion": 1,
   "id": "growth-notes",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "type": "page",
   "platformApi": { "major": 1, "minMinor": 0 },
-  "frontendApi": { "major": 1, "minMinor": 0 },
+  "frontendApi": { "major": 1, "minMinor": 1 },
   "frontend": { "entry": "frontend/entry.js", "styles": ["frontend/style.css"] },
   "backend": null,
   "configSchema": "schemas/config.json",

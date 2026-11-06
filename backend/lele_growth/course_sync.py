@@ -85,6 +85,10 @@ def _title(teacher, courseware):
     return title[:200]
 
 
+def validate_settings(points, start_date):
+    return _points(points), _day(start_date)
+
+
 def normalize_courses(courses, account_id, contract_id):
     """Merge duplicate lesson ids. Cancelled wins, then attended, then booked."""
     if not isinstance(courses, list):

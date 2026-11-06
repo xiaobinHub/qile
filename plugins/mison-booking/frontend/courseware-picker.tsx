@@ -233,8 +233,7 @@ export function CoursewarePicker({
             {items.map((course) => {
               const disabled =
                 !course.active || course.selectedElsewhere || taken.includes(course.id)
-              const learned =
-                course.learned === null ? "" : course.learned ? "已学过" : "未学"
+              const learned = course.learned === null ? "" : course.learned ? "已学过" : "未学"
               const detail = [
                 course.categoryName,
                 disabled ? "不可选择 / 本次其他课时已选" : learned,

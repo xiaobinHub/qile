@@ -112,11 +112,11 @@ def create_app(config_path, surface='parent'):
             if match:
                 with development.admission(match[1], request.headers.get('x-plugin-dev-session'), request.headers.get('x-plugin-dev-revision'),
                                            release_id=request.headers.get('x-plugin-release')):
-                    return PluginGateway(service).route(*arguments)
-            return PluginGateway(service).route(*arguments)
+                    return PluginGateway(service).route(*arguments, frontend_api=request.headers.get('x-plugin-frontend-api'))
+            return PluginGateway(service).route(*arguments, frontend_api=request.headers.get('x-plugin-frontend-api'))
         result=await run_in_threadpool(invoke_plugin)
         if result is NotImplemented:
-            result=await run_in_threadpool(service.request,request.method,path,body,request.cookies.get(cookie_name),request.headers.get('x-csrf-token'),request.headers.get('origin'),surface,request.client.host if request.client else 'unknown')
+            result=await run_in_threadpool(service.request,request.method,path,body,request.cookies.get(cookie_name),request.headers.get('x-csrf-token'),request.headers.get('origin'),surface,request.client.host if request.client else 'unknown',frontend_api=request.headers.get('x-plugin-frontend-api'))
         entry_match = re.fullmatch(r'children/[^/]+/plugins/([^/]+)/entry', path) if request.method == 'GET' else None
         if entry_match:
             descriptor = await run_in_threadpool(development.descriptor, entry_match[1], result.get('releaseId'))

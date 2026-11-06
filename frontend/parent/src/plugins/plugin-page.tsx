@@ -51,6 +51,7 @@ export function PluginPage({
   notifyRef.current = notify
   activeRef.current = active
   const [failure, setFailure] = useState("")
+  const [requiresReload, setRequiresReload] = useState(false)
   const [loading, setLoading] = useState(false)
   const [retry, setRetry] = useState(0)
   const effective =
@@ -82,6 +83,7 @@ export function PluginPage({
   }, [active])
   useLayoutEffect(() => {
     setFailure("")
+    setRequiresReload(false)
     if (!effective || !plugin || !host.current) {
       setLoading(false)
       return
@@ -111,6 +113,9 @@ export function PluginPage({
       .catch((error) => {
         if (controller.signal.aborted) return
         setLoading(false)
+        setRequiresReload(
+          error instanceof ApiError && error.code === "plugin_frontend_incompatible",
+        )
         if (!(error instanceof ApiError && error.kind === "stale")) setFailure(pluginError(error))
         void pluginStore.refresh()
       })
@@ -169,11 +174,15 @@ export function PluginPage({
           <Button
             variant="outline"
             onClick={() => {
+              if (requiresReload) {
+                window.location.reload()
+                return
+              }
               void pluginStore.refresh()
               setRetry((value) => value + 1)
             }}
           >
-            重试
+            {requiresReload ? "刷新页面" : "重试"}
           </Button>
         </div>
       ) : loading ? (

@@ -79,6 +79,15 @@ export function createFixtureContext(): PluginContext {
   })
   const quota = { remaining: 0, total: 5 }
   const controller = new AbortController()
+  const syncSettings = {
+    enabled: false,
+    points: null as number | null,
+    startDate: null as string | null,
+    revision: 0,
+    canManage: true,
+    serverDate: "2026-11-02",
+  }
+  const syncReceipts = new Map<string, { hash: string; result: unknown }>()
   const bootstrap: Bootstrap = {
     connection: {
       status: "connected",
@@ -152,7 +161,50 @@ export function createFixtureContext(): PluginContext {
           ...bootstrap,
           upcomingCount: bookings.filter((b) => b.status === "upcoming").length,
         }
-      else if (path.startsWith("resources/images/"))
+      else if (path === "course-sync" && method === "GET") data = syncSettings
+      else if (path === "course-sync/run")
+        data = { state: syncSettings.enabled ? "synced" : "disabled" }
+      else if (path === "course-sync/preview")
+        data = {
+          state: "synced",
+          added: 2,
+          addedAttended: 1,
+          newlyCompleted: 1,
+          points: body.points,
+        }
+      else if (path === "course-sync" && method === "POST") {
+        const hash = JSON.stringify(body)
+        const receipt = syncReceipts.get(body.operationId)
+        if (receipt) {
+          if (receipt.hash !== hash)
+            return {
+              ok: false,
+              error: { code: "OPERATION_CONFLICT", message: "操作编号冲突" },
+            } as T
+          data = receipt.result
+        } else {
+          if (body.expectedRevision !== syncSettings.revision)
+            return {
+              ok: false,
+              error: { code: "REVISION_CONFLICT", message: "同步设置已改变，请重新核对后保存。" },
+            } as T
+          if (body.bindingRevision !== bootstrap.connection.bindingRevision)
+            return { ok: false, error: { code: "BINDING_CHANGED", message: "美森账号已改变" } } as T
+          Object.assign(syncSettings, {
+            enabled: body.enabled,
+            ...(body.enabled ? { points: body.points, startDate: body.startDate } : {}),
+            revision: syncSettings.revision + 1,
+          })
+          data = {
+            state: body.enabled ? "synced" : "disabled",
+            points: body.enabled ? body.points : 0,
+            added: body.enabled ? 2 : 0,
+            removed: body.enabled ? 0 : 1,
+            revision: syncSettings.revision,
+          }
+          syncReceipts.set(body.operationId, { hash, result: structuredClone(data) })
+        }
+      } else if (path.startsWith("resources/images/"))
         data = {
           dataUrl:
             "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=",
@@ -309,6 +361,25 @@ export function createFixtureContext(): PluginContext {
           return key
         })
         data = successOperation(body.operationId, { bookingKeys: keys })
+      } else if (path === "bookings/pages") {
+        const status = url.searchParams.get("status")
+        const page = Number(url.searchParams.get("page") || "1")
+        const pageSize = 100
+        const items = bookings
+          .filter((booking) => booking.status === status)
+          .sort((left, right) =>
+            status === "upcoming"
+              ? (left.startsAt ?? "").localeCompare(right.startsAt ?? "")
+              : (right.startsAt ?? "").localeCompare(left.startsAt ?? ""),
+          )
+        const start = (page - 1) * pageSize
+        data = {
+          status,
+          page,
+          pageSize,
+          complete: start + pageSize >= items.length,
+          items: items.slice(start, start + pageSize),
+        }
       } else if (path === "bookings") {
         const items = bookings
           .filter(

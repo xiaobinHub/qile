@@ -78,6 +78,8 @@ def handle(context, path, method, body):
             return success(read_api.filters(client))
         if path == 'teachers':
             return success(read_api.teacher_query(client, body))
+        if path == 'bookings/pages':
+            return success(read_api.booking_page(client, body))
         if path == 'bookings':
             return success(read_api.bookings(client, body))
         match = re.fullmatch(r'teachers/([1-9][0-9]{0,17})(/schedule)?', path)

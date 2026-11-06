@@ -230,6 +230,7 @@ async function exerciseMisonTouch({ page, browserContext, origin, entryUrl, out,
     await scrolls(picker.getByRole("navigation", { name: "课件分类" }), "courseware categories")
     await scrolls(picker.locator("section[aria-label='选择课件']"), "courseware choices")
     await picker.getByRole("button", { name: "取消", exact: true }).click()
+    await page.getByRole("tab", { name: "课程日历", exact: true }).click()
     await page.getByRole("button", { name: /我的预约/ }).click()
     const bookings = page.getByRole("dialog", {
       name: "我的预约",
@@ -262,6 +263,14 @@ async function exerciseMisonTouch({ page, browserContext, origin, entryUrl, out,
     await pdf.getByRole("button", { name: "下载", exact: true }).click()
     const download = await downloadPromise
     assert.equal(download.suggestedFilename(), "触控课件.pdf")
+    assert.equal(await download.failure(), null, "PDF download completes without cancellation")
+    const downloadedPdf = path.join(out, `${engine}-courseware.pdf`)
+    await download.saveAs(downloadedPdf)
+    assert.deepEqual(
+      fs.readFileSync(downloadedPdf),
+      pdfFixture(),
+      "Downloaded PDF bytes are complete",
+    )
     await download.delete()
     await page.setViewportSize({ width: 820, height: 1180 })
     await pdf.locator('[data-pdf-page="1"][data-rendered="true"]').waitFor()
@@ -293,11 +302,55 @@ async function exerciseMisonTouch({ page, browserContext, origin, entryUrl, out,
     await bookings.waitFor({ state: "hidden" })
     assert.equal(await page.locator(".pdf-preview").count(), 0)
     await page.waitForFunction(() => !document.body.hasAttribute("data-scroll-locked"))
+    const retainedPage = await page.locator(".plugin-page").elementHandle()
+    const retainedMount = await page.locator('[data-plugin-root="mison-booking"]').elementHandle()
+    const retainedOverlay = await page
+      .locator('[data-plugin-overlay="mison-booking"]')
+      .elementHandle()
+    const retainedRoots = await page.locator(".mison-ui").count()
+    assert.ok(retainedRoots > 0, "Mison is mounted before leaving")
+    const galleryTop = await page.locator(".mison-teacher-scroll").evaluate(async (element) => {
+      element.scrollTop = 120
+      await new Promise(requestAnimationFrame)
+      return element.scrollTop
+    })
     await page.locator('[data-view="settings"]').click()
     await page.waitForFunction(
       () => getComputedStyle(document.querySelector("#main")).overflowY === "auto",
     )
-    assert.equal(await page.locator(".mison-ui").count(), 0)
+    assert.equal(await page.locator(".mison-ui").count(), retainedRoots)
+    for (const [label, element] of [
+      ["page", retainedPage],
+      ["overlay", retainedOverlay],
+    ]) {
+      assert.deepEqual(
+        await element.evaluate((node) => ({
+          connected: node.isConnected,
+          hidden: node.hidden,
+          inert: node.inert,
+        })),
+        { connected: true, hidden: true, inert: true },
+        `Retained Mison ${label} is hidden and inert`,
+      )
+      assert.equal(await element.isVisible(), false)
+    }
+    assert.equal(await retainedMount.evaluate((node) => node.isConnected), true)
+    await page
+      .locator('[data-plugin-root="mison-booking"] button')
+      .first()
+      .evaluate((button) => button.focus())
+    await page.keyboard.press("Tab")
+    assert.equal(
+      await page.evaluate(() => !!document.activeElement?.closest(".mison-ui")),
+      false,
+      "Hidden plugin cannot take programmatic or keyboard focus",
+    )
+    assert.equal(await page.locator('[role="dialog"]:visible').count(), 0)
+    assert.equal(await page.evaluate(() => document.body.hasAttribute("data-scroll-locked")), false)
+    assert.notEqual(
+      await page.evaluate(() => getComputedStyle(document.body).pointerEvents),
+      "none",
+    )
     await page.locator("#openChildManagementSettings").click()
     const sidebar = await page.locator(".settings-sidebar").boundingBox()
     assert.ok(
@@ -319,6 +372,33 @@ async function exerciseMisonTouch({ page, browserContext, origin, entryUrl, out,
       "Long settings page leaves navigation fixed",
     )
     checks.push("settings long content scrolls within main and navigation stays fixed")
+    await page.locator('[data-view="plugin:mison-booking"]').click()
+    await page.getByRole("region", { name: "约课区" }).waitFor()
+    assert.equal(
+      await retainedMount.evaluate(
+        (node) => node === document.querySelector('[data-plugin-root="mison-booking"]'),
+      ),
+      true,
+      "Returning to Mison reuses its existing mount and selection",
+    )
+    for (const element of [retainedPage, retainedOverlay]) {
+      assert.deepEqual(
+        await element.evaluate((node) => ({ hidden: node.hidden, inert: node.inert })),
+        { hidden: false, inert: false },
+      )
+    }
+    assert.ok(
+      Math.abs(
+        (await page.locator(".mison-teacher-scroll").evaluate((element) => element.scrollTop)) -
+          galleryTop,
+      ) < 2,
+      "Returning to Mison restores its scroll position",
+    )
+    assert.equal(await page.locator('[role="dialog"]:visible').count(), 0)
+    await screenshot("retained-plugin-restored")
+    checks.push(
+      "navigation retains hidden/inert plugin, releases focus and scroll locks, and restores the same instance",
+    )
   }
   for (const [width, height] of [
     [1180, 820],
@@ -370,7 +450,7 @@ async function exerciseMisonTouch({ page, browserContext, origin, entryUrl, out,
     await screenshot(`calendar-${width}`)
   }
   checks.push(
-    "PDF zoom, rotation, last page, lazy canvas release, invalid-file retry, nested overlay cleanup and navigation unlock",
+    "PDF complete-file download, rotation, last page, lazy canvas release, invalid-file retry, nested overlay cleanup and navigation unlock",
   )
   await page.emulateMedia({ media: "print" })
   assert.notEqual(

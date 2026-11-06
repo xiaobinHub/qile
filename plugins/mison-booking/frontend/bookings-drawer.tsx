@@ -1,12 +1,18 @@
 import { operationId as newOperationId } from "./operation-id"
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
+import {
+  loadNextBookingPage,
+  reloadBookingSource,
+  useBookingSource,
+  type BookingStatus,
+} from "./booking-source"
 import { RefreshCw } from "lucide-react"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@shared/components/ui/tabs"
 import { Card, CardContent, CardFooter } from "@shared/components/ui/card"
 import { Badge } from "@shared/components/ui/badge"
 import { request } from "./api"
 import { Avatar, Button, Empty, Notice, Overlay, DatePicker, dateLabel, teacherName } from "./ui"
-import type { Booking, BookingQuery, Operation, PluginContext, Resource } from "./types"
+import type { Booking, Operation, PluginContext, Resource } from "./types"
 export function BookingsDrawer({
   context,
   bindingRevision,
@@ -20,59 +26,46 @@ export function BookingsDrawer({
   onResource(resource: Resource): void
   onScheduleChanged?(): void
 }) {
-  const [status, setStatus] = useState("upcoming"),
-    [items, setItems] = useState<Booking[]>([])
-  const [loading, setLoading] = useState(false),
-    [error, setError] = useState(""),
+  const [status, setStatus] = useState<BookingStatus>("upcoming")
+  const [error, setError] = useState(""),
     [date, setDate] = useState("")
-  const [cursor, setCursor] = useState<string | null>(null),
-    [total, setTotal] = useState<number | null>(null)
+  const [limit, setLimit] = useState(20)
   const [cancel, setCancel] = useState<Booking | null>(null),
     [cancelId, setCancelId] = useState("")
   const [busy, setBusy] = useState(false),
     [cancelMessage, setCancelMessage] = useState("")
   const [cancelUncertain, setCancelUncertain] = useState(false)
   const [materials, setMaterials] = useState<Resource[] | null>(null)
-  const generation = useRef(0)
-  async function load(append = false) {
-    const seq = ++generation.current
-    setLoading(true)
+  const scope = `${context.child.id}:${bindingRevision}`
+  const source = useBookingSource({ context, scope, status, enabled: true, edge: date || null })
+  const loading = source.loading
+  const items = useMemo(() => {
+    const filtered = source.items.filter(
+      (booking) => !date || booking.startsAt?.slice(0, 10) === date,
+    )
+    return filtered.sort((left, right) => {
+      const order =
+        (left.startsAt ?? "").localeCompare(right.startsAt ?? "") ||
+        left.key.localeCompare(right.key)
+      return status === "upcoming" ? order : -order
+    })
+  }, [source.items, date, status])
+  const visible = items.slice(0, limit)
+  const total = (date ? source.settled : source.complete) ? items.length : null
+  const canLoadMore = items.length > visible.length || (!date && !source.complete && !source.error)
+  useEffect(() => setLimit(20), [status, date])
+  function reload() {
     setError("")
-    let next: string | null = append ? cursor : null
-    try {
-      do {
-        const query = new URLSearchParams({ status })
-        if (date) {
-          query.set("from", date)
-          query.set("to", date)
-        }
-        if (next) query.set("cursor", next)
-        const r: BookingQuery = await request(context, `bookings?${query}`)
-        if (seq !== generation.current || context.signal.aborted) return
-        next = r.nextCursor
-        if (r.state === "ready") {
-          setItems((old) => (append ? [...old, ...r.items] : r.items))
-          setCursor(next)
-          setTotal(r.total)
-          break
-        }
-        if (!next) throw Error("课程记录仍在同步，请稍后刷新。")
-      } while (next)
-    } catch (e) {
-      if (seq === generation.current) setError((e as Error).message)
-    } finally {
-      if (seq === generation.current) setLoading(false)
-    }
+    reloadBookingSource(scope, [status])
   }
-  useEffect(() => {
-    setItems([])
-    setCursor(null)
-    setTotal(null)
-    void load()
-    return () => {
-      generation.current++
+  async function loadMore() {
+    if (items.length > limit) {
+      setLimit((value) => value + 20)
+      return
     }
-  }, [context, status, date])
+    await loadNextBookingPage(context, scope, status)
+    setLimit((value) => value + 20)
+  }
   async function action(booking: Booking, kind: string) {
     setError("")
     setBusy(true)
@@ -127,7 +120,7 @@ export function BookingsDrawer({
       )
       if (r.state === "succeeded") {
         setCancel(null)
-        void load()
+        reloadBookingSource(scope, ["upcoming", "cancelled"])
         onScheduleChanged?.()
       } else {
         setCancelMessage(r.message || "结果待核对，请刷新预约记录。")
@@ -148,7 +141,7 @@ export function BookingsDrawer({
       const r = await request<Operation>(context, `operations/${cancelId}`)
       if (r.state === "succeeded") {
         setCancel(null)
-        void load()
+        reloadBookingSource(scope, ["upcoming", "cancelled"])
         onScheduleChanged?.()
       } else {
         setCancelMessage(r.message)
@@ -170,10 +163,7 @@ export function BookingsDrawer({
           className="mison-booking-sheet"
           value={status}
           onValueChange={(next) => {
-            setStatus(next)
-            setItems([])
-            setCursor(null)
-            setTotal(null)
+            setStatus(next as BookingStatus)
             setError("")
           }}
         >
@@ -205,16 +195,16 @@ export function BookingsDrawer({
                   size="icon"
                   aria-label="刷新预约"
                   disabled={loading}
-                  onClick={() => void load()}
+                  onClick={reload}
                 >
                   <RefreshCw />
                 </Button>
               </div>
             </div>
-            {error ? <Notice error>{error}</Notice> : null}
+            {source.error || error ? <Notice error>{source.error || error}</Notice> : null}
           </div>
           <TabsContent className="mison-booking-list" value={status} aria-busy={loading}>
-            {items.map((booking) => {
+            {visible.map((booking) => {
               const day = booking.startsAt?.slice(0, 10)
               const statusName =
                 booking.status === "upcoming"
@@ -285,13 +275,13 @@ export function BookingsDrawer({
                 </Card>
               )
             })}
-            {!items.length ? (
+            {!visible.length ? (
               <Empty
                 title={loading ? "正在加载预约…" : error ? "预约记录加载失败" : "暂无课程记录"}
               />
             ) : null}
-            {cursor ? (
-              <Button variant="outline" disabled={loading} onClick={() => void load(true)}>
+            {canLoadMore ? (
+              <Button variant="outline" disabled={loading} onClick={() => void loadMore()}>
                 加载更多课程
               </Button>
             ) : null}

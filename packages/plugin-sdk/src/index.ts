@@ -1,4 +1,4 @@
-/** Protocol 1.0: host-owned child context; plugins never receive account secrets. */
+/** Protocol 1.1: host-owned child context, overlays and page visibility. */
 export type PluginContext = {
   child: { id: string; name: string }
   releaseId: string
@@ -18,4 +18,4 @@ export type PluginContext = {
   refreshChild?(): Promise<void> | void
 }
 export type PluginModule = { mount(container: HTMLElement, context: PluginContext): () => void }
-export const FRONTEND_PROTOCOL = { major: 1, minor: 0 } as const
+export const FRONTEND_PROTOCOL = { major: 1, minor: 1 } as const

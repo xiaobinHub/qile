@@ -1,6 +1,6 @@
 # 插件开发约定
 
-插件协议为 1.0。插件与平台同仓库开发，每个插件单独构建和部署。管理后台决定发布状态和儿童范围；家庭负责人决定当前儿童是否安装及启用。全家共享状态、配置及菜单。
+平台与前端 API 当前支持 1.1，继续兼容声明 1.0 的插件。插件与平台同仓库开发，每个插件单独构建和部署。管理后台决定发布状态和儿童范围；家庭负责人决定当前儿童是否安装及启用。全家共享状态、配置及菜单。
 
 ## 目录及类型
 
@@ -15,6 +15,8 @@
 前端合同见 `packages/plugin-sdk/src/index.ts`，可读 JSON Schema 见 `packages/plugin-sdk/schema/plugin.schema.json`。服务端 `plugins/manifest.py` 是上线时实际执行的严格校验器。
 
 ## 前端
+
+使用 `overlay`、`isActive` 或 `onVisibility` 的插件必须声明 `frontendApi: { "major": 1, "minMinor": 1 }`。宿主在入口及运行接口发送 `X-Plugin-Frontend-Api: 1.1`；旧页面没有该请求头，按 1.0 处理。服务器在交付入口或调用后端前检查兼容性，入口响应同时返回 `frontendApi` 供加载器再次检查。不兼容返回 `plugin_frontend_incompatible` 并提示刷新整个页面；前端提供整页刷新操作。声明 1.0 的插件仍可由旧页面访问。
 
 独立 ESM 导出 `mount(container, context)`，在容器中构建自己的界面。`context` 提供当前儿童显示信息、活动版本、AbortSignal、本插件 API、通知和返回核心页面的导航。禁止导入平台内部业务对象或宿主带哈希的构建分块。
 
@@ -44,7 +46,7 @@ await context.api("records/notes/record-123", {
 
 配置为声明式 JSON Schema 子集，支持文本、数字、布尔、枚举、枚举多选、时间与时区，以及分组说明。实际支持字段以 `plugins/configuration.py` 为准。服务器和前端同时校验；未知字段和可执行表达式拒绝。
 
-配置为儿童共享数据，有独立修订号；同时编辑发生冲突时重新读取，不能静默覆盖其他家长。首期拒绝 password、token、secret 等凭据字段。接入真实外部通知渠道前，需要扩展平台凭据能力。
+配置为儿童共享数据，有独立修订号；同时编辑发生冲突时重新读取，不能静默覆盖其他家长。公开配置 Schema 仍拒绝 password、token、secret 等凭据字段。插件结构 v3 已提供 `plugin.private-state`、`plugin.credentials`、`plugin.external-operations` 和 `plugin.resources` 私有能力，美森通过私有 Bridge 保存加密凭据和外部操作回执；不把凭据放进公开配置或前端存储。其他插件或外部通知渠道须单独实现并核验适配器，不能把现有能力声明当作接口已接通。
 
 ## 后端
 

@@ -28,7 +28,7 @@ class ContextSigner:
         require(isinstance(self.secret, bytes) and len(self.secret) >= 32, 503)
         self.clock = clock
 
-    def issue(self, context, *, actor=None, job_id=None, capabilities=None, ttl=60):
+    def issue(self, context, *, actor=None, job_id=None, job_attempt=None, capabilities=None, ttl=60):
         require(1 <= ttl <= 3600, 400)
         allowed = list(context.get('capabilities', []))
         capabilities = allowed if capabilities is None else list(capabilities)
@@ -37,6 +37,9 @@ class ContextSigner:
         claims.update(actorId=actor, jobId=job_id, capabilities=capabilities, version=context['version'],
                       configSha256=hashlib.sha256(json.dumps(context.get('config', {}), sort_keys=True, allow_nan=False).encode()).hexdigest(),
                       expiresAt=int(self.clock()) + ttl, nonce=secrets.token_hex(16))
+        if job_attempt is not None:
+            require(job_id is not None and type(job_attempt) is int and job_attempt > 0, 400)
+            claims['jobAttempt'] = job_attempt
         encoded = base64.urlsafe_b64encode(json.dumps(claims, sort_keys=True, separators=(',', ':'), allow_nan=False).encode()).rstrip(b'=')
         signature = hmac.new(self.secret, encoded, hashlib.sha256).hexdigest()
         return {**claims, 'config': json.loads(json.dumps(context.get('config', {}))),
@@ -84,8 +87,8 @@ class PluginGateway:
         context = active_context(cur, plugin_id, child_id)
         return context, user
 
-    def issue_job_context(self, current, job_id, *, ttl=360):
-        return self.signer.issue(current, job_id=job_id, ttl=ttl)
+    def issue_job_context(self, current, job_id, *, ttl=360, attempt=None):
+        return self.signer.issue(current, job_id=job_id, job_attempt=attempt, ttl=ttl)
 
     def final_context(self, cur, supplied, *, capability=None):
         claims = self.signer.verify(supplied, capability=capability)
@@ -107,7 +110,7 @@ class PluginGateway:
         key = hashlib.sha256(effect_key.encode()).hexdigest()
         return state_store.apply_effects(cur, current, effects, effect_key=key)
 
-    def route(self, method, path, body, token, csrf, origin, surface, release_id):
+    def route(self, method, path, body, token, csrf, origin, surface, release_id, *, frontend_api=None):
         url = urlsplit(path)
         match = re.fullmatch(r'(?:api/)?children/([^/]+)/plugins/([^/]+)/runtime(?:/(.*))?', url.path.lstrip('/'))
         if not match:
@@ -121,6 +124,8 @@ class PluginGateway:
             current, user = self._authenticate(cur, plugin_id, child_id, token, csrf, origin, surface, write)
             require(isinstance(release_id, str) and release_id == current['releaseId'], 409,
                     '应用版本已改变，请重新进入。', 'plugin_version_changed')
+            from .frontend_protocol import require_frontend
+            require_frontend(current['manifest'], frontend_api)
             declared = (current['manifest'].get('backend') or {}).get('requestTimeoutSeconds', 10)
             context = self.signer.issue(current, actor=user[0], ttl=min(120, declared + 30))
             record_route = re.fullmatch(r'records/([A-Za-z0-9_-]{1,64})(?:/([^/]{1,128}))?', endpoint)

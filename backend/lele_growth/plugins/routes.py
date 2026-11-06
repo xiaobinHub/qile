@@ -6,6 +6,7 @@ from lele_growth.maintenance import PLUGIN_SCHEMA_VERSION
 from . import catalog, installations
 from .child_picker import list_plugin_children
 from .manifest import safe_relative_path
+from .frontend_protocol import require_frontend
 from .policy import active_context, catalog_row, rows_dict
 
 
@@ -13,7 +14,7 @@ class PluginRoutes:
     def __init__(self, service):
         self.service=service
 
-    def handle(self, cur, user, method, path, body):
+    def handle(self, cur, user, method, path, body, *, frontend_api=None):
         url=urlsplit(path)
         path=url.path.removeprefix('/api/').strip('/')
         parts=path.split('/')
@@ -62,9 +63,10 @@ class PluginRoutes:
         if method=='GET' and action=='entry':
             context=active_context(cur,plugin_id,child_id)
             require(context['type']=='page',409,'后台型应用没有页面入口。','plugin_no_page')
+            require_frontend(context['manifest'], frontend_api)
             frontend=context['manifest']['frontend']
             prefix='/plugin-assets/'+plugin_id+'/'+context['version']+'/'
-            return dict(entry=prefix+safe_relative_path(frontend['entry']),styles=[prefix+safe_relative_path(s) for s in frontend.get('styles',[])],releaseId=context['release_id'],version=context['version'])
+            return dict(entry=prefix+safe_relative_path(frontend['entry']),styles=[prefix+safe_relative_path(s) for s in frontend.get('styles',[])],releaseId=context['release_id'],version=context['version'],frontendApi=context['manifest']['frontendApi'])
         if method=='POST' and action in ('install','enable','disable') or method=='DELETE' and action=='installation':
             performed='uninstall' if action=='installation' else action
             result=installations.mutate_installation(cur,plugin_id,child_id,user[0],performed,body)

@@ -1,11 +1,13 @@
 # 美森约课：接口、数据与上游适配合同
 
+> 当前交付状态（2026-11-06，源码候选 1.0.30）：直接登录、唯一有效合约自动关联、教师/预约只读查询、收藏、持久草稿、单/多连续课时预约、两步取消及学生 PDF 已接入。真实预约/取消闭环未完成；批量顺延、预约后更换课件及 PC 原生学习协议未交付。当前证据与限制统一见 [上游核验记录](upstream-verification.md)，部署要求为插件结构 v3、前端协议 1.1，见 [部署说明](../deployment.md)。
+
 > 2026-11-03：教师档案返回introVideo.inline与同源短期视频URL，新增resource.issue（purpose=teacher-intro-video）和媒体GET/HEAD流代理，支持Range。具体时段筛选改为多选，times仍采用已核验的CSV参数；日期使用共享DatePicker。视频流校验主应用身份、儿童/插件/绑定/凭据与发布版本，令牌不进入资源URL。
 
-> 2026-11-02 实现更新：按用户后续要求，现有插件采用直接登录，`POST connection/login` 请求为 `{operationId,bindingRevision,username,password}`，成功返回下文 `Connection`（`contract` 暂为null），GET bootstrap返回保存的登录状态，DELETE connection退出。使用 `session.begin/finish/fail/get/disconnect` 私有Bridge，Token仅服务端加密保存；本机Bridge在同一Unix socket按凭证隔离控制与Bridge身份。下文 authenticate→候选课程→PUT connection仍为后续课程绑定规划，当前前端不再调用这些未实现的路由。教师列表/筛选/资料/档期、我的预约三状态与分页现已接入；预约提交、取消和学习入口仍待接入。查询缓存采用worker内有界TTL缓存（5分钟、账号与查询隔离），worker重启后旧游标明确过期；头像通过插件JSON接口按需返回限域限大小的图片data URI，以避免修改宿主CSP。
+> 2026-11-02 历史实现记录：插件改用直接登录，`POST connection/login` 请求为 `{operationId,bindingRevision,username,password}`，成功返回下文 `Connection`，GET bootstrap读取保存的状态，DELETE connection退出。使用 `session.begin/finish/fail/get/disconnect` 私有Bridge，Token仅服务端加密保存；本机Bridge在同一Unix socket按凭证隔离控制与Bridge身份。下文 authenticate→候选课程→PUT connection 为未交付的多合约选择规划，当前前端不调用。查询缓存采用worker内有界TTL缓存（5分钟、账号与查询隔离），worker重启后旧游标明确过期；头像通过插件JSON接口按需返回限域限大小的图片data URI，以避免修改宿主CSP。
 
 
-版本：设计1.0 / 2026-11-02。配套[实施方案](../../superpowers/plans/2026-11-02-mison-booking-implementation.md)。这里定义的新路由、DTO、Bridge动作均为**待实现合同**；“上游已记录”只指用户提供的报告，不代表本次已在线复测。
+设计基线：1.0 / 2026-11-02，配套[实施方案](../../superpowers/plans/2026-11-02-mison-booking-implementation.md)。本文保留原设计的候选课程、多合约绑定、批量顺延及修复等规划，不能据路由表推断这些能力已交付；当前实现以本文开头的交付状态、末尾适配器补充及上游核验记录为准。“上游已记录”不代表本次已在线复测，隔离样例通过不代表真实写入验收通过。
 
 ## 1. 接口总约定
 
@@ -241,7 +243,7 @@ PUT/DELETE connection必须使用实施方案的binding.commit/disconnect一次�
 - 非收藏：第1页返回普通池+推荐第1页；后续只追加去重后的推荐池。总数未知时null，smart_count变化不作为稳定快照承诺。以G06核验的终止条件标complete=true；连续两页未产生新tid但终止条件未满足，返回UPSTREAM_SCHEMA_CHANGED并保留已见结果，不能伪装完整结束或死循环。
 - 收藏且没有日期/时段：读取getTeacherCollect完整收藏，再在服务端按昵称与标签ID筛选；以报告字段核验标签AND，缺失标签不能按名字猜匹配。
 - 收藏叠加日期/时段：用相同搜索条件扫描完整普通/推荐池与收藏集合求交；每请求最多3个源页，未扫描完返回nextCursor和complete=false，即使本页items为空也显示“继续查找”，不下结论为空。
-- query快照TTL5分钟，缓存键包括childId、bindingRevision和规范化筛选；取消收藏后使相关查询失效并重建，不能继续拼接旧快照。
+- 教师列表分页不设固定有效期，按childId、bindingRevision和规范化筛选单独保存；课程日历和课件分页不能使该游标失效。筛选或绑定变化后旧游标失效。取消收藏后使相关查询失效并重建，不能继续拼接旧快照。
 - 资料缓存5分钟，档期缓存30秒，提交前强制新读；收藏/预约/取消成功使相关cache失效。
 
 ### 3.3 草稿与课件
@@ -249,7 +251,7 @@ PUT/DELETE connection必须使用实施方案的binding.commit/disconnect一次�
 | 方法 / 路径 | 输入 | 返回data / 行为 |
 |---|---|---|
 | POST `drafts` | `{operationId,bindingRevision,teacherId,date,slotStarts:LocalTime[]}` | Draft；重新验证可约且连续，建立无固定有效期的服务端草稿并请求推荐 |
-| GET `drafts/{draftId}` | 无 | Draft；验证当前绑定及过期时间 |
+| GET `drafts/{draftId}` | 无 | Draft；验证当前绑定，不设固定TTL；兼容旧草稿过期标记 |
 | PUT `drafts/{draftId}/slots` | `{operationId,bindingRevision,expectedRevision,slotStarts}` | Draft；仅同老师同日；按start保留手选课程，新增位置补推荐 |
 | GET `courseware/categories` | 无 | `{nodes:CategoryNode[],depthNames:string[]}` |
 | GET `courseware` | `categoryId,draftId,slotStart,cursor?` | `{items:Courseware[],nextCursor,total}`；只接叶子分类 |
@@ -260,9 +262,9 @@ PUT/DELETE connection必须使用实施方案的binding.commit/disconnect一次�
 
 草稿的推荐课件和manual selectionReceipt只在服务端签发。selectionReceipt绑定draftId、revision、slotStart、coursewareId、bindingRevision，不可跨草稿复用。它记录已经执行的选课流程，不能允许客户端自报“已扣额度”。
 
-草稿每次revision变化时，服务端按保留的合法选择证据重新签发对应receipt，无需再次扣额；移除的时段销毁对应receipt。预约dispatching期间草稿冻结；其他页面修改返回OPERATION_IN_PROGRESS。草稿过期会禁用提交并提示重建，不能用旧revision自动提交预约。
+草稿每次revision变化时，服务端按保留的合法选择证据重新签发对应receipt；移除的时段销毁对应receipt。预约dispatching期间草稿冻结；其他页面修改返回OPERATION_IN_PROGRESS。当前草稿不设固定TTL，旧草稿过期标记通过显式兼容读取处理；提交仍校验当前绑定、修订、课件及真实档期，不能用旧revision自动提交预约。
 
-打开更换器、展开分类和分页都是只读；关闭不扣额。选择同一课时当前课件为无变化，不发送扣额请求。若真实App的更换计数发生在另一环节，按G03真实流程执行并更新fixture；对用户说明的动作与实际扣额保持一致。
+打开更换器、展开分类和分页都是只读；关闭不扣额。预约前选择/更换课件只更新持久草稿，不发送扣额请求。预约后已排课程的更换属于另一操作，当前未开放；不能混用其接口或计数规则。
 
 预览只使用当前授权草稿中美森返回的学员PDF地址，不接受浏览器传入任意URL，也不访问教师文件。失败不回退到官方扣额接口；资源票据过期可重新签发。保留旧版操作回执的只读查询，历史未决扣额操作不得自动重发。
 
@@ -271,7 +273,8 @@ PUT/DELETE connection必须使用实施方案的binding.commit/disconnect一次�
 | 方法 / 路径 | 输入 | 返回data / 行为 |
 |---|---|---|
 | POST `bookings` | `{operationId,bindingRevision,draftId,expectedRevision}` | Operation；不接受浏览器直接给userid/合约/课件数组替代服务端草稿 |
-| GET `bookings` | `status:'upcoming'\|'completed'\|'cancelled',from?,to?,cursor?,pageSize?` | BookingQuery |
+| GET `bookings` | `status:'upcoming'\|'completed'\|'cancelled',from?,to?,cursor?,pageSize?` | BookingQuery；旧全量扫描，日历和预约弹窗不再使用 |
+| GET `bookings/pages` | `status,page` | 恰好一个上游页，最多100条，保留上游顺序；`complete` 表示该状态已到末页 |
 | POST `bookings/{bookingKey}/cancel` | `{operationId,bindingRevision,snapshotVersion,adjustLessons:boolean}` | Operation；验证该课节属于当前账号/合约、未完成、可取消 |
 | POST `bookings/adjust-order` | `{operationId,bindingRevision,items:[{bookingKey,snapshotVersion}]}` | Operation；至少1项最多50项、无重复，先获取全部新状态再调用已核验接口 |
 | GET `operations/{operationId}` | 无 | Operation；仅当前儿童、插件、绑定可读 |
@@ -281,6 +284,10 @@ PUT/DELETE connection必须使用实施方案的binding.commit/disconnect一次�
 `reconcile/repair`属于原操作状态转换，不生成另一个原始预约或取消operationId。重放同stageVersion时返回已推进状态；不能把“修复记录”解释成重新取消/重新顺延。
 
 **列表完整性和排序：**
+
+日历与「我的预约」共用 `GET bookings/pages`。每次只读取一个上游页，不按月份缓存，也不把已上课和待上课合成一次请求。2026-11-06 只读复测：待上课 `getLiveList` 从近到远，已上课 `getBackList`（必须带 `is_lesson_status=1`）和已取消 `onevoneGetCancelLesson` 从新到旧；超出末页返回空列表。页内顺序不符合时返回 `UPSTREAM_SCHEMA_CHANGED`，前端不把残缺结果当成完整课程。待上课通常不超过一页；只有接口明确还有下一页，且画面碰到已加载的最晚一天，才继续向后取。已上课和已取消只在画面碰到已加载的最早一天或更早时继续取，同一天可能拆页，所以边界当天也要继续确认。已取消没有 `cid` 和总数字段，短页即结束，也不能按上课时间并入其他状态。成功预约只清待上课，成功取消清待上课和已取消；关闭弹窗不刷新日历。课程同步仍自行全量扫描，不读这份页面缓存。
+
+旧 `GET bookings` 仍保留全量扫描。
 
 上游没有记录通用日期过滤与稳定排序参数。后端建立短期查询快照：每个请求最多扫描3个上游页（每页100），保留nextCursor；需要全局排序/日期过滤时，未扫描完返回state=building、items=[]、total=null，前端显示加载进度并继续请求。扫描完后在服务端归一化、过滤、全局排序，再按20条分页，快照TTL5分钟。不采用“只筛当前页”冒充全局日期过滤。
 
@@ -317,7 +324,7 @@ worker HTTP client仅调用以上两个固定origin与适配器登记的路径�
 | 前端能力 | 上游 / 方法 | 主要入参 | 归一化与注意事项 |
 |---|---|---|---|
 | 登录 | B `member/login` POST | username,password | 外层status=0；检查data.token及内层状态，禁止整包回传 |
-| 课程识别 | B `course/myOneToOneList`、`myCourseList`、`myCourseDetail` | G01核验 | 仅发现端点名，字段/关联关系未完整证实 |
+| 课程识别 | B `course/myOneToOneList`、`myCourseList` | 当前账号 | 已动态关联合约/课程班/课件树ID，仅接受唯一有效关联；myCourseDetail不是当前识别必需调用 |
 | 教师标签 | A `getTeacherLabelGroups` POST | {} | category_id/name/list，动态渲染标签，不硬编码15项 |
 | 时间模板 | A `onevoneTimeTemplateV2` POST | {} | data[]时间字符串；时段步长据模板验证 |
 | 教师搜索 | A `onevoneSearchTeacher` POST | t_type=核验值,ddate,dtime,nickname,can_date=1,user1v1_id,label_id,page,limit=10 | 普通池重复、推荐池分页；is_smart_matching分组 |
@@ -331,7 +338,7 @@ worker HTTP client仅调用以上两个固定origin与适配器登记的路径�
 | 额度 | A `onevoneGetChangeCoursewareTimes` POST | userid,user1v1_id | leftTimes/allTimes；不可用≠0额度 |
 | 待补学 | A `onevoneGetCancelCourseware` POST | user1v1_id,userid,page,limit | 非空结构与“作废”具体语义见G07 |
 | 预览 | 草稿中的 `student_file_url` | 不调用扣额接口 | 直接打开学员 PDF；官方扣额接口见 G03，本插件不再使用 |
-| 确认更换 | G03定位真实调用链 | 草稿目标课件及绑定 | **没有已证实独立端点名，禁止虚构** |
+| 预约前确认更换 | 插件本地草稿事务 | 草稿目标课件及绑定/修订 | 不调用上游更换或扣额接口；预约后更换未开放 |
 | 预约 | A `onevoneAppointment` POST | tid,userid,ddate,dtime,user1v1_id,lesson_period,courseware_id | 多课时courseware_id编码见G02；成功无cid |
 | 待上课 | B `course/getLiveList` POST | classid=课程班ID,page_size,page_no,courseway=0,blockid=0 | data.list及分页元数据；与1v1合约ID区别 |
 | 已上课 | B `course/getBackList` POST | 同上,is_lesson_status=1 | 显示真实学习/作业状态；回放地址需解析协议 |
@@ -339,7 +346,7 @@ worker HTTP client仅调用以上两个固定origin与适配器登记的路径�
 | 取消步骤1 | A `cancelLesson` POST | userid,cid | code=200且data.status=1；msg可能只是“获取成功” |
 | 取消步骤2 | A `onevoneSaveCancelLesson` POST | cid,status=1,userid,adjust_lessons=0/1 | 步骤1成功后才调用；顺延副作用单独核验 |
 | 批量顺延 | G04定位 | G04核验 | 报告只记录UI及资格，没有完整端点/排序算法 |
-| 学习资源 | B `course/courseClassResource`、`haveClass`等为候选 | G05核验 | 端点存在≠可直接推导入参/响应/PC协议 |
+| 学生PDF资料 | B `course/courseClassResource` → `download/pdf` | lessonid,type,cid,producttype → fid | 已接通学生PDF；上课/回放/预习/作业仍返回App操作说明 |
 | 教师视频 | GET data.intro_video | 不带Bearer | 使用返回URL，禁止猜tno+姓名拼文件名 |
 
 **字段细节：**
@@ -433,19 +440,19 @@ book已明确成功但pendingRecordSync=true时，同样保留时段占用屏障
 ### 6.4 收藏、预览、更换、顺延
 
 - 收藏写的是目标状态，未知结果先getTeacherCollect核对，再决定是否已经完成，不连点toggle。
-- 预览/更换属于消耗额度的写入。操作日志保存调用前后额度与资源引用，不能对失败自动重试；同operationId再次读取已成功结果不扣第二次。
+- 当前预览从草稿学员 PDF 签发资源，预约前更换只修改草稿，两者均不消耗预览额度，也不依赖额度查询。仍校验operationId、绑定和修订；历史扣额操作只读核对，不能通过重试重新派发扣额请求。
 - 批量顺延先保存课节和课件快照，调用后回读映射；不知道变更算法不能用本地数组重排假装成功。G04未解决重复语义时网络未知一律人工核对。
 - 同一operationId不同类型/不同课件/不同cid必须冲突。业务消息给具体动作，不向用户显示数据库锁/字段名等实现内容。
 
 ## 7. 必须完成的上游核验任务
 
-以下为已识别的事实缺口，不是让执行者自由选择产品行为。实现阶段按步骤收集证据；没有证据就不能把相应真实功能标为完成。先读已有报告、非临时项目的抓包和APK；真实写入必须有明确指定的测试账号/课程和操作范围。
+以下为最初识别的核验问题目录，当前已解决部分及剩余边界见 [上游核验记录](upstream-verification.md)；不能把本表重复当作“全部未实现”的现状。没有证据就不能把相应真实功能标为完成。先读已有报告、非临时项目的抓包和APK；真实写入必须有明确指定的测试账号/课程和操作范围。
 
 | 编号 | 缺口 | 核验动作 | 完成证据与实现分支 |
 |---|---|---|---|
 | G01 | 登录后如何得到课程classid、user1v1_id、liveid、教师类型 | 检查myOneToOneList/myCourseList/myCourseDetail调用链和样本；核对多合约、无效合约 | 每个候选能得到完整ID元组及显示名；无默认样本ID。若liveid是产品固定值，需要静态证据及适用产品条件 |
 | G02 | 多课时courseware_id编码、最大课时数、部分成功 | 提取App两课时确认提交的实际payload与处理分支，核对1/2/超过2、最后一档 | 文档写明是CSV/数组/其他真实格式及限制；fixture包括多课时，适配器不猜。上游无原生批量时先报告证据，不擅自拆单改变语义 |
-| G03 | 预览响应、真正更换动作、额度扣减时点 | 对照只打开、翻页、预览、确认更换、取消更换调用链及额度前后值 | 明确哪个请求扣额，失败/重复是否扣额，资源如何取得；接口DTO支持receipt，禁止直接读公开文件绕过计数 |
+| G03 | 区分官方扣额预览、预约前选课件和预约后更换 | 对照App调用链及当前课件列表的student_file_url；核对资源授权、来源与失败路径 | 当前使用草稿中学员PDF、选择只改草稿；不调用或回退到扣额接口。预约后更换单独核验，不能混用协议 |
 | G04 | 批量排序端点、选中顺序、取消顺延作用及重复安全性 | 阅读批量排序/adjust_lessons调用点；在授权样本上比较操作前后cid→courseware映射 | 端点/参数/资格/结果/幂等性逐项记录；解释是否只改内容与影响未选课节范围，确认文案据此准确说明 |
 | G05 | 上课、回放、预习、作业、下载完整链路与PC支持 | 检查haveClass、courseClassResource及相关页面处理；只读查询真实返回结构 | 每类动作有可验证PC URL/资源或官方App路径；不得从ID猜URL。识别短时票据与长期JWT，后者不得泄露 |
 | G06 | 列表状态、排序、分页、日期区间与总数可信度 | 读取预约/已上/已取消分页样本，验证page_no/page、allRow/count及重复边界 | adapter准确读分页终止条件与status字段；本合同全局排序/过滤无需依赖未知上游sort参数 |
@@ -465,7 +472,7 @@ book已明确成功但pendingRecordSync=true时，同样保留时段占用屏障
 | 时段失效 | SLOT_UNAVAILABLE | 列出失效时段，回到档期；保留仍有效课件映射 |
 | 非连续 | NON_CONTIGUOUS_SLOTS | 本地与服务端都拦截，不发送预约 |
 | 同课件重复 | COURSEWARE_DUPLICATE | 标记具体课时与课件，禁提交 |
-| 额度0/未知 | QUOTA_EXHAUSTED / QUOTA_UNAVAILABLE | 禁用预览/更换；额度未知提供刷新 |
+| 额度0/未知 | 仅历史扣额接口/记录使用Quota错误 | 当前学员PDF预览、草稿更换和预约不受预览额度限制；资源无效时显示具体文件错误 |
 | 上游明确业务拒绝 | UPSTREAM_REJECTED | 显示净化后的可读原因，按钮恢复，保留输入 |
 | 写入可能已生效 | Operation.uncertain | 显示“结果待核对”，只提供核对，不重复提交 |
 | 取消记录失败 | Operation.needs_repair | 明确实际已取消；安全时提供补全记录 |
@@ -480,9 +487,9 @@ book已明确成功但pendingRecordSync=true时，同样保留时段占用屏障
 - 两种成功envelope与所有认证失败码；HTTP200错误/非JSON/超长响应。
 - 日期模板17项以实际长度渲染，午夜重读baseDate；时长25、步长30的区别。
 - 普通池重复3页、推荐池变化、收藏只在第3页出现、途中空页但未结束。
-- draft revision/TTL、重复课件、推荐不足、classid两种含义不串用。
+- draft revision、无固定TTL及旧TTL兼容、重复课件、推荐不足、classid两种含义不串用。
 - 原生两课时真实编码fixture；超出上游限制提前拒绝。
-- 额度成功但资源失败、上游扣额后断线、同操作重复点击。
+- 学员PDF缺失/来源不支持、同操作重复点击、零额度下选择/预览/预约、历史扣额回执只读恢复。
 - 预约成功无cid、响应丢失、旧预约同时间匹配歧义、部分课时成功。
 - 两阶段取消第二步失败、第二步已顺延后断线、再次repair不重复顺延。
 - GET媒体票据无自定义版本头仍验证权限；Range206/416、重定向、私网、恶意mime、票据过期。
@@ -491,9 +498,11 @@ book已明确成功但pendingRecordSync=true时，同样保留时段占用屏障
 **完成定义：** 接口契约、前端真实请求、独立worker、平台Bridge与数据库状态在隔离集成中贯通；G01–G07有可审查证据。未支持的PC学习动作只能以经验证的官方入口回退交付，不能以“后端以后再接”结束任务。
 
 
-## 当前适配器补充（2026-11-03，1.0.10）
+## 当前适配器补充（始于2026-11-03，随源码更新）
 
 以下以本次App定点静态代码及真实只读响应核验为准，覆盖前文仍待G02/G03核验的部分：
+
+- G01：`read_api.contracts` 使用 myOneToOneList 与 myCourseList 关联 id/courseid/gradeid 和 liveid/classid/new_liveid，仅接受唯一有效合约；样本ID不作为默认值。当前适配的一对一产品使用 teacherType=2，多合约选择仍未交付。
 
 - G02：App预约函数按时段顺序取每课时选中的id，`courseware_id = ids.join(",")`、`lesson_period = 数量`、`dtime = 第一个时段`，一次调用onevoneAppointment。生产写入未实约；隔离合成上游验证了实际序列化协议及响应丢失核对。
 - G03：预约前选课件只更新App本地选择数组，没有独立扣额调用。美森 App 的预览会调用 onevonePreviewCourseware 并扣 leftTimes；本插件已改为直接使用课件列表里的 student_file_url，不再调用该扣额接口。预约后已排课程的 onevoneChangeCourseware 是另一操作，本次不混用。

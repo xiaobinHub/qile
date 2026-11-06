@@ -65,6 +65,7 @@ class ReadAdapterTests(unittest.TestCase):
     def setUp(self):
         for cache in (read_store.memo, read_store.cursors):
             cache.values.clear(); cache.size = 0
+        read_store.teacher_cursors.clear()
         self.client = FakeClient()
 
     def test_contract_ids_are_joined_and_never_interchanged(self):
@@ -111,7 +112,7 @@ class ReadAdapterTests(unittest.TestCase):
         self.assertEqual(result['items'][0]['id'], '102')
         self.assertTrue(result['items'][0]['favorite'])
 
-    def test_cursor_scope_query_and_expiry_are_checked(self):
+    def test_teacher_cursor_is_scoped_and_not_expired_by_other_reads(self):
         self.client.favorite_rows = [self.client.teacher(i) for i in range(101, 130)]
         result = api.teacher_query(self.client, {'favoritesOnly': '1'})
         cursor = result['nextCursor']; self.assertIsNotNone(cursor)
@@ -121,8 +122,12 @@ class ReadAdapterTests(unittest.TestCase):
         self.client.scope = ('child-a', 2, 'credential-b')
         with self.assertRaises(auth.AuthError): api.teacher_query(self.client, {'favoritesOnly': '1', 'cursor': cursor})
         self.client.scope = ('child-a', 1, 'credential-a')
+        for index in range(80):
+            read_store.continuation({'scope': ['child-z', 1, 'other'], 'kind': 'bookings',
+                                     'filters': {'page': index}, 'queryId': f'booking-{index}'})
         with patch('mison_booking.read_store.time.monotonic', return_value=10**20):
-            with self.assertRaises(auth.AuthError): api.teacher_query(self.client, {'favoritesOnly': '1', 'cursor': cursor})
+            resumed = api.teacher_query(self.client, {'favoritesOnly': '1', 'cursor': cursor})
+        self.assertEqual(len(resumed['items']), 9)
 
     def test_schedule_uses_beijing_base_and_hides_occupant_ids(self):
         fixed = datetime(2099, 1, 1, 12, tzinfo=api.TZ)
@@ -151,6 +156,41 @@ class ReadAdapterTests(unittest.TestCase):
         self.assertEqual(result['items'][0]['cid'], '1')
         self.assertFalse(result['items'][0]['actions']['cancel']['allowed'])
         self.assertEqual(result['items'][0]['actions']['replay']['mode'], 'instructions')
+
+    def test_booking_page_keeps_upstream_order_and_does_not_scan_ahead(self):
+        rows = [self.client.record(i, f'2099-{(i - 1) // 28 + 1:02d}-{(i - 1) % 28 + 1:02d} 19:00') for i in range(1, 101)]
+        self.client.booking_pages = {1: {'list': rows, 'allPage': 2, 'lastPage': False, 'allRow': 101}}
+        result = api.booking_page(self.client, {'status': 'upcoming', 'page': '1'})
+        self.assertEqual([row['cid'] for row in result['items']], [str(i) for i in range(1, 101)])
+        self.assertFalse(result['complete'])
+        self.assertEqual(result['pageSize'], 100)
+        live = [body for endpoint, body in self.client.calls if endpoint == 'getLiveList']
+        self.assertEqual(live, [{'classid': '90001', 'page_size': 100, 'page_no': 1, 'courseway': 0, 'blockid': 0}])
+        self.client.booking_pages[1]['list'] = [self.client.record(2, '2099-01-04 19:00'), self.client.record(1, '2099-01-02 19:00')]
+        with self.assertRaises(auth.AuthError) as failure:
+            api.booking_page(self.client, {'status': 'upcoming', 'page': 1})
+        self.assertEqual(failure.exception.code, 'UPSTREAM_SCHEMA_CHANGED')
+        self.client.calls.clear()
+        self.client.booking_pages = {1: {'list': [self.client.record(2, '2099-01-04 19:00'), self.client.record(1, '2099-01-02 19:00')],
+                                          'allPage': 1, 'lastPage': True, 'allRow': 2}}
+        result = api.booking_page(self.client, {'status': 'completed'})
+        self.assertEqual([row['cid'] for row in result['items']], ['2', '1'])
+        self.assertTrue(result['complete'])
+        back = [body for endpoint, body in self.client.calls if endpoint == 'getBackList']
+        self.assertEqual([body['page_no'] for body in back], [1])
+        self.assertEqual(back[0]['is_lesson_status'], 1)
+        self.client.cancel_pages = {1: [{'dateTime': '2099-01-03 18:00-18:25', 'teachername': '合成教师', 'course_name': '内容', 'courseware_id': '10001'}]}
+        self.client.calls.clear()
+        result = api.booking_page(self.client, {'status': 'cancelled', 'page': '1'})
+        self.assertTrue(result['complete'])
+        self.assertIsNone(result['items'][0]['cid'])
+        self.assertEqual(self.client.calls[-1][0], 'onevoneGetCancelLesson')
+        self.assertEqual(self.client.calls[-1][1]['limit'], 100)
+        self.assertEqual(self.client.calls[-1][1]['classid'], '70001')
+        with self.assertRaises(auth.AuthError):
+            api.booking_page(self.client, {'status': 'upcoming', 'page': '0'})
+        with self.assertRaises(auth.AuthError):
+            api.booking_page(self.client, {'status': 'upcoming', 'cursor': 'abc'})
 
     def test_cancelled_missing_teacher_and_cid_are_nullable(self):
         self.client.cancel_pages = {1: [{'dateTime': '2099-01-02 18:00-18:25', 'teachername': '合成教师', 'course_name': '内容', 'courseware_id': '10001'}]}

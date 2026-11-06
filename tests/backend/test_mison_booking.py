@@ -41,6 +41,7 @@ class BookingApiTests(DatabaseFixture):
         self.live=[];self.cancelled=[];self.sent=[];self.remaining=5;self.drop=None;self.reject=False
         self.course=lambda i:{'id':i,'title':f'合成课件{i}','category_id':5,'category_name':'测试分类','status':1,'student_file_url':f'https://file.mison.cn/course{i}.pdf'}
         for cache in (read_store.memo,read_store.cursors):cache.values.clear();cache.size=0
+        read_store.teacher_cursors.clear()
 
     @contextmanager
     def connected(self):
@@ -330,6 +331,7 @@ class BookingApiTests(DatabaseFixture):
             self.run_api('bookings','POST',body)
             saved=self.live.pop()
         for cache in (read_store.memo,read_store.cursors):cache.values.clear();cache.size=0
+        read_store.teacher_cursors.clear()
         with self.connected():
             result=self.run_api('operations/'+body['operationId'])
             self.assertEqual(result['state'],'partially_succeeded')

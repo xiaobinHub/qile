@@ -1,4 +1,4 @@
-"""Protocol 1.0 manifest validation; no code imports or filesystem writes."""
+"""Protocol 1.1 manifest validation; no code imports or filesystem writes."""
 import copy
 import re
 from pathlib import PurePosixPath
@@ -9,7 +9,7 @@ from .configuration import validate_schema
 
 PLATFORM_API_MAJOR = 1
 PLATFORM_API_MINOR = 1
-FRONTEND_API_MINOR = 0
+FRONTEND_API_MINOR = 1
 SUPPORTED_CAPABILITIES = frozenset({'plugin.state.read','plugin.state.write','plugin.jobs.schedule','plugin.events.subscribe'})
 SUPPORTED_PLUGIN_CAPABILITIES = frozenset({'plugin.private-state','plugin.credentials','plugin.external-operations','plugin.resources'})
 SUPPORTED_EVENTS = frozenset({'task.completed'})

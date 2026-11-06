@@ -1,11 +1,18 @@
 import { operationId as newOperationId } from "./operation-id"
-import { lazy, Suspense, useEffect, useState } from "react"
+import { lazy, Suspense, useEffect, useRef, useState } from "react"
 import { Download, Play, Star } from "lucide-react"
 import { Skeleton } from "@shared/components/ui/skeleton"
 import { Badge } from "@shared/components/ui/badge"
 import { Switch } from "@shared/components/ui/switch"
-import { getCourseSync, previewCourseSync, saveCourseSync, courseSyncChanged, request } from "./api"
-import type { CourseSyncSettings, CourseSyncSummary } from "./api"
+import {
+  getCourseSync,
+  previewCourseSync,
+  saveCourseSync,
+  courseSyncChanged,
+  PluginApiError,
+  request,
+} from "./api"
+import type { CourseSyncSettings, CourseSyncSummary, CourseSyncSaveRequest } from "./api"
 import { Avatar, Button, DatePicker, Empty, Notice, NumberPicker, Overlay, teacherName } from "./ui"
 import type { Connection, PluginContext, Resource, Teacher, TeacherProfile } from "./types"
 const PdfPreview = lazy(() => import("@shared/components/pdf-preview"))
@@ -210,6 +217,9 @@ export function AccountDialog({
   const [startDate, setStartDate] = useState("")
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
+  const [saveUncertain, setSaveUncertain] = useState(false)
+  const pendingSave = useRef<CourseSyncSaveRequest | null>(null)
+  const saveLock = useRef(false)
   const [disconnecting, setDisconnecting] = useState(false)
   const [error, setError] = useState("")
   const [savedMessage, setSavedMessage] = useState("")
@@ -242,7 +252,7 @@ export function AccountDialog({
     (enabled !== settings.enabled ||
       (enabled && (points !== (settings.points ?? 0) || startDate !== savedDate)))
   async function disconnect() {
-    if (busy || disconnecting) return
+    if (busy || disconnecting || pendingSave.current) return
     setDisconnecting(true)
     setError("")
     try {
@@ -264,46 +274,79 @@ export function AccountDialog({
     }
   }
   async function persist(nextEnabled: boolean) {
-    if (!settings) return
+    if (!settings || saveLock.current) return
+    saveLock.current = true
+    const retrying = pendingSave.current !== null
+    const body = (pendingSave.current ??= {
+      operationId: newOperationId(),
+      expectedRevision: settings.revision,
+      bindingRevision: connection.bindingRevision,
+      enabled: nextEnabled,
+      points,
+      startDate: startDate || settings.serverDate,
+    })
     setBusy(true)
     setError("")
     try {
-      const summary = await saveCourseSync(context, {
-        operationId: newOperationId(),
-        enabled: nextEnabled,
-        points,
-        startDate: startDate || settings.serverDate,
-      })
+      const summary = await saveCourseSync(context, body)
+      const current = await getCourseSync(context)
       if (context.signal.aborted) return
-      setSettings({
-        ...settings,
-        enabled: nextEnabled,
-        points: nextEnabled ? points : settings.points,
-        startDate: nextEnabled ? startDate : settings.startDate,
-        revision: summary.revision ?? settings.revision,
-      })
-      setEnabled(nextEnabled)
+      pendingSave.current = null
+      setSaveUncertain(false)
+      setSettings(current)
+      setEnabled(current.enabled)
+      setPoints(current.points ?? 0)
+      setStartDate(current.startDate ?? current.serverDate)
       setConfirm(null)
       const removed = summary.removed ?? 0
       const awarded = summary.points ?? 0
       setSavedMessage(
-        nextEnabled
-          ? awarded || removed
-            ? `已按起始日同步${awarded ? `，发放 ${awarded} 积分` : ""}${removed ? `，删除 ${removed} 节并收回 ${summary.clawback ?? 0} 积分` : ""}。`
-            : "课程同步已保存。"
-          : removed
-            ? `已关闭同步，并删除 ${removed} 节未完成课程。`
-            : "已关闭课程同步。",
+        retrying || current.revision !== summary.revision
+          ? "原保存结果已核对，已读取最新同步设置。"
+          : body.enabled
+            ? awarded || removed
+              ? `已按起始日同步${awarded ? `，发放 ${awarded} 积分` : ""}${removed ? `，删除 ${removed} 节并收回 ${summary.clawback ?? 0} 积分` : ""}。`
+              : "课程同步已保存。"
+            : removed
+              ? `已关闭同步，并删除 ${removed} 节未完成课程。`
+              : "已关闭课程同步。",
       )
-      if (courseSyncChanged(summary)) await context.refreshChild?.()
+      if (courseSyncChanged(summary)) {
+        try {
+          await context.refreshChild?.()
+        } catch {
+          if (!context.signal.aborted) setError("同步设置已保存，日历稍后刷新。")
+        }
+      }
     } catch (reason) {
-      if (!context.signal.aborted) setError((reason as Error).message)
+      if (!context.signal.aborted) {
+        setConfirm(null)
+        const definitive =
+          reason instanceof PluginApiError &&
+          !["UPSTREAM_UNAVAILABLE", "RESULT_UNCERTAIN"].includes(reason.code)
+        if (definitive) {
+          pendingSave.current = null
+          setSaveUncertain(false)
+          try {
+            setSettings(await getCourseSync(context))
+          } catch {
+            /* Preserve the draft and the original error if settings are unavailable. */
+          }
+        } else setSaveUncertain(true)
+        setError(definitive ? (reason as Error).message : "保存结果暂未确认，请核对并重试原保存。")
+      }
     } finally {
+      saveLock.current = false
       if (!context.signal.aborted) setBusy(false)
     }
   }
   async function requestSave() {
-    if (!settings?.canManage || busy || !dirty) return
+    if (!settings?.canManage || busy) return
+    if (pendingSave.current) {
+      await persist(pendingSave.current.enabled)
+      return
+    }
+    if (!dirty) return
     setError("")
     setSavedMessage("")
     if (!enabled) {
@@ -343,7 +386,7 @@ export function AccountDialog({
     : []
   return (
     <>
-      <Overlay title="美森账号管理" onClose={onClose} busy={busy || disconnecting}>
+      <Overlay title="美森约课设置" onClose={onClose} busy={busy || disconnecting}>
         <div className="mison-account">
           {error ? (
             <Notice error className="mison-account-message">
@@ -360,7 +403,7 @@ export function AccountDialog({
                 <Button
                   className="mison-account-logout"
                   variant="outline"
-                  disabled={busy || disconnecting}
+                  disabled={busy || disconnecting || saveUncertain}
                   onClick={() => void disconnect()}
                 >
                   {disconnecting ? "正在退出…" : "退出美森登录"}
@@ -386,7 +429,7 @@ export function AccountDialog({
                   id="mison-course-sync"
                   className="mison-sync-toggle"
                   checked={enabled}
-                  disabled={busy || loading || !settings?.canManage}
+                  disabled={busy || saveUncertain || loading || !settings?.canManage}
                   onCheckedChange={(checked) => {
                     const next = checked === true
                     setEnabled(next)
@@ -417,7 +460,7 @@ export function AccountDialog({
                       step={5}
                       loop
                       value={points}
-                      disabled={busy}
+                      disabled={busy || saveUncertain}
                       onChange={setPoints}
                       required
                     />
@@ -428,22 +471,25 @@ export function AccountDialog({
                       id="mison-sync-start"
                       openDownwards
                       value={startDate}
-                      disabled={busy}
+                      disabled={busy || saveUncertain}
                       onChange={setStartDate}
                     />
                   </div>
                 </div>
               ) : null}
-              {settings?.canManage && (dirty || busy || savedMessage) ? (
+              {settings?.canManage && (dirty || busy || saveUncertain || savedMessage) ? (
                 <div className="mison-sync-actions">
                   {savedMessage ? (
                     <p className="mison-sync-saved" role="status">
                       {savedMessage}
                     </p>
                   ) : null}
-                  {dirty || busy ? (
-                    <Button disabled={busy || loading || !dirty} onClick={() => void requestSave()}>
-                      {busy ? "正在保存…" : "保存"}
+                  {dirty || busy || saveUncertain ? (
+                    <Button
+                      disabled={busy || loading || (!dirty && !saveUncertain)}
+                      onClick={() => void requestSave()}
+                    >
+                      {busy ? "正在保存…" : saveUncertain ? "核对并重试原保存" : "保存"}
                     </Button>
                   ) : null}
                 </div>

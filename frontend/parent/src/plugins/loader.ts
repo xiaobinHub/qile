@@ -1,6 +1,7 @@
 import { ApiError, runtime } from "../lib/runtime"
 import { pluginBase, pluginClient } from "./client"
 import { pluginStore } from "./store"
+import { assertFrontendProtocol, frontendHeaders } from "./protocol"
 import type { Plugin, PluginContext, PluginModule, PluginDevelopment } from "./types"
 
 export function pluginAssetUrl(value: string, pluginId: string, version: string) {
@@ -165,6 +166,7 @@ export async function mountPlugin(options: {
         "plugin_version_changed",
       )
     if (!Array.isArray(entry.styles)) throw new Error("应用资源格式不正确。")
+    assertFrontendProtocol(entry.frontendApi)
     const dev = entry.development
     const entryUrl = dev
       ? developmentUrl(entry.entry, plugin.id, dev)
@@ -197,6 +199,7 @@ export async function mountPlugin(options: {
           options?.method || "GET",
           options?.body,
           {
+            ...frontendHeaders,
             "X-Plugin-Release": entry.releaseId,
             ...(dev
               ? {

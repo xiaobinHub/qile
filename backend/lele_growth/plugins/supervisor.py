@@ -359,7 +359,7 @@ class RuntimeClient:
         remaining = min(360, int(context.get('expiresAt', 0) - time.time()))
         require(remaining >= 1, 403, '应用上下文已过期。', 'plugin_context_invalid')
         sealed = signer.issue(context, actor=context.get('actorId'), job_id=context.get('jobId'),
-                              capabilities=context.get('capabilities'), ttl=remaining)
+                              job_attempt=context.get('jobAttempt'), capabilities=context.get('capabilities'), ttl=remaining)
         from .dev_mode import invocation
         return self._request('/call', dict(context=sealed, action=action, payload=payload, timeoutSeconds=timeout,
                                           development=invocation.get()), timeout=max(15, (timeout or 10) + 10))

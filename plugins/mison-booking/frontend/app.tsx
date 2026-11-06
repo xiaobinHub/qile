@@ -1,11 +1,12 @@
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@shared/components/ui/tabs"
 import { CourseCalendar } from "./course-calendar"
+import { clearBookingSource, reloadBookingSource } from "./booking-source"
 import { operationId as newOperationId } from "./operation-id"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Card, CardHeader, CardContent } from "@shared/components/ui/card"
 import { Badge } from "@shared/components/ui/badge"
 import { Separator } from "@shared/components/ui/separator"
-import { CalendarDays, RefreshCw, Settings } from "lucide-react"
+import { RefreshCw, Settings } from "lucide-react"
 import {
   courseSyncChanged,
   createDraft,
@@ -42,7 +43,6 @@ type Switch = { teacher: Teacher; date?: string }
 export function App({ context }: { context: PluginContext }) {
   const [view, setView] = useState("teachers")
   const [calendarVisited, setCalendarVisited] = useState(false)
-  const [calendarRefresh, setCalendarRefresh] = useState(0)
   const [bootstrap, setBootstrap] = useState<Bootstrap | null>(null),
     [bootstrapError, setBootstrapError] = useState("")
   const [teachers, setTeachers] = useState<Teacher[]>([]),
@@ -107,7 +107,11 @@ export function App({ context }: { context: PluginContext }) {
     void reloadBootstrap()
   }, [reloadBootstrap])
   useEffect(
-    () => onConnectionExpired(context, () => void reloadBootstrap()),
+    () =>
+      onConnectionExpired(context, () => {
+        clearBookingSource()
+        void reloadBootstrap()
+      }),
     [context, reloadBootstrap],
   )
   const connected = bootstrap?.connection.status === "connected"
@@ -420,7 +424,7 @@ export function App({ context }: { context: PluginContext }) {
     setOperation(r)
     if (r.state === "failed" || r.state === "cancelled") submitId.current = null
     if (r.state === "succeeded") {
-      setCalendarRefresh((value) => value + 1)
+      reloadBookingSource(`${context.child.id}:${bindingRevision}`, ["upcoming"])
       setStep("success")
       setRefresh((v) => v + 1)
       void reloadBootstrap()
@@ -592,7 +596,10 @@ export function App({ context }: { context: PluginContext }) {
       if (operation?.operationId === pending.operationId) acceptOperation(value)
       if (value.result?.resource) setResource(value.result.resource)
       if (value.state === "succeeded" && ["book", "cancel"].includes(pending.kind ?? "")) {
-        setCalendarRefresh((value) => value + 1)
+        reloadBookingSource(
+          `${context.child.id}:${bindingRevision}`,
+          pending.kind === "cancel" ? ["upcoming", "cancelled"] : ["upcoming"],
+        )
         setBookingsOpen(true)
         setScheduleRefresh((n) => n + 1)
       }
@@ -648,6 +655,7 @@ export function App({ context }: { context: PluginContext }) {
     }
   }
   function accountChanged(connection: Connection) {
+    clearBookingSource()
     setView("teachers")
     setCalendarVisited(false)
     setBootstrap((old) => (old ? { ...old, connection } : old))
@@ -681,10 +689,6 @@ export function App({ context }: { context: PluginContext }) {
                 <TabsTrigger value="teachers">教师与约课</TabsTrigger>
                 <TabsTrigger value="calendar">课程日历</TabsTrigger>
               </TabsList>
-              <Button variant="outline" disabled={!connected} onClick={() => setBookingsOpen(true)}>
-                <CalendarDays />
-                我的预约{bootstrap?.upcomingCount != null ? <b>{bootstrap.upcomingCount}</b> : null}
-              </Button>
               <Button
                 variant="ghost"
                 size="icon"
@@ -865,9 +869,11 @@ export function App({ context }: { context: PluginContext }) {
                   <CourseCalendar
                     key={bindingRevision}
                     context={context}
+                    bindingRevision={bindingRevision}
                     serverDate={bootstrap.serverDate}
                     active={view === "calendar"}
-                    refresh={calendarRefresh}
+                    upcomingCount={bootstrap.upcomingCount}
+                    onBookings={() => setBookingsOpen(true)}
                     onResource={setResource}
                   />
                 ) : null}
@@ -907,13 +913,12 @@ export function App({ context }: { context: PluginContext }) {
             <BookingsDrawer
               context={context}
               bindingRevision={bindingRevision}
-              onClose={() => {
-                setBookingsOpen(false)
-                setCalendarRefresh((value) => value + 1)
-                void reloadBootstrap()
-              }}
+              onClose={() => setBookingsOpen(false)}
               onResource={setResource}
-              onScheduleChanged={() => void syncCourses()}
+              onScheduleChanged={() => {
+                void reloadBootstrap()
+                void syncCourses()
+              }}
             />
           ) : null}
           {accountOpen && bootstrap ? (

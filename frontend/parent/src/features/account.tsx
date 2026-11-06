@@ -95,6 +95,11 @@ export function Login({ message }: { message: string }) {
           </p>
         </footer>
       </Card>
+      <p className="login-filing">
+        <a href="https://beian.miit.gov.cn/" target="_blank" rel="noreferrer">
+          粤ICP备2025454655号
+        </a>
+      </p>
     </section>
   )
 }

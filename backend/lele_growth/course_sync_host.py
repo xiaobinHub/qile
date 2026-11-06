@@ -6,16 +6,22 @@ lock here; doing so after that row lock can deadlock a normal task save.
 from __future__ import annotations
 
 import copy
+import hashlib
+import hmac
+import json
 import re
-from datetime import datetime
+import uuid
+from datetime import datetime, timezone
 
 from lele_growth.child_service import ApiError, require
-from lele_growth.course_sync import SHANGHAI, CourseSyncConflict, clock, purge_incomplete, reconcile_current
+from lele_growth.course_sync import SHANGHAI, CourseSyncConflict, clock, purge_incomplete, reconcile_current, validate_settings
 from lele_growth.business_operations import uid
 from lele_growth.plugins import private_store
+from lele_growth.plugins.policy import row_dict
 
 COLLECTION = "course-sync"
 RECORD = "settings"
+RECEIPTS = "course-sync-receipts"
 PLUGIN_ID = "mison-booking"
 SAFE_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,63}\Z")
 REASONS = {
@@ -59,6 +65,61 @@ def _courses(payload):
     return courses
 
 
+def _binding(cur, scope, expected_revision, snapshot=None, *, connected=True):
+    record = private_store.get(cur, scope, 'login-session', 'current')
+    saved = record['payload'] if record else {}
+    require(type(expected_revision) is int and expected_revision == saved.get('bindingRevision', 0),
+            409, '美森账号已改变，请重新打开账号设置。', 'BINDING_CHANGED')
+    if not connected:
+        return
+    require(isinstance(saved.get('credentialId'), str), 409, '请先登录美森账号。', 'RECONNECT_REQUIRED')
+    cur.execute("SELECT revision,state,expires_at,provider FROM lele.plugin_credentials WHERE id=%s AND child_id=%s AND plugin_id=%s",
+                (saved['credentialId'], scope['child_id'], scope['plugin_id']))
+    credential = row_dict(cur)
+    require(credential and credential['provider'] == 'mison' and credential['state'] == 'active'
+            and credential['expires_at'] and credential['expires_at'] > datetime.now(timezone.utc),
+            409, '美森登录已失效，请重新登录。', 'RECONNECT_REQUIRED')
+    if snapshot is not None:
+        require(snapshot.get('bindingRevision') == expected_revision
+                and snapshot.get('credentialId') == saved['credentialId']
+                and type(snapshot.get('credentialRevision')) is int
+                and snapshot['credentialRevision'] == credential['revision']
+                and snapshot.get('accountId') == saved.get('userid'),
+                409, '美森账号已改变，本次课程没有同步。', 'BINDING_CHANGED')
+
+
+def _save_request(cur, scope, actor_id, payload, revision):
+    request = payload.get('request')
+    fields = {'operationId', 'expectedRevision', 'bindingRevision', 'enabled', 'points', 'startDate'}
+    require(isinstance(request, dict) and set(request) == fields, 400, '同步设置不正确。', 'VALIDATION_ERROR')
+    try:
+        operation_id = str(uuid.UUID(request['operationId']))
+    except (ValueError, TypeError, AttributeError):
+        require(False, 400, '同步操作标识不正确。', 'VALIDATION_ERROR')
+    require(type(request['expectedRevision']) is int and request['expectedRevision'] >= 0
+            and type(request['bindingRevision']) is int and request['bindingRevision'] >= 0
+            and type(request['enabled']) is bool, 400, '同步设置不正确。', 'VALIDATION_ERROR')
+    try:
+        encoded = json.dumps(request, sort_keys=True, separators=(',', ':'), allow_nan=False).encode()
+    except (ValueError, TypeError):
+        raise ApiError(400, '同步设置不正确。', 'VALIDATION_ERROR') from None
+    digest = hashlib.sha256(encoded).hexdigest()
+    receipt = private_store.get(cur, scope, RECEIPTS, operation_id)
+    if receipt:
+        saved = receipt['payload']
+        require(saved['actorId'] == actor_id and hmac.compare_digest(saved['requestHash'], digest),
+                409, '操作编号已用于其他同步请求。', 'OPERATION_CONFLICT')
+        return request, operation_id, digest, copy.deepcopy(saved['result'])
+    require(request['expectedRevision'] == revision, 409, '同步设置已改变，请重新核对后保存。', 'REVISION_CONFLICT')
+    if request['enabled']:
+        try:
+            validate_settings(request['points'], request['startDate'])
+        except CourseSyncConflict as error:
+            raise ApiError(400, str(error), error.code) from None
+    _binding(cur, scope, request['bindingRevision'], connected=request['enabled'])
+    return request, operation_id, digest, None
+
+
 def _commit(service, cur, child_id, current, data, actor_id, action):
     if data == current["data"]:
         return current
@@ -96,22 +157,40 @@ def handle(service, cur, scope, request_context, action, payload):
         require(owner or request_context.get("jobId"), 403, "只有儿童负责人可以设置课程同步。", "OWNER_REQUIRED")
         removed = purge_saved(service, cur, child_id, actor_id, payload.get("accountId"))
         return {"ok": True, "data": {"state": "purged", "removed": removed}}
-    require(action in ("courseSync.preview", "courseSync.save", "courseSync.run"), 400, "课程同步动作不存在。", "plugin_bridge_action_unavailable")
+    require(action in ("courseSync.check", "courseSync.preview", "courseSync.save", "courseSync.run"), 400, "课程同步动作不存在。", "plugin_bridge_action_unavailable")
     if action != "courseSync.run":
         require(owner, 403, "只有儿童负责人可以设置课程同步。", "OWNER_REQUIRED")
         require(not archived, 409, _reason_message("archived"), "archived")
     stored, revision = _settings(cur, scope)
-    if action == "courseSync.save" and payload.get("enabled") is False:
+    request = None
+    if action in ('courseSync.check', 'courseSync.save'):
+        request, operation_id, request_hash, replay = _save_request(cur, scope, actor_id, payload, revision)
+        if action == 'courseSync.check':
+            return {'ok': True, 'data': {'replay': replay is not None, 'result': replay}}
+        if replay is not None:
+            return {'ok': True, 'data': replay}
+    if action == "courseSync.save" and request['enabled'] is False:
         updated = {**stored, "enabled": False}
         current = service.store.read(cur, child_id, locked=True)
         purged, removed = purge_incomplete(current["data"])
         _commit(service, cur, child_id, current, purged, actor_id, "course.sync.disable")
         _store_settings(cur, scope, updated, revision)
-        return {"ok": True, "data": {"state": "disabled", "removed": removed, "revision": revision + 1}}
+        summary = {"state": "disabled", "removed": removed, "revision": revision + 1}
+        private_store.put(cur, scope, RECEIPTS, operation_id,
+                          {'actorId': actor_id, 'requestHash': request_hash, 'result': summary}, expected_revision=0)
+        return {"ok": True, "data": summary}
+    if action == 'courseSync.run':
+        if not stored.get('enabled'):
+            return {'ok': True, 'data': {'state': 'disabled'}}
+        if type(payload.get('settingsRevision')) is not int or payload['settingsRevision'] != revision:
+            return {'ok': True, 'data': {'state': 'paused', 'reason': 'settings-changed'}}
+    expected_binding = request['bindingRevision'] if request else payload.get('bindingRevision')
+    _binding(cur, scope, expected_binding, payload)
     account_id = _identity(payload, "accountId")
     contract_id = _identity(payload, "contractId")
-    points = payload.get("points", stored.get("points"))
-    start_date = payload.get("startDate", stored.get("startDate"))
+    parameters = stored if action == 'courseSync.run' else request if request is not None else payload
+    points = parameters.get('points')
+    start_date = parameters.get('startDate')
     courses = _courses(payload)
     list_complete = payload.get("listComplete") is True
     contract_error = payload.get("contractError")
@@ -142,6 +221,9 @@ def handle(service, cur, scope, request_context, action, payload):
         _store_settings(cur, scope, {"enabled": True, "points": points, "startDate": start_date,
                                       "accountId": account_id, "contractId": contract_id}, revision)
         summary["revision"] = revision + 1
+    if action == 'courseSync.save':
+        private_store.put(cur, scope, RECEIPTS, operation_id,
+                          {'actorId': actor_id, 'requestHash': request_hash, 'result': summary}, expected_revision=0)
     return {"ok": True, "data": summary}
 
 

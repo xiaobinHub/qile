@@ -99,8 +99,10 @@ def _sync_payload(context, body, *, enabled):
     except AuthError as error:
         return _paused(error)
     return {'enabled': enabled, 'courses': lessons, 'accountId': str(client.session['userid']),
-            'contractId': contract['id'], 'listComplete': True, 'points': body.get('points'),
-            'startDate': body.get('startDate')}
+            'contractId': contract['id'], 'listComplete': True,
+            'credentialId': client.session['credentialId'], 'credentialRevision': client.session['credentialRevision'],
+            'bindingRevision': client.session['bindingRevision'],
+            **{key: body[key] for key in ('points', 'startDate') if key in body}}
 
 
 def _raise_paused(payload):
@@ -124,16 +126,19 @@ def preview(context, body):
 
 
 def save(context, body):
-    if set(body) != {'operationId', 'enabled', 'points', 'startDate'} or type(body.get('enabled')) is not bool:
+    if set(body) != {'operationId', 'expectedRevision', 'bindingRevision', 'enabled', 'points', 'startDate'} or type(body.get('enabled')) is not bool:
         raise AuthError('VALIDATION_ERROR', '同步设置不正确。')
     from . import drafts
     drafts.uid(body['operationId'])
+    checked = bridge(context, 'courseSync.check', {'request': body})
+    if checked['replay']:
+        return checked['result']
     if body['enabled'] is False:
-        return bridge(context, 'courseSync.save', {'enabled': False})
+        return bridge(context, 'courseSync.save', {'request': body})
     payload = _sync_payload(context, body, enabled=True)
     if payload.get('state') == 'paused':
         _raise_paused(payload)
-    return bridge(context, 'courseSync.save', payload)
+    return bridge(context, 'courseSync.save', {**payload, 'request': body})
 
 
 def _run(context):
@@ -143,7 +148,7 @@ def _run(context):
     payload = _sync_payload(context, {}, enabled=True)
     if payload.get('state') == 'paused':
         return payload
-    return bridge(context, 'courseSync.run', payload)
+    return bridge(context, 'courseSync.run', {**payload, 'settingsRevision': settings['revision']})
 
 
 def run_now(context, body):

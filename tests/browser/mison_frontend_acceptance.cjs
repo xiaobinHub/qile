@@ -30,19 +30,59 @@ async function main() {
   const server = await createServer({
     configFile: path.join(root, "frontend/parent/vite.config.mts"),
     cacheDir: path.join(out, "vite-cache"),
+    plugins: [
+      {
+        name: "mison-test-media",
+        configureServer(server) {
+          // Chromium's native download bypasses Playwright request routing.
+          // Serve the synthetic PDF over HTTP, including its attachment headers.
+          server.middlewares.use((request, response, next) => {
+            const url = new URL(request.url, "http://fixture.local")
+            if (
+              !(touchAcceptance || calendarAcceptance) ||
+              url.pathname !== "/api/children/a/plugins/mison-booking/media/fixture-pdf"
+            )
+              return next()
+            assert.ok(["GET", "HEAD"].includes(request.method), "Fixture PDF is read-only")
+            const data = require("./ipad_touch_acceptance.cjs").pdfFixture()
+            const filename = url.searchParams.get("filename")
+            response.writeHead(200, {
+              "Content-Type": "application/pdf",
+              "Content-Length": String(data.length),
+              "Content-Disposition": filename
+                ? `attachment; filename="courseware.pdf"; filename*=UTF-8''${encodeURIComponent(filename)}`
+                : "inline; filename=courseware.pdf",
+            })
+            response.end(request.method === "HEAD" ? undefined : data)
+          })
+        },
+      },
+    ],
     server: {
       host: "127.0.0.1",
       port: development ? 18896 : 0,
       strictPort: true,
       open: false,
-      proxy: sourceServer
-        ? {
-            [base]: {
-              target: `http://127.0.0.1:${sourceServer.httpServer.address().port}`,
-              ws: true,
-            },
-          }
-        : undefined,
+      proxy: {
+        ...(sourceServer
+          ? {
+              [base]: {
+                target: `http://127.0.0.1:${sourceServer.httpServer.address().port}`,
+                ws: true,
+              },
+            }
+          : {}),
+        ...(installedBuild
+          ? {
+              // Keep media on the fixture origin while reading the actual installed
+              // host assets. Never proxy API or plugin business requests upstream.
+              "^/(?!api(?:/|$)|plugin-assets(?:/|$)|__plugin-dev(?:/|$))": {
+                target: installedBuild,
+                changeOrigin: true,
+              },
+            }
+          : {}),
+      },
     },
   })
   let browser
@@ -70,6 +110,8 @@ async function main() {
     paginationCalls = 0
   let lastBookingOperationId = null,
     restoredPending = null
+  let dropSyncResponse = false
+  const syncRequests = []
   const version = JSON.parse(
     fs.readFileSync(path.join(root, "plugins/mison-booking/plugin.json")),
   ).version
@@ -131,7 +173,7 @@ async function main() {
     knownWarnings = []
   try {
     await server.listen()
-    const origin = installedBuild || `http://127.0.0.1:${server.httpServer.address().port}`
+    const origin = `http://127.0.0.1:${server.httpServer.address().port}`
     const entryUrl = `${origin}${installedBuild ? "/" : "/parent-assets/"}`
     browser = await engine.launch({ headless: true })
     const browserContext = await browser.newContext({
@@ -151,8 +193,7 @@ async function main() {
         url = new URL(req.url()),
         json = (value) => route.fulfill({ json: value })
       if ((touchAcceptance || calendarAcceptance) && url.pathname.endsWith("/media/fixture-pdf")) {
-        const data = require("./ipad_touch_acceptance.cjs").pdfFixture()
-        return route.fulfill({ contentType: "application/pdf", body: data })
+        return route.continue()
       }
       if (url.pathname.endsWith("/media/fixture-video")) {
         const data = fs.readFileSync(path.join(root, "tests/fixtures/mison/teacher-intro.mp4"))
@@ -193,6 +234,7 @@ async function main() {
       const prefix = "/api/children/a/plugins/mison-booking/runtime/"
       if (url.pathname.startsWith(prefix)) {
         assert.equal(req.headers()["x-plugin-release"], releaseId)
+        assert.equal(req.headers()["x-plugin-frontend-api"], "1.1")
         if (development) {
           assert.equal(req.headers()["x-plugin-dev-session"], session)
           assert.equal(req.headers()["x-plugin-dev-revision"], "1")
@@ -213,11 +255,7 @@ async function main() {
           assert.equal(options.method, "GET")
           return json(await calendarFixture.resources(relative))
         }
-        if (
-          calendarFixture &&
-          relative.startsWith("bookings?") &&
-          new URLSearchParams(relative.split("?")[1]).get("pageSize") === "50"
-        )
+        if (calendarFixture && relative.startsWith("bookings/pages?"))
           return json(await calendarFixture.handle(relative))
         if (options.body?.operationId)
           assert.match(
@@ -307,7 +345,23 @@ async function main() {
         }
         if (touchAcceptance) {
           const name = relative.split("?")[0]
-          if (name === "teachers" || (name === "bookings" && req.method() === "GET")) {
+          if (name === "bookings/pages" && req.method() === "GET") {
+            const items = response.data.items || []
+            const status = new URLSearchParams(relative.split("?")[1] || "").get("status")
+            const count = items.length ? 60 : 0
+            response.data.items = Array.from({ length: count }, (_, index) => {
+              const offset = status === "upcoming" ? index : 400 - index
+              const day = 1 + Math.floor(offset / 2)
+              const month = 9 + Math.floor((day - 1) / 28)
+              const dayOfMonth = ((day - 1) % 28) + 1
+              return {
+                ...items[index % items.length],
+                key: `touch-booking-${status}-${index}`,
+                startsAt: `2026-${String(month).padStart(2, "0")}-${String(dayOfMonth).padStart(2, "0")}T${index % 2 ? "10:30" : "10:00"}:00+08:00`,
+              }
+            })
+            response.data.complete = true
+          } else if (name === "teachers" || (name === "bookings" && req.method() === "GET")) {
             const items = response.data.items
             const count = !items.length
               ? 0
@@ -410,6 +464,16 @@ async function main() {
                 message: "模拟预约已接受但响应结果不明",
               },
             })
+        }
+        if (relative === "course-sync" && options.method === "POST") {
+          syncRequests.push(structuredClone(options.body))
+          if (dropSyncResponse) {
+            dropSyncResponse = false
+            return json({
+              ok: false,
+              error: { code: "UPSTREAM_UNAVAILABLE", message: "Committed fixture response lost" },
+            })
+          }
         }
         return json(response)
       }
@@ -1394,7 +1458,7 @@ async function main() {
       await screenshot(`responsive-${width}`)
     }
     await page.getByRole("button", { name: "账号设置", exact: true }).click()
-    const accountDialog = page.getByRole("dialog", { name: "美森账号管理" })
+    const accountDialog = page.getByRole("dialog", { name: "美森约课设置" })
     assert.equal(await accountDialog.getByText(/家人共享使用/).count(), 0)
     assert.equal(
       await accountDialog.getByRole("button", { name: "更换账号 / 重新登录" }).count(),
@@ -1405,6 +1469,16 @@ async function main() {
         .width <
         (await accountDialog.boundingBox()).width / 2,
     )
+    await require("./mison_sync_settings_acceptance.cjs").exerciseSyncSettings({
+      page,
+      dialog: accountDialog,
+      api: fixtureApi,
+      requests: syncRequests,
+      out,
+      dropNext: () => {
+        dropSyncResponse = true
+      },
+    })
     await page.getByRole("button", { name: "退出美森登录", exact: true }).click()
     await page.getByRole("heading", { name: "请登录美森网课账号" }).waitFor()
     await loginForm.getByLabel("账号", { exact: true }).fill("ui-test")
@@ -1437,7 +1511,11 @@ async function main() {
         document.querySelector(".plugin-overlay")?.hasAttribute("hidden"),
     )
     assert.equal(
-      await page.locator(".plugin-overlay:not([hidden]) [data-slot='sheet-overlay'], .plugin-overlay:not([hidden]) [data-slot='dialog-overlay']").count(),
+      await page
+        .locator(
+          ".plugin-overlay:not([hidden]) [data-slot='sheet-overlay'], .plugin-overlay:not([hidden]) [data-slot='dialog-overlay']",
+        )
+        .count(),
       0,
     )
     await page.waitForFunction(
@@ -1482,6 +1560,7 @@ async function main() {
             "uncertain login checks without resend",
             "login axe and mobile layout",
             "logout returns to login",
+            "sync settings: exact uncertain retry, authoritative reread, revision conflict and explicit resave",
             "full-width entry",
             "shared calendar date picker",
             "multi-select time panel and CSV API query",

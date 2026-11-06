@@ -91,6 +91,14 @@ export type CourseSyncSummary = {
   skipped?: number
   revision?: number
 }
+export type CourseSyncSaveRequest = {
+  operationId: string
+  expectedRevision: number
+  bindingRevision: number
+  enabled: boolean
+  points: number
+  startDate: string
+}
 export const courseSyncChanged = (summary: CourseSyncSummary) =>
   (["added", "removed", "newlyCompleted", "points", "clawback"] as const).some(
     (key) => Number(summary[key] || 0) > 0,
@@ -101,9 +109,7 @@ export const previewCourseSync = (
   context: PluginContextLike,
   body: { points: number; startDate: string },
 ) => request<CourseSyncSummary>(context, "course-sync/preview", { method: "POST", body })
-export const saveCourseSync = (
-  context: PluginContextLike,
-  body: { operationId: string; enabled: boolean; points: number; startDate: string },
-) => request<CourseSyncSummary>(context, "course-sync", { method: "POST", body })
+export const saveCourseSync = (context: PluginContextLike, body: CourseSyncSaveRequest) =>
+  request<CourseSyncSummary>(context, "course-sync", { method: "POST", body })
 export const runCourseSync = (context: PluginContextLike, operationId: string) =>
   request<CourseSyncSummary>(context, "course-sync/run", { method: "POST", body: { operationId } })

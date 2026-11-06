@@ -21,7 +21,7 @@ class PluginPackageTests(unittest.TestCase):
         manifest=json.loads((PROJECT_ROOT/'plugins/growth-notes/plugin.json').read_text())
         source=self.root/'plugins/growth-notes'; source.mkdir(parents=True)
         (source/'plugin.json').write_text(json.dumps(manifest))
-        built=self.root/'output/plugin-releases/growth-notes/1.0.0/build'; built.mkdir(parents=True)
+        built=self.root/'output/plugin-releases/growth-notes'/manifest['version']/'build'; built.mkdir(parents=True)
         (built/'plugin.json').write_text(json.dumps(manifest))
         (built/'frontend').mkdir(); (built/'schemas').mkdir()
         (built/'frontend/entry.js').write_text('export function mount() { return () => {} }')
@@ -85,7 +85,8 @@ class PluginPackageTests(unittest.TestCase):
 
     def test_ignored_stale_output_is_rebuilt_from_current_source(self):
         builder=self.root/'scripts/build_plugin.mjs'
-        builder.write_text("import fs from 'node:fs';fs.writeFileSync('output/plugin-releases/growth-notes/1.0.0/build/frontend/entry.js','export const currentSource=true;');")
+        entry=(self.built/'frontend/entry.js').relative_to(self.root).as_posix()
+        builder.write_text("import fs from 'node:fs';fs.writeFileSync("+json.dumps(entry)+",'export const currentSource=true;');")
         (self.root/'.gitignore').write_text('output/\n')
         subprocess.run(['git','rm','-r','--cached','output'],cwd=self.root,check=True,capture_output=True)
         subprocess.run(['git','add','scripts/build_plugin.mjs','.gitignore'],cwd=self.root,check=True,capture_output=True)
