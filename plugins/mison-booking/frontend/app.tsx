@@ -4,6 +4,7 @@ import { clearBookingSource, reloadBookingSource } from "./booking-source"
 import { operationId as newOperationId } from "./operation-id"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Card, CardHeader, CardContent } from "@shared/components/ui/card"
+import { Skeleton } from "@shared/components/ui/skeleton"
 import { Badge } from "@shared/components/ui/badge"
 import { Separator } from "@shared/components/ui/separator"
 import { RefreshCw, Settings } from "lucide-react"
@@ -40,6 +41,41 @@ import type {
 } from "./types"
 
 type Switch = { teacher: Teacher; date?: string }
+
+function StartupSkeleton() {
+  return (
+    <div className="mison-startup" role="status" aria-busy="true">
+      <p className="sr-only">正在加载美森约课</p>
+      <div className="mison-startup-header">
+        <Skeleton className="h-8 w-28" />
+        <Skeleton className="h-8 w-24" />
+        <Skeleton className="ml-auto size-9 rounded-full" />
+      </div>
+      <div className="mison-startup-filters">
+        <Skeleton className="h-9 w-[200px]" />
+        <Skeleton className="h-9 w-[200px]" />
+        <Skeleton className="h-9 w-[200px]" />
+        <Skeleton className="ml-auto h-9 w-16" />
+      </div>
+      <div className="mison-startup-heading">
+        <Skeleton className="h-6 w-32" />
+      </div>
+      <div className="mison-startup-grid">
+        {Array.from({ length: 4 }, (_, index) => (
+          <div key={index} className="mison-startup-card">
+            <Skeleton className="size-20 rounded-full" />
+            <div className="mison-startup-copy">
+              <Skeleton className="h-5 w-24" />
+              <Skeleton className="h-4 w-40" />
+              <Skeleton className="h-4 w-28" />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 export function App({ context }: { context: PluginContext }) {
   const [view, setView] = useState("teachers")
   const [calendarVisited, setCalendarVisited] = useState(false)
@@ -54,6 +90,8 @@ export function App({ context }: { context: PluginContext }) {
   const [nextCursor, setNextCursor] = useState<string | null>(null),
     [total, setTotal] = useState<number | null>(null)
   const [listLoading, setListLoading] = useState(false),
+    [teachersReady, setTeachersReady] = useState(false),
+    [listEpoch, setListEpoch] = useState(0),
     [error, setError] = useState("")
   const [expanded, setExpanded] = useState(false),
     [schedule, setSchedule] = useState<TeacherSchedule | null>(null)
@@ -233,8 +271,10 @@ export function App({ context }: { context: PluginContext }) {
         if (seq === listGeneration.current && !context.signal.aborted && live.current)
           setError((e as Error).message)
       } finally {
-        if (seq === listGeneration.current && !context.signal.aborted && live.current)
+        if (seq === listGeneration.current && !context.signal.aborted && live.current) {
           setListLoading(false)
+          if (!cursor) setTeachersReady(true)
+        }
       }
     },
     [context, query, bindingRevision],
@@ -247,7 +287,7 @@ export function App({ context }: { context: PluginContext }) {
     return () => {
       listGeneration.current++
     }
-  }, [connected, loadTeachers, refresh])
+  }, [connected, loadTeachers, refresh, listEpoch])
   useEffect(() => {
     let alive = true
     if (connected)
@@ -663,6 +703,8 @@ export function App({ context }: { context: PluginContext }) {
     setAccountOpen(false)
     setBookingsOpen(false)
     listGeneration.current++
+    setTeachersReady(false)
+    setListEpoch((value) => value + 1)
     setTeachers([])
     setTeacher(null)
     setSchedule(null)
@@ -683,218 +725,224 @@ export function App({ context }: { context: PluginContext }) {
         }}
       >
         <Card className="mison-booking gap-0 py-0" data-viewport-contained ref={root}>
-          {connected ? (
-            <CardHeader className="mison-header">
-              <TabsList aria-label="美森约课功能" className="mison-page-tabs">
-                <TabsTrigger value="teachers">教师与约课</TabsTrigger>
-                <TabsTrigger value="calendar">课程日历</TabsTrigger>
-              </TabsList>
-              <Button
-                variant="ghost"
-                size="icon"
-                aria-label="账号设置"
-                title="账号设置"
-                onClick={() => setAccountOpen(true)}
-                disabled={!bootstrap || frozen}
-              >
-                <Settings />
-              </Button>
-            </CardHeader>
-          ) : null}
-          {connected ? <Separator /> : null}
-          {bootstrapError ? (
-            <Notice error>
-              {bootstrapError}
-              <Button variant="outline" onClick={() => void reloadBootstrap()}>
-                <RefreshCw />
-                重试连接
-              </Button>
-            </Notice>
-          ) : null}
-          {syncError ? <Notice error>{syncError}</Notice> : null}
-          {connected ? (
+          {(!bootstrap && !bootstrapError) || (connected && !teachersReady) ? (
+            <StartupSkeleton />
+          ) : (
             <>
-              {bootstrap.readError ? <Notice error>{bootstrap.readError}</Notice> : null}
-              {bootstrap.unresolvedOperations?.map((item) => (
-                <Notice key={item.operationId}>
-                  {item.kind === "book"
-                    ? "上次预约"
-                    : item.kind === "cancel"
-                      ? "上次取消"
-                      : "上次课件操作"}
-                  结果待核对，请勿重复操作。
+              {connected ? (
+                <CardHeader className="mison-header">
+                  <TabsList aria-label="美森约课功能" className="mison-page-tabs">
+                    <TabsTrigger value="teachers">教师与约课</TabsTrigger>
+                    <TabsTrigger value="calendar">课程日历</TabsTrigger>
+                  </TabsList>
                   <Button
-                    variant="outline"
-                    disabled={busy}
-                    onClick={() => void checkSavedOperation(item)}
+                    variant="ghost"
+                    size="icon"
+                    aria-label="账号设置"
+                    title="账号设置"
+                    onClick={() => setAccountOpen(true)}
+                    disabled={!bootstrap || frozen}
                   >
-                    核对上次操作
+                    <Settings />
                   </Button>
-                  <Button variant="ghost" disabled={busy} onClick={() => setEndPending(item)}>
-                    结束核对
+                </CardHeader>
+              ) : null}
+              {connected ? <Separator /> : null}
+              {bootstrapError ? (
+                <Notice error>
+                  {bootstrapError}
+                  <Button variant="outline" onClick={() => void reloadBootstrap()}>
+                    <RefreshCw />
+                    重试连接
                   </Button>
                 </Notice>
-              ))}
-              <TabsContent
-                value="teachers"
-                forceMount
-                hidden={view !== "teachers"}
-                className="mison-teachers-view"
-              >
-                <TeacherFilterBar
-                  value={filters}
-                  onChange={changeFilters}
-                  options={options}
-                  onSearch={() => {
-                    setSearch(filters.nickname.trim())
-                    setRefresh((v) => v + 1)
-                  }}
-                  onReset={() => {
-                    setFilters({ ...emptyFilters, favoritesOnly: filters.favoritesOnly })
-                    setSearch("")
-                  }}
-                />
-                <Separator />
-                {error ? (
-                  <Notice error>
-                    {error}
-                    {coursePending ? (
+              ) : null}
+              {syncError ? <Notice error>{syncError}</Notice> : null}
+              {connected ? (
+                <>
+                  {bootstrap.readError ? <Notice error>{bootstrap.readError}</Notice> : null}
+                  {bootstrap.unresolvedOperations?.map((item) => (
+                    <Notice key={item.operationId}>
+                      {item.kind === "book"
+                        ? "上次预约"
+                        : item.kind === "cancel"
+                          ? "上次取消"
+                          : "上次课件操作"}
+                      结果待核对，请勿重复操作。
                       <Button
                         variant="outline"
                         disabled={busy}
-                        onClick={() => void reconcileCourse()}
+                        onClick={() => void checkSavedOperation(item)}
                       >
-                        核对课件操作
+                        核对上次操作
                       </Button>
-                    ) : null}
-                  </Notice>
-                ) : null}
-                <CardContent className={`mison-workspace p-0${expanded ? " is-expanded" : ""}`}>
-                  <TeacherList
-                    teachers={teachers}
-                    selectedId={teacher?.id ?? null}
-                    expanded={expanded}
-                    total={total}
-                    loading={listLoading}
-                    nextCursor={nextCursor}
-                    paginationKey={`${query}:${refresh}`}
-                    onMore={() => void loadTeachers(nextCursor)}
-                    onBook={book}
-                    onProfile={setProfile}
-                    onFavorite={(t) => void favorite(t)}
-                    favoriteBusy={favoriteBusy}
-                  />
-                  {expanded ? (
-                    <Separator orientation="vertical" className="mison-workspace-divider" />
-                  ) : null}
-                  {expanded && teacher ? (
-                    <SchedulePanel
-                      teacher={teacher}
-                      schedule={schedule}
-                      selected={selected}
-                      step={step}
-                      draft={draft}
-                      loading={scheduleLoading}
-                      requestedDate={date}
-                      slotTimes={options?.timeSlots ?? []}
-                      loadError={scheduleError}
-                      onRetry={() => setScheduleRefresh((n) => n + 1)}
-                      busy={busy}
-                      blocked={frozen}
-                      contiguous={contiguous}
-                      limit={bootstrap.bookingLimits.maxContiguousLessons}
-                      operation={operation}
-                      onSlot={(start) => {
-                        if (
-                          frozen ||
-                          scheduleLoading ||
-                          scheduleError ||
-                          selectionBeforeWarning !== null
-                        )
-                          return
-                        const nextSelected = selected.includes(start)
-                          ? selected.filter((value) => value !== start)
-                          : [...selected, start].sort()
-                        const nextContiguous = nextSelected.every(
-                          (value, index) =>
-                            index === 0 ||
-                            minutes(value) - minutes(nextSelected[index - 1]) ===
-                              schedule?.slotStepMinutes,
-                        )
-                        if (!nextContiguous) setSelectionBeforeWarning(selected)
-                        setSelected(nextSelected)
-                        draftOperationId.current = null
-                        submitId.current = null
+                      <Button variant="ghost" disabled={busy} onClick={() => setEndPending(item)}>
+                        结束核对
+                      </Button>
+                    </Notice>
+                  ))}
+                  <TabsContent
+                    value="teachers"
+                    forceMount
+                    hidden={view !== "teachers"}
+                    className="mison-teachers-view"
+                  >
+                    <TeacherFilterBar
+                      value={filters}
+                      onChange={changeFilters}
+                      options={options}
+                      onSearch={() => {
+                        setSearch(filters.nickname.trim())
+                        setRefresh((v) => v + 1)
                       }}
-                      onDate={(value) => book(teacher, value)}
-                      onClear={() => {
-                        if (frozen) return
-                        setSelected([])
-                        setDraft(null)
-                        draftOperationId.current = null
+                      onReset={() => {
+                        setFilters({ ...emptyFilters, favoritesOnly: filters.favoritesOnly })
+                        setSearch("")
                       }}
-                      onNext={() => void next()}
-                      onBack={() => setStep("schedule")}
-                      onSubmit={() => void submit()}
-                      onCollapse={collapse}
-                      onProfile={() => setProfile(teacher)}
-                      onChange={(start) => {
-                        if (!coursePending) setCourseStart(start)
-                      }}
-                      onPreview={(start) => void previewCourse(start)}
-                      onContinue={() => {
-                        setError("")
-                        setScheduleRefresh((v) => v + 1)
-                        setSelected([])
-                        setDraft(null)
-                        setOperation(null)
-                        setStep("schedule")
-                        submitId.current = null
-                        draftOperationId.current = null
-                        setDate(schedule?.date)
-                      }}
-                      onBookings={() => setBookingsOpen(true)}
-                      onReconcile={() => void reconcile()}
                     />
-                  ) : null}
-                </CardContent>
-              </TabsContent>
-              <TabsContent
-                value="calendar"
-                forceMount
-                hidden={view !== "calendar"}
-                className="mison-calendar-tab"
-              >
-                {calendarVisited ? (
-                  <CourseCalendar
-                    key={bindingRevision}
-                    context={context}
-                    bindingRevision={bindingRevision}
-                    serverDate={bootstrap.serverDate}
-                    active={view === "calendar"}
-                    upcomingCount={bootstrap.upcomingCount}
-                    onBookings={() => setBookingsOpen(true)}
-                    onResource={setResource}
-                  />
-                ) : null}
-              </TabsContent>
+                    <Separator />
+                    {error ? (
+                      <Notice error>
+                        {error}
+                        {coursePending ? (
+                          <Button
+                            variant="outline"
+                            disabled={busy}
+                            onClick={() => void reconcileCourse()}
+                          >
+                            核对课件操作
+                          </Button>
+                        ) : null}
+                      </Notice>
+                    ) : null}
+                    <CardContent className={`mison-workspace p-0${expanded ? " is-expanded" : ""}`}>
+                      <TeacherList
+                        teachers={teachers}
+                        selectedId={teacher?.id ?? null}
+                        expanded={expanded}
+                        total={total}
+                        loading={listLoading}
+                        nextCursor={nextCursor}
+                        paginationKey={`${query}:${refresh}`}
+                        onMore={() => void loadTeachers(nextCursor)}
+                        onBook={book}
+                        onProfile={setProfile}
+                        onFavorite={(t) => void favorite(t)}
+                        favoriteBusy={favoriteBusy}
+                      />
+                      {expanded ? (
+                        <Separator orientation="vertical" className="mison-workspace-divider" />
+                      ) : null}
+                      {expanded && teacher ? (
+                        <SchedulePanel
+                          teacher={teacher}
+                          schedule={schedule}
+                          selected={selected}
+                          step={step}
+                          draft={draft}
+                          loading={scheduleLoading}
+                          requestedDate={date}
+                          slotTimes={options?.timeSlots ?? []}
+                          loadError={scheduleError}
+                          onRetry={() => setScheduleRefresh((n) => n + 1)}
+                          busy={busy}
+                          blocked={frozen}
+                          contiguous={contiguous}
+                          limit={bootstrap.bookingLimits.maxContiguousLessons}
+                          operation={operation}
+                          onSlot={(start) => {
+                            if (
+                              frozen ||
+                              scheduleLoading ||
+                              scheduleError ||
+                              selectionBeforeWarning !== null
+                            )
+                              return
+                            const nextSelected = selected.includes(start)
+                              ? selected.filter((value) => value !== start)
+                              : [...selected, start].sort()
+                            const nextContiguous = nextSelected.every(
+                              (value, index) =>
+                                index === 0 ||
+                                minutes(value) - minutes(nextSelected[index - 1]) ===
+                                  schedule?.slotStepMinutes,
+                            )
+                            if (!nextContiguous) setSelectionBeforeWarning(selected)
+                            setSelected(nextSelected)
+                            draftOperationId.current = null
+                            submitId.current = null
+                          }}
+                          onDate={(value) => book(teacher, value)}
+                          onClear={() => {
+                            if (frozen) return
+                            setSelected([])
+                            setDraft(null)
+                            draftOperationId.current = null
+                          }}
+                          onNext={() => void next()}
+                          onBack={() => setStep("schedule")}
+                          onSubmit={() => void submit()}
+                          onCollapse={collapse}
+                          onProfile={() => setProfile(teacher)}
+                          onChange={(start) => {
+                            if (!coursePending) setCourseStart(start)
+                          }}
+                          onPreview={(start) => void previewCourse(start)}
+                          onContinue={() => {
+                            setError("")
+                            setScheduleRefresh((v) => v + 1)
+                            setSelected([])
+                            setDraft(null)
+                            setOperation(null)
+                            setStep("schedule")
+                            submitId.current = null
+                            draftOperationId.current = null
+                            setDate(schedule?.date)
+                          }}
+                          onBookings={() => setBookingsOpen(true)}
+                          onReconcile={() => void reconcile()}
+                        />
+                      ) : null}
+                    </CardContent>
+                  </TabsContent>
+                  <TabsContent
+                    value="calendar"
+                    forceMount
+                    hidden={view !== "calendar"}
+                    className="mison-calendar-tab"
+                  >
+                    {calendarVisited ? (
+                      <CourseCalendar
+                        key={bindingRevision}
+                        context={context}
+                        bindingRevision={bindingRevision}
+                        serverDate={bootstrap.serverDate}
+                        active={view === "calendar"}
+                        upcomingCount={bootstrap.upcomingCount}
+                        onBookings={() => setBookingsOpen(true)}
+                        onResource={setResource}
+                      />
+                    ) : null}
+                  </TabsContent>
+                </>
+              ) : bootstrap ? (
+                <section className="mison-login" aria-labelledby="mison-login-title">
+                  <div className="mison-login-panel">
+                    <h2 id="mison-login-title">请登录美森网课账号</h2>
+                    {bootstrap.connection.status === "reconnect_required" ? (
+                      <p className="mison-caption">登录已过期，请重新登录。</p>
+                    ) : null}
+                    <LoginForm
+                      context={context}
+                      connection={bootstrap.connection}
+                      onSuccess={accountChanged}
+                    />
+                  </div>
+                </section>
+              ) : (
+                <Empty title="暂时无法连接美森约课" />
+              )}
             </>
-          ) : bootstrap ? (
-            <section className="mison-login" aria-labelledby="mison-login-title">
-              <div className="mison-login-panel">
-                <h2 id="mison-login-title">请登录美森网课账号</h2>
-                {bootstrap.connection.status === "reconnect_required" ? (
-                  <p className="mison-caption">登录已过期，请重新登录。</p>
-                ) : null}
-                <LoginForm
-                  context={context}
-                  connection={bootstrap.connection}
-                  onSuccess={accountChanged}
-                />
-              </div>
-            </section>
-          ) : (
-            <Empty title={bootstrapError ? "暂时无法连接美森约课" : "正在读取美森约课…"} />
           )}
           {profile ? (
             <ProfileDrawer

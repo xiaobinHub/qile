@@ -162,6 +162,7 @@ a {
   transition-property: color, background-color, border-color, box-shadow;
 }
 .plugin-page {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 20px;
@@ -172,6 +173,9 @@ a {
 }
 .plugin-page[hidden] {
   display: none;
+}
+.plugin-page:has(> .plugin-loading) {
+  overflow: visible;
 }
 .plugin-overlay[hidden] {
   display: none;
@@ -200,6 +204,37 @@ a {
 }
 .plugin-placeholder p {
   color: var(--muted-foreground);
+}
+.plugin-loading {
+  position: absolute;
+  inset: calc(var(--content-gutter, 0px) * -1);
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--card);
+}
+.plugin-loading-bar,
+.plugin-loading-tools {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: none;
+  padding: 16px 20px;
+}
+.plugin-loading-bar {
+  min-height: 64px;
+}
+.plugin-loading-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
+  gap: 16px;
+  min-height: 0;
+  padding: 8px 20px 20px;
+}
+.plugin-loading-card {
+  height: 144px;
 }
 .plugin-host,
 .plugin-mount {

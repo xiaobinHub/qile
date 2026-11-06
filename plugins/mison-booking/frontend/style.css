@@ -1439,3 +1439,59 @@
     width: 100%;
   }
 }
+
+.mison-booking > .mison-startup {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--card);
+}
+.mison-startup-header,
+.mison-startup-filters {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: none;
+}
+.mison-startup-header {
+  min-height: 64px;
+  padding: 0 20px;
+  background: color-mix(in srgb, var(--muted) 35%, var(--card));
+}
+.mison-startup-filters {
+  flex-wrap: wrap;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+}
+.mison-startup-heading {
+  flex: none;
+  padding: 20px 20px 0;
+}
+.mison-startup-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
+  gap: 16px;
+  min-height: 0;
+  overflow: hidden;
+  padding: 16px 20px 20px;
+}
+.mison-startup-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  max-width: 380px;
+  height: 148px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+}
+.mison-startup-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}

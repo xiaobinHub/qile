@@ -186,16 +186,30 @@ export function PluginPage({
           </Button>
         </div>
       ) : loading ? (
-        <div role="status" className="plugin-placeholder">
-          <Skeleton className="h-10 w-48" />
-          <p>正在加载应用…</p>
+        <div role="status" className="plugin-loading" aria-busy="true">
+          <p className="sr-only">正在加载应用…</p>
+          <div className="plugin-loading-bar">
+            <Skeleton className="h-8 w-36" />
+            <Skeleton className="h-8 w-24" />
+          </div>
+          <div className="plugin-loading-tools">
+            <Skeleton className="h-9 w-48" />
+            <Skeleton className="h-9 w-32" />
+            <Skeleton className="ml-auto h-9 w-20" />
+          </div>
+          <div className="plugin-loading-grid">
+            {Array.from({ length: 4 }, (_, index) => (
+              <Skeleton key={index} className="plugin-loading-card" />
+            ))}
+          </div>
         </div>
       ) : null}
       <div
         ref={host}
         className="plugin-host"
         hidden={!effective || !!failure}
-        aria-busy={loading}
+        aria-busy={loading || undefined}
+        inert={loading || undefined}
       />
     </section>
   )
