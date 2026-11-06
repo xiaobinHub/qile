@@ -10,6 +10,7 @@
 - [共享组件规范](../frontend/shared/README.md)
 - [插件开发约定](plugins/development.md)
 - [插件运行与独立部署](plugins/deployment.md)
+- [2026-11-07 腾讯云主应用与美森约课发布](update-release-2026-11-07.md)
 - [插件本地验收记录](plugins/acceptance.md)
 - [字体与响应式规范](ui/字体与响应式规范.md)
 - [儿童成长工作台与插件系统设计](superpowers/specs/2026-10-30-plugin-workbench-design.md)
