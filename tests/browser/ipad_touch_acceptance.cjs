@@ -373,7 +373,13 @@ async function exerciseMisonTouch({ page, browserContext, origin, entryUrl, out,
     )
     checks.push("settings long content scrolls within main and navigation stays fixed")
     await page.locator('[data-view="plugin:mison-booking"]').click()
-    await page.getByRole("region", { name: "约课区" }).waitFor()
+    const calendarTab = page.getByRole("tab", { name: "课程日历", exact: true })
+    await calendarTab.waitFor()
+    assert.equal(
+      await calendarTab.getAttribute("data-state"),
+      "active",
+      "Returning to Mison restores the calendar tab",
+    )
     assert.equal(
       await retainedMount.evaluate(
         (node) => node === document.querySelector('[data-plugin-root="mison-booking"]'),
@@ -394,6 +400,8 @@ async function exerciseMisonTouch({ page, browserContext, origin, entryUrl, out,
       ) < 2,
       "Returning to Mison restores its scroll position",
     )
+    await page.getByRole("tab", { name: "教师与约课", exact: true }).click()
+    await page.getByRole("region", { name: "约课区" }).waitFor()
     assert.equal(await page.locator('[role="dialog"]:visible').count(), 0)
     await screenshot("retained-plugin-restored")
     checks.push(

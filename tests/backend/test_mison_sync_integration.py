@@ -96,6 +96,122 @@ class MisonSyncIntegrationTests(PluginDatabaseCase):
         with self.adapters():
             return course_sync.save(self.context, body or self.request())
 
+    def run_payload(self):
+        with self.adapters():
+            return {**course_sync._sync_payload(self.context, {}, enabled=True),
+                    'settingsRevision': self.invoke('courseSync.get')['revision']}
+
+    def identity_records(self):
+        return self.service.transaction(lambda cur: cur.execute(
+            "SELECT collection,record_id,payload,revision FROM lele.plugin_private_records WHERE child_id=%s AND plugin_id=%s AND collection IN ('course-sync-identities','course-sync') ORDER BY collection,record_id",
+            (self.a['id'], self.plugin_id)).fetchall())
+
+    def test_missing_cid_cancel_preview_is_read_only_and_commit_keeps_other_tasks(self):
+        self.upstream.pages['upcoming'][0].update(tid=100, courseware_id=6857, bid=201, courseid=301)
+        self.save()
+        self.upstream.pages['upcoming'] = []
+        self.upstream.pages['cancelled'] = [{'teachername': 'Fixture', 'dateTime': '2026-11-12 19:00-19:25',
+            'courseware_id': 6857, 'course_name': 'Upcoming', 'bid': 201, 'courseid': 301}]
+        before, identities = self.record(), self.identity_records()
+        with self.adapters():
+            preview = course_sync.preview(self.context, {'points': 10, 'startDate': '2026-11-01'})
+        self.assertEqual(preview['removed'], 1)
+        self.assertEqual(self.record(), before)
+        self.assertEqual(self.identity_records(), identities)
+        result = self.invoke('courseSync.run', self.run_payload())
+        self.assertEqual(result['removed'], 1)
+        self.assertEqual([row['source']['cid'] for row in self.record()['data']['series']], ['12'])
+        self.assertEqual(sum(row['amount'] for row in self.record()['data']['ledger']), 10)
+        self.assertEqual(self.invoke('courseSync.run', self.run_payload())['removed'], 0)
+
+    def test_late_snapshot_cannot_resurrect_cancelled_lesson_or_reaward_points(self):
+        self.upstream.pages['completed'][0].update(tid=100, courseware_id=6857, bid=201, courseid=301)
+        self.save()
+        old = self.run_payload()
+        self.upstream.pages['completed'] = []
+        self.upstream.pages['cancelled'] = [{'teachername': 'Fixture', 'dateTime': '2026-11-02 19:00-19:25',
+            'courseware_id': 6857, 'course_name': 'Completed', 'bid': 201, 'courseid': 301}]
+        self.assertEqual(self.invoke('courseSync.run', self.run_payload())['clawback'], 10)
+        before, identities = self.record(), self.identity_records()
+        stale = self.invoke('courseSync.run', old)
+        self.assertEqual(stale, {'state': 'paused', 'reason': 'snapshot-changed'})
+        self.assertEqual(self.record(), before)
+        self.assertEqual(self.identity_records(), identities)
+        # Even a later upstream response reporting the cancelled CID as attended
+        # cannot revive it after the durable cancellation tombstone was saved.
+        old['snapshotRevision'] = self.invoke('courseSync.get')['snapshotRevision']
+        self.assertEqual(self.invoke('courseSync.run', old)['points'], 0)
+        self.assertEqual(self.record(), before)
+
+    def test_retry_recollects_when_an_older_batch_commits_first(self):
+        self.upstream.pages['upcoming'][0].update(tid=100, courseware_id=6857)
+        self.save()
+        old = self.run_payload()
+        self.upstream.pages['upcoming'] = []
+        self.upstream.pages['cancelled'] = [{'teachername': 'Fixture', 'dateTime': '2026-11-12 19:00-19:25',
+                                            'courseware_id': 6857, 'course_name': 'Upcoming'}]
+        original = course_sync.collect_lessons
+        calls = []
+        def collect(client):
+            result = original(client)
+            if not calls:
+                self.invoke('courseSync.run', old)
+            calls.append(1)
+            return result
+        with self.adapters(), patch.object(course_sync, 'collect_lessons', side_effect=collect):
+            result = course_sync.run_now(self.context, {'operationId': str(uuid.uuid4())})
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(result['removed'], 1)
+
+    def test_identity_write_failure_rolls_back_tasks_points_and_snapshot(self):
+        from lele_growth.plugins import private_store
+        self.save()
+        before, identities = self.record(), self.identity_records()
+        self.upstream.pages['completed'].append({'cid': 13, 'tid': 100, 'courseware_id': 6857,
+            'teachername': 'Fixture', 'datestart': '2026-11-03 20:00', 'dateend': '20:25', 'course_name': 'New'})
+        payload = self.run_payload()
+        original = private_store.put
+        def fail(cur, scope, collection, *args, **kwargs):
+            if collection == 'course-sync-identities':
+                raise ApiError(503, 'Injected identity persistence failure', 'review_failure')
+            return original(cur, scope, collection, *args, **kwargs)
+        with patch.object(private_store, 'put', side_effect=fail), self.assertRaises(ApiError):
+            self.invoke('courseSync.run', payload)
+        self.assertEqual(self.record(), before)
+        self.assertEqual(self.identity_records(), identities)
+
+    def test_legacy_collector_without_snapshot_fence_is_blocked(self):
+        self.save()
+        payload = self.run_payload()
+        payload.pop('snapshotRevision')
+        before = self.record()
+        self.assertEqual(self.invoke('courseSync.run', payload)['reason'], 'snapshot-changed')
+        self.assertEqual(self.record(), before)
+
+    def test_only_final_confirmed_cancel_receipt_removes_task_and_fences_old_batch(self):
+        self.upstream.pages['upcoming'][0].update(tid=100, courseware_id=6857)
+        self.save()
+        old = self.run_payload()
+        lesson = next(row for row in old['courses'] if row['cid'] == '11')
+        operation_id = str(uuid.uuid4())
+        canonical = {'request': {}, 'details': {'courseSync': {
+            'accountId': old['accountId'], 'contractId': old['contractId'],
+            'lesson': {**lesson, 'status': 'cancelled'}}}}
+        begun = self.invoke('operation.begin', {'operationId': operation_id, 'kind': 'cancel',
+            'bindingRevision': old['bindingRevision'], 'canonicalRequest': canonical})['operation']
+        sent = self.invoke('operation.mark-dispatch', {'operationId': operation_id, 'canonicalRequest': canonical,
+            'expectedStageVersion': begun['stageVersion'], 'stage': 'cancel_sent'})['operation']
+        before, identities = self.record(), self.identity_records()
+        uncertain = self.invoke('operation.finish', {'operationId': operation_id, 'canonicalRequest': canonical,
+            'expectedStageVersion': sent['stageVersion'], 'state': 'needs_repair', 'result': {}})['operation']
+        self.assertEqual(self.record(), before)
+        self.assertEqual(self.identity_records(), identities)
+        self.invoke('operation.finish', {'operationId': operation_id, 'canonicalRequest': canonical,
+            'expectedStageVersion': uncertain['stageVersion'], 'state': 'succeeded', 'result': {}})
+        self.assertEqual([row['source']['cid'] for row in self.record()['data']['series']], ['12'])
+        self.assertEqual(self.invoke('courseSync.run', old)['reason'], 'snapshot-changed')
+        self.assertEqual(sum(row['amount'] for row in self.record()['data']['ledger']), 10)
+
     def test_run_uses_saved_settings_and_completes_new_lessons_once(self):
         self.save()
         self.upstream.pages['completed'].append({'cid': 13, 'teachername': 'Fixture', 'datestart': '2026-11-03 20:00',

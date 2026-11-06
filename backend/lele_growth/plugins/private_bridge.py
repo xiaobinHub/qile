@@ -124,4 +124,12 @@ AND attempt=%s AND generation=%s AND config_revision=%s AND release_epoch=%s AND
     def _operation(self, cur, current, context, action, payload):
         self._capability(current, 'plugin.external-operations')
         from . import external_operations
-        return external_operations.handle(cur, current, context, action, payload)
+        result = external_operations.handle(cur, current, context, action, payload)
+        operation = result.get('data', {}).get('operation', {})
+        if (current['plugin_id'] == 'mison-booking' and action == 'operation.finish'
+                and operation.get('kind') == 'cancel' and operation.get('state') == 'succeeded'):
+            details = operation.get('canonicalRequest', {}).get('details', {})
+            if isinstance(details.get('courseSync'), dict):
+                from lele_growth.course_sync_host import confirmed_cancel
+                confirmed_cancel(self.service, cur, current, context, details['courseSync'])
+        return result

@@ -1,7 +1,15 @@
 const assert = require("node:assert/strict")
 const { selectNumber } = require("./picker_actions.cjs")
 
-exports.exerciseSyncSettings = async function ({ page, dialog, api, requests, dropNext, out }) {
+exports.exerciseSyncSettings = async function ({
+  page,
+  dialog,
+  api,
+  requests,
+  dropNext,
+  out,
+  needsReview = false,
+}) {
   await page.setViewportSize({ width: 1280, height: 900 })
   const toggle = dialog.getByRole("switch", { name: "自动同步课程到任务" })
   await toggle.waitFor()
@@ -10,6 +18,8 @@ exports.exerciseSyncSettings = async function ({ page, dialog, api, requests, dr
   await dialog.getByRole("button", { name: "保存", exact: true }).click()
   const confirmation = page.getByRole("alertdialog", { name: "按新的起始日同步？" })
   await confirmation.waitFor()
+  if (needsReview)
+    await confirmation.getByText("1 条课程关联无法唯一确认，保留原任务", { exact: true }).waitFor()
   dropNext()
   await confirmation.getByRole("button", { name: "确认同步", exact: true }).click()
   await dialog.getByText("保存结果暂未确认，请核对并重试原保存。", { exact: true }).waitFor()

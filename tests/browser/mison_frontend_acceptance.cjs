@@ -14,6 +14,7 @@ async function main() {
     ? require("./mison_calendar_acceptance.cjs").createCalendarFixture()
     : null
   const availabilityAcceptance = process.env.AVAILABILITY_ACCEPTANCE === "1"
+  const syncSettingsAcceptance = process.env.SYNC_SETTINGS_ACCEPTANCE === "1"
   const installedBuild = process.env.PARENT_ACCEPTANCE_ORIGIN
   const engine = process.env.TOUCH_BROWSER === "webkit" ? webkit : chromium
   const { createServer } = await import("vite")
@@ -316,6 +317,18 @@ async function main() {
             })
         }
         const response = await fixtureApi(relative, options)
+        if (
+          syncSettingsAcceptance &&
+          (relative === "course-sync" || relative === "course-sync/preview") &&
+          options.method !== "POST"
+        ) {
+          Object.assign(response.data, {
+            needsReview: 1,
+            review: [{ date: "2026-11-10", startTime: "20:00", teacherName: "Miri" }],
+          })
+        }
+        if (syncSettingsAcceptance && relative === "course-sync/preview")
+          response.data.needsReview = 1
         if (scheduleRequest && availabilityAcceptance) {
           const data = response.data
           if (scheduleRequestMode === "no-availability") {
@@ -661,6 +674,25 @@ async function main() {
     await loginForm.getByRole("button", { name: "登录", exact: true }).dblclick()
     await ready()
     assert.equal(loginCalls, 2, "double click sends one request")
+    if (syncSettingsAcceptance) {
+      await page.getByRole("button", { name: "账号设置", exact: true }).click()
+      const dialog = page.getByRole("dialog", { name: "美森约课设置" })
+      await dialog.getByText("2026-11-10 20:00 Miri", { exact: true }).waitFor()
+      await require("./mison_sync_settings_acceptance.cjs").exerciseSyncSettings({
+        page,
+        dialog,
+        api: fixtureApi,
+        requests: syncRequests,
+        out,
+        needsReview: true,
+        dropNext: () => {
+          dropSyncResponse = true
+        },
+      })
+      assert.deepEqual(errors, [])
+      console.log(JSON.stringify({ passed: true, evidence: out, pageErrors: errors }))
+      return
+    }
     if (calendarAcceptance) {
       await require("./mison_calendar_acceptance.cjs")
         .exerciseCalendar({
@@ -847,6 +879,55 @@ async function main() {
       const image = document.querySelector(".mison-teacher-card .mison-avatar img")
       return image?.complete && image.naturalWidth > 0
     })
+    let releaseBookingPage, bookingPageStarted
+    const bookingPageGate = new Promise((resolve) => {
+      releaseBookingPage = resolve
+    })
+    const bookingPageRequest = new Promise((resolve) => {
+      bookingPageStarted = resolve
+    })
+    await page.route(
+      "**/runtime/bookings/pages?status=upcoming&page=1",
+      async (route) => {
+        bookingPageStarted()
+        await bookingPageGate
+        await route
+          .fulfill({
+            json: {
+              ok: true,
+              data: { status: "upcoming", page: 1, pageSize: 100, complete: true, items: [] },
+            },
+          })
+          .catch(() => undefined)
+      },
+      { times: 1 },
+    )
+    await page.getByRole("tab", { name: "课程日历", exact: true }).click()
+    await bookingPageRequest
+    const oldMount = await page.locator('[data-plugin-root="mison-booking"]').elementHandle()
+    Object.assign(plugin, {
+      enabled: false,
+      effectiveEnabled: false,
+      revision: plugin.revision + 1,
+    })
+    await page.evaluate(() => window.dispatchEvent(new Event("focus")))
+    await page.waitForFunction(() => !document.querySelector('[data-plugin-root="mison-booking"]'))
+    releaseBookingPage()
+    Object.assign(plugin, { enabled: true, effectiveEnabled: true, revision: plugin.revision + 1 })
+    await page.evaluate(() => window.dispatchEvent(new Event("focus")))
+    await page.locator('[data-view="plugin:mison-booking"]').click()
+    await ready()
+    assert.equal(await oldMount.evaluate((node) => node.isConnected), false)
+    const freshBookingPage = page.waitForResponse((response) =>
+      response.url().endsWith("/runtime/bookings/pages?status=upcoming&page=1"),
+    )
+    await page.getByRole("tab", { name: "课程日历", exact: true }).click()
+    assert.equal((await freshBookingPage).ok(), true)
+    await page.waitForFunction(
+      () => document.querySelector(".mison-course-calendar")?.getAttribute("aria-busy") === "false",
+    )
+    assert.equal(await page.getByText("页面已切换。", { exact: true }).count(), 0)
+    await screenshot("booking-cache-after-reenable")
     await page.goto(entryUrl)
     await page.locator('[data-view="plugin:mison-booking"]').click()
     await ready()

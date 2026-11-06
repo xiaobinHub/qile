@@ -40,10 +40,12 @@ class DevelopmentRuntimeTests(unittest.TestCase):
             self.assertFalse(dev.plugin_runtime_ready())
         with patch('lele_growth.plugins.supervisor.unix_request', return_value={'ok': True, 'protocol': 'invalid'}):
             self.assertFalse(dev.plugin_runtime_ready())
-        from lele_growth.plugins.manifest import FRONTEND_API_MINOR
+        from lele_growth.plugins.manifest import FRONTEND_API_MINOR, PLATFORM_API_MINOR
         with patch('lele_growth.plugins.supervisor.unix_request', return_value={'ok': True, 'protocol': '1.0'}):
             self.assertFalse(dev.plugin_runtime_ready())
         with patch('lele_growth.plugins.supervisor.unix_request', return_value={'ok': True, 'protocol': '1.0', 'frontendMinor': FRONTEND_API_MINOR}):
+            self.assertFalse(dev.plugin_runtime_ready())
+        with patch('lele_growth.plugins.supervisor.unix_request', return_value={'ok': True, 'protocol': '1.0', 'frontendMinor': FRONTEND_API_MINOR, 'platformMinor': PLATFORM_API_MINOR}):
             self.assertTrue(dev.plugin_runtime_ready())
 
     def test_start_creates_persistent_runtime_and_waits_for_authenticated_readiness(self):
@@ -125,6 +127,19 @@ class DevelopmentRuntimeTests(unittest.TestCase):
         launch.assert_called_once()
         self.assertEqual(launch.call_args.kwargs['env']['LELE_DEV_RELOAD'], '1')
 
+    def test_current_frontend_with_old_platform_is_restarted(self):
+        from lele_growth.plugins.manifest import FRONTEND_API_MINOR, PLATFORM_API_MINOR
+        process = Mock(pid=78)
+        process.poll.return_value = None
+        stale = {'ok': True, 'protocol': '1.0', 'frontendMinor': FRONTEND_API_MINOR,
+                 'platformMinor': PLATFORM_API_MINOR - 1}
+        with patch.object(dev, 'plugin_runtime_status', return_value=stale), \
+             patch.object(dev, 'stop_plugin_runtime') as stop, \
+             patch.object(dev, 'plugin_runtime_ready', side_effect=[False, True]), \
+             patch.object(dev.subprocess, 'Popen', return_value=process), patch.object(dev.time, 'sleep'):
+            dev.ensure_plugin_runtime()
+        stop.assert_called_once()
+
     def test_deployment_reuses_runtime_and_does_not_terminate_it(self):
         package = self.runtime / 'plugin.tar.gz'
         package.touch()
@@ -173,8 +188,9 @@ class DevelopmentRuntimeTests(unittest.TestCase):
                 self.assertEqual(client.post('/ready', json={}, headers={'Authorization': 'Bearer incorrect'}).status_code, 403)
                 response = client.post('/ready', json={}, headers={'Authorization': 'Bearer ' + credential})
                 self.assertEqual(response.status_code, 200)
-                from lele_growth.plugins.manifest import FRONTEND_API_MINOR
-                self.assertEqual(response.json(), {'ok': True, 'protocol': '1.0', 'frontendMinor': FRONTEND_API_MINOR})
+                from lele_growth.plugins.manifest import FRONTEND_API_MINOR, PLATFORM_API_MINOR
+                self.assertEqual(response.json(), {'ok': True, 'protocol': '1.0', 'frontendMinor': FRONTEND_API_MINOR,
+                                                  'platformMinor': PLATFORM_API_MINOR})
 
     def test_bridge_identity_cannot_control_runtime_and_requires_signed_context(self):
         from fastapi.testclient import TestClient

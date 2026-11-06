@@ -14,9 +14,13 @@ def _plain(value, limit):
     return re.sub(r'<[^>]*>', '', value).strip()[:limit] if isinstance(value, str) else ''
 
 
+def _id(value):
+    return str(value) if type(value) in (str, int) and re.fullmatch(r'[1-9][0-9]{0,17}', str(value)) else None
+
+
 def _lesson(row, status):
-    cid_raw = row.get('cid') if isinstance(row, dict) else None
-    cid = str(cid_raw) if type(cid_raw) in (str, int) and re.fullmatch(r'[1-9][0-9]{0,17}', str(cid_raw)) else None
+    row = row if isinstance(row, dict) else {}
+    cid = _id(row.get('cid'))
     raw = row.get('dateTime') if isinstance(row, dict) and status == 'cancelled' else row.get('datestart') if isinstance(row, dict) else None
     match = RANGE_RE.fullmatch(raw.strip()) if isinstance(raw, str) else None
     end = match[3] if match else None
@@ -25,10 +29,15 @@ def _lesson(row, status):
         end = found[1] if found else None
     start = match[2] if match else None
     lesson_date = match[1] if match else None
-    valid = bool(cid and lesson_date and start and end and TIME_RE.fullmatch(start) and TIME_RE.fullmatch(end) and start < end)
+    courseware_id = _id(row.get('courseware_id'))
+    teacher_id = _id(row.get('tid'))
+    teacher_name = _plain(row.get('teachername'), 100)
+    identity = cid or (status == 'cancelled' and courseware_id and (teacher_id or teacher_name))
+    valid = bool(identity and lesson_date and start and end and TIME_RE.fullmatch(start) and TIME_RE.fullmatch(end) and start < end)
     return {'cid': cid, 'status': status, 'date': lesson_date, 'startTime': start, 'endTime': end,
-            'teacherName': _plain(row.get('teachername'), 100) if isinstance(row, dict) else '',
-            'coursewareTitle': _plain(row.get('course_name'), 300) if isinstance(row, dict) else '',
+            'teacherId': teacher_id, 'teacherName': teacher_name, 'coursewareId': courseware_id,
+            'coursewareTitle': _plain(row.get('course_name'), 300),
+            'bid': _id(row.get('bid')), 'bookingId': _id(row.get('courseid')),
             'invalid': not valid}
 
 
@@ -91,6 +100,9 @@ def _connected(context):
 
 
 def _sync_payload(context, body, *, enabled):
+    # Capture before the first upstream read; a concurrent commit invalidates
+    # this complete snapshot even when settings/binding have not changed.
+    snapshot_revision = get_settings(context)['snapshotRevision']
     client = _connected(context)
     if isinstance(client, dict):
         return client
@@ -100,6 +112,7 @@ def _sync_payload(context, body, *, enabled):
         return _paused(error)
     return {'enabled': enabled, 'courses': lessons, 'accountId': str(client.session['userid']),
             'contractId': contract['id'], 'listComplete': True,
+            'snapshotRevision': snapshot_revision,
             'credentialId': client.session['credentialId'], 'credentialRevision': client.session['credentialRevision'],
             'bindingRevision': client.session['bindingRevision'],
             **{key: body[key] for key in ('points', 'startDate') if key in body}}
@@ -119,10 +132,15 @@ def _raise_paused(payload):
 def preview(context, body):
     if set(body) != {'points', 'startDate'}:
         raise AuthError('VALIDATION_ERROR', '同步设置不正确。')
-    payload = _sync_payload(context, body, enabled=True)
-    if payload.get('state') == 'paused':
-        _raise_paused(payload)
-    return bridge(context, 'courseSync.preview', payload)
+    for attempt in range(2):
+        payload = _sync_payload(context, body, enabled=True)
+        if payload.get('state') == 'paused':
+            _raise_paused(payload)
+        try:
+            return bridge(context, 'courseSync.preview', payload)
+        except AuthError as error:
+            if error.code != 'SYNC_SNAPSHOT_CHANGED' or attempt:
+                raise
 
 
 def save(context, body):
@@ -130,25 +148,34 @@ def save(context, body):
         raise AuthError('VALIDATION_ERROR', '同步设置不正确。')
     from . import drafts
     drafts.uid(body['operationId'])
-    checked = bridge(context, 'courseSync.check', {'request': body})
-    if checked['replay']:
-        return checked['result']
-    if body['enabled'] is False:
-        return bridge(context, 'courseSync.save', {'request': body})
-    payload = _sync_payload(context, body, enabled=True)
-    if payload.get('state') == 'paused':
-        _raise_paused(payload)
-    return bridge(context, 'courseSync.save', {**payload, 'request': body})
+    for attempt in range(2):
+        checked = bridge(context, 'courseSync.check', {'request': body})
+        if checked['replay']:
+            return checked['result']
+        if body['enabled'] is False:
+            return bridge(context, 'courseSync.save', {'request': body})
+        payload = _sync_payload(context, body, enabled=True)
+        if payload.get('state') == 'paused':
+            _raise_paused(payload)
+        try:
+            return bridge(context, 'courseSync.save', {**payload, 'request': body})
+        except AuthError as error:
+            if error.code != 'SYNC_SNAPSHOT_CHANGED' or attempt:
+                raise
 
 
 def _run(context):
-    settings = get_settings(context)
-    if not settings.get('enabled'):
-        return {'state': 'disabled'}
-    payload = _sync_payload(context, {}, enabled=True)
-    if payload.get('state') == 'paused':
-        return payload
-    return bridge(context, 'courseSync.run', {**payload, 'settingsRevision': settings['revision']})
+    for _ in range(2):
+        settings = get_settings(context)
+        if not settings.get('enabled'):
+            return {'state': 'disabled'}
+        payload = _sync_payload(context, {}, enabled=True)
+        if payload.get('state') == 'paused':
+            return payload
+        result = bridge(context, 'courseSync.run', {**payload, 'settingsRevision': settings['revision']})
+        if result.get('reason') != 'snapshot-changed':
+            return result
+    return result
 
 
 def run_now(context, body):

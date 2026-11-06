@@ -56,6 +56,23 @@ class MisonCourseCollectionTest(unittest.TestCase):
             collect_lessons(client)
         self.assertEqual(caught.exception.code, "CONTRACT_SELECTION_REQUIRED")
 
+    def test_cancellation_without_cid_preserves_composite_and_booking_evidence(self):
+        client = FakeClient()
+        client.pages['cancelled'] = [{'teachername': 'Miri', 'dateTime': '2026-11-10 20:00-20:25',
+            'courseware_id': '6857', 'course_name': 'Food shopping', 'bid': 1788407996, 'courseid': '26110349376644'}]
+        client.pages['upcoming'][0].update(tid=3864, courseware_id=6857, bid=1786364535, courseid='26110678668335')
+        lessons, _ = collect_lessons(client)
+        cancelled = next(row for row in lessons if row['status'] == 'cancelled')
+        self.assertFalse(cancelled['invalid'])
+        self.assertIsNone(cancelled['cid'])
+        self.assertIsNone(cancelled['teacherId'])
+        self.assertEqual(cancelled['coursewareId'], '6857')
+        self.assertEqual(cancelled['bid'], '1788407996')
+        self.assertEqual(cancelled['bookingId'], '26110349376644')
+        upcoming = next(row for row in lessons if row['status'] == 'upcoming')
+        self.assertEqual(upcoming['teacherId'], '3864')
+        self.assertEqual(upcoming['coursewareId'], '6857')
+
     def test_incomplete_page_does_not_pretend_the_list_is_complete(self):
         client = FakeClient()
         client.pages["upcoming"] = [{"cid": 11, "teachername": "甲老师", "datestart": "2026-10-01 19:00", "dateend": "19:25", "course_name": "拼音"}]

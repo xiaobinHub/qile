@@ -304,6 +304,12 @@ def _ordered(status, items):
     ordered = all(left <= right for left, right in pairs) if status == 'upcoming' else all(left >= right for left, right in pairs)
     if not ordered: schema('美森课程顺序已改变，请刷新列表。')
 
+def _listed_complete(data, page):
+    last, total = data.get('lastPage'), data['allPage']
+    if (last is True and page < total) or (last is False and page >= total):
+        schema('美森课程分页信息不一致，请刷新列表。')
+    return last is True or page >= total
+
 def booking_page(client, query):
     if set(query) - {'status', 'page'}: invalid()
     status = query.get('status', 'upcoming')
@@ -324,8 +330,7 @@ def booking_page(client, query):
         data = response.get('data')
         if not isinstance(data, dict) or type(data.get('allPage')) is not int or data['allPage'] < 0: schema()
         source = rows(data.get('list'))
-        complete = data.get('lastPage') is True or page >= data['allPage']
-        if data.get('lastPage') is not False and len(source) < 100: complete = True
+        complete = _listed_complete(data, page)
     items, seen = [], set()
     for row in source:
         value = booking(client, contract, status, row)
@@ -333,4 +338,5 @@ def booking_page(client, query):
         seen.add(value['key']); items.append(value)
     _ordered(status, items)
     for item in items: item['teacher']['avatarUrl'] = images.reference(client, item['teacher']['avatarUrl'])
-    return {'status': status, 'page': page, 'pageSize': 100, 'complete': complete or not items, 'items': items}
+    if not items and not complete: schema('美森课程分页信息不一致，请刷新列表。')
+    return {'status': status, 'page': page, 'pageSize': 100, 'complete': complete, 'items': items}

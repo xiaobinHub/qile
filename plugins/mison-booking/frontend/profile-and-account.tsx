@@ -382,6 +382,9 @@ export function AccountDialog({
         ["完成并发放", `${summary.newlyCompleted ?? 0} 节，发放 ${summary.points ?? 0} 积分`],
         ["删除并收回", `${summary.removed ?? 0} 节，收回 ${summary.clawback ?? 0} 积分`],
         ...(summary.skipped ? [["已跳过", `${summary.skipped} 节缺少编号或时间无效`]] : []),
+        ...(summary.needsReview
+          ? [["待核对", `${summary.needsReview} 条课程关联无法唯一确认，保留原任务`]]
+          : []),
       ]
     : []
   return (
@@ -447,6 +450,16 @@ export function AccountDialog({
               ) : null}
               {settings && !settings.canManage ? (
                 <Notice className="mison-account-message">只有儿童负责人可以设置课程同步。</Notice>
+              ) : null}
+              {settings?.needsReview ? (
+                <Notice className="mison-account-message">
+                  有 {settings.needsReview} 条课程关联无法唯一确认，已保留原任务，请核对美森记录。
+                  {settings.review?.slice(0, 3).map((item, index) => (
+                    <p key={index}>
+                      {[item.date, item.startTime, item.teacherName].filter(Boolean).join(" ")}
+                    </p>
+                  ))}
+                </Notice>
               ) : null}
               {enabled && settings?.canManage ? (
                 <div className="mison-sync-fields">

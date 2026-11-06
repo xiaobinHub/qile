@@ -7,7 +7,7 @@ import {
 } from "@shared/components/ui/alert-dialog"
 import { useContext, useEffect, useRef, useState, type ReactNode } from "react"
 import { request } from "./api"
-import { forgetAvatar, loadAvatar, peekAvatar } from "./avatar-cache"
+import { forgetAvatar, loadAvatar, peekAvatar, subscribeAvatar } from "./avatar-cache"
 import type { PluginContext } from "./types"
 import { X, UserRound } from "lucide-react"
 import { Button as SharedButton } from "@shared/components/ui/button"
@@ -154,11 +154,16 @@ export function Avatar({
         setLoaded({ reference: url, data })
       }
     }
+    const unsubscribe = subscribeAvatar(url, () => {
+      const data = peekAvatar(url)
+      if (data) accept(data)
+    })
     const cached = peekAvatar(url)
     if (cached) {
       accept(cached)
       return () => {
         alive = false
+        unsubscribe()
       }
     }
     const observer = new IntersectionObserver(
@@ -176,6 +181,7 @@ export function Avatar({
     observer.observe(target.current)
     return () => {
       alive = false
+      unsubscribe()
       observer.disconnect()
     }
   }, [context, internal, url])

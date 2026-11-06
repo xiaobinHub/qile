@@ -246,7 +246,11 @@ def cancel(client,key,body):
     value,row=lookup_booking(client,key)
     if body['snapshotVersion']!=value['snapshotVersion']:raise AuthError('REVISION_CONFLICT','课程记录已改变，请刷新预约。')
     if not value['actions'].get('cancel',{}).get('allowed'):raise AuthError('ACTION_UNAVAILABLE','该课程已临近上课，请在美森App确认取消规则。')
-    op=begin(client,'cancel',body,{'booking':value})
+    from .course_sync import _lesson
+    contract = read_api.contracts(client)
+    sync = {'accountId': str(client.session['userid']), 'contractId': contract['id'],
+            'lesson': _lesson({**row, 'dateTime': row.get('datestart')}, 'cancelled')}
+    op=begin(client,'cancel',body,{'booking':value, 'courseSync': sync})
     op=advance(client,op,'mark-dispatch',stage='cancel_sent')
     try:
         data=client.mutate('cancelLesson',{'userid':client.userid,'cid':int(value['cid'])}).get('data')

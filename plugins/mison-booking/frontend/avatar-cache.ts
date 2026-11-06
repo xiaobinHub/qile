@@ -4,6 +4,7 @@ const REFERENCE = /^mison-image:([a-f0-9]{64})$/
 const memory = new Map<string, string>()
 const inflight = new Map<string, Promise<string>>()
 const generations = new Map<string, number>()
+const listeners = new Map<string, Set<() => void>>()
 let queue: Promise<void> = Promise.resolve()
 
 function generation(reference: string) {
@@ -18,6 +19,20 @@ export function peekAvatar(reference: string) {
   return memory.get(reference) ?? null
 }
 
+export function subscribeAvatar(reference: string, listener: () => void) {
+  const group = listeners.get(reference) ?? new Set<() => void>()
+  group.add(listener)
+  listeners.set(reference, group)
+  return () => {
+    group.delete(listener)
+    if (!group.size) listeners.delete(reference)
+  }
+}
+
+function notify(reference: string) {
+  listeners.get(reference)?.forEach((listener) => listener())
+}
+
 function retain(reference: string, data: string) {
   memory.delete(reference)
   memory.set(reference, data)
@@ -26,6 +41,7 @@ function retain(reference: string, data: string) {
     if (oldest === undefined) break
     memory.delete(oldest)
   }
+  notify(reference)
 }
 
 function cacheAvailable() {

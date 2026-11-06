@@ -82,6 +82,20 @@ function needsThrough(chain: Chain, status: BookingStatus, edge: string) {
   return status === "upcoming" ? edge >= bound : edge <= bound
 }
 
+function abandoned(context: PluginContext, error: unknown) {
+  if (context.signal.aborted) return true
+  if (!error || typeof error !== "object") return false
+  const code = "code" in error ? error.code : undefined
+  const kind = "kind" in error ? error.kind : undefined
+  const name = "name" in error ? error.name : undefined
+  return code === "stale" || kind === "stale" || name === "AbortError"
+}
+
+function rememberFailure(chain: Chain, generation: number, context: PluginContext, error: unknown) {
+  if (chain.generation !== generation || abandoned(context, error)) return
+  chain.error = error instanceof Error ? error.message : "课程读取失败"
+}
+
 function shouldFetch(chain: Chain, status: BookingStatus, edge: string | null) {
   if (chain.complete || chain.error) return false
   if (!chain.pages.length) return true
@@ -107,9 +121,10 @@ async function fetchPage(
   if (chain.pages.length >= page || chain.complete) return
   const generation = chain.generation
   const data = await request<BookingPage>(context, `bookings/pages?status=${status}&page=${page}`)
-  if (chain.generation !== generation) return
+  if (chain.generation !== generation || context.signal.aborted) return
   if (data.status !== status || data.page !== page) throw Error(stallMessage)
   if (!data.items.length) {
+    if (!data.complete) throw Error(stallMessage)
     chain.complete = true
     return
   }
@@ -143,17 +158,20 @@ export function syncBookingSource(
   const chain = ensure(scope, status)
   return enqueue(chain, async () => {
     const generation = chain.generation
-    if (!shouldFetch(chain, status, edge)) return
+    if (context.signal.aborted || !shouldFetch(chain, status, edge)) return
     chain.loading = true
     emit()
     try {
-      while (chain.generation === generation && shouldFetch(chain, status, edge)) {
+      while (
+        chain.generation === generation &&
+        !context.signal.aborted &&
+        shouldFetch(chain, status, edge)
+      ) {
         if (chain.pages.length >= 100) throw Error("课程历史过多，暂时无法完成本次查询。")
         await fetchPage(chain, context, status, chain.pages.length + 1)
       }
     } catch (error) {
-      if (chain.generation === generation)
-        chain.error = error instanceof Error ? error.message : "课程读取失败"
+      rememberFailure(chain, generation, context, error)
     } finally {
       if (chain.generation === generation) chain.loading = false
       emit()
@@ -165,14 +183,13 @@ export function loadNextBookingPage(context: PluginContext, scope: string, statu
   const chain = ensure(scope, status)
   return enqueue(chain, async () => {
     const generation = chain.generation
-    if (chain.complete || chain.error || chain.pages.length >= 100) return
+    if (context.signal.aborted || chain.complete || chain.error || chain.pages.length >= 100) return
     chain.loading = true
     emit()
     try {
       await fetchPage(chain, context, status, chain.pages.length + 1)
     } catch (error) {
-      if (chain.generation === generation)
-        chain.error = error instanceof Error ? error.message : "课程读取失败"
+      rememberFailure(chain, generation, context, error)
     } finally {
       if (chain.generation === generation) chain.loading = false
       emit()

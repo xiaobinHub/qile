@@ -1,4 +1,4 @@
-"""Protocol 1.1 manifest validation; no code imports or filesystem writes."""
+"""Platform 1.2 / frontend 1.1 manifests; no code imports or filesystem writes."""
 import copy
 import re
 from pathlib import PurePosixPath
@@ -8,7 +8,7 @@ from lele_growth.child_service import require
 from .configuration import validate_schema
 
 PLATFORM_API_MAJOR = 1
-PLATFORM_API_MINOR = 1
+PLATFORM_API_MINOR = 2
 FRONTEND_API_MINOR = 1
 SUPPORTED_CAPABILITIES = frozenset({'plugin.state.read','plugin.state.write','plugin.jobs.schedule','plugin.events.subscribe'})
 SUPPORTED_PLUGIN_CAPABILITIES = frozenset({'plugin.private-state','plugin.credentials','plugin.external-operations','plugin.resources'})

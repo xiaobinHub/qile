@@ -71,6 +71,11 @@ export const createDraft = (context: PluginContextLike, body: unknown) =>
 export const getBookings = (context: PluginContextLike, status: string) =>
   request<BookingQuery>(context, `bookings?status=${status}`)
 
+export type CourseSyncReview = {
+  date: string | null
+  startTime: string | null
+  teacherName: string | null
+}
 export type CourseSyncSettings = {
   enabled: boolean
   points: number | null
@@ -78,6 +83,8 @@ export type CourseSyncSettings = {
   revision: number
   canManage: boolean
   serverDate: string
+  needsReview?: number
+  review?: CourseSyncReview[]
 }
 export type CourseSyncSummary = {
   state: string
@@ -89,6 +96,8 @@ export type CourseSyncSummary = {
   removed?: number
   clawback?: number
   skipped?: number
+  needsReview?: number
+  review?: CourseSyncReview[]
   revision?: number
 }
 export type CourseSyncSaveRequest = {

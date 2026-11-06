@@ -169,9 +169,10 @@ def plugin_runtime_status():
 
 
 def plugin_runtime_ready():
-    from lele_growth.plugins.manifest import FRONTEND_API_MINOR
+    from lele_growth.plugins.manifest import FRONTEND_API_MINOR, PLATFORM_API_MINOR
     status = plugin_runtime_status()
-    return status is not None and status.get('frontendMinor') == FRONTEND_API_MINOR
+    return (status is not None and status.get('frontendMinor') == FRONTEND_API_MINOR
+            and status.get('platformMinor') == PLATFORM_API_MINOR)
 
 
 def ensure_plugin_runtime():
@@ -187,9 +188,10 @@ def ensure_plugin_runtime():
     # Serialize two concurrent `start` or deployment commands.
     with (sockets / 'start.lock').open('a+') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
-        from lele_growth.plugins.manifest import FRONTEND_API_MINOR
+        from lele_growth.plugins.manifest import FRONTEND_API_MINOR, PLATFORM_API_MINOR
         status = plugin_runtime_status()
-        if status is not None and status.get('frontendMinor') != FRONTEND_API_MINOR:
+        if status is not None and (status.get('frontendMinor') != FRONTEND_API_MINOR
+                                   or status.get('platformMinor') != PLATFORM_API_MINOR):
             stop_plugin_runtime()
         if plugin_runtime_ready():
             return

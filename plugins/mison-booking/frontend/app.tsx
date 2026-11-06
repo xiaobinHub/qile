@@ -128,6 +128,7 @@ export function App({ context }: { context: PluginContext }) {
     live.current = true
     return () => {
       live.current = false
+      clearBookingSource()
     }
   }, [])
   const active = () => live.current && !context.signal.aborted

@@ -321,8 +321,9 @@ def create_app(config_path, root=None):
             raise ApiError(400, '请求格式不正确。') from None
         require(isinstance(body, dict), 400)
         if operation == 'ready':
-            from lele_growth.plugins.manifest import FRONTEND_API_MINOR
-            return {'ok': True, 'protocol': '1.0', 'frontendMinor': FRONTEND_API_MINOR}
+            from lele_growth.plugins.manifest import FRONTEND_API_MINOR, PLATFORM_API_MINOR
+            return {'ok': True, 'protocol': '1.0', 'frontendMinor': FRONTEND_API_MINOR,
+                    'platformMinor': PLATFORM_API_MINOR}
         if operation.startswith('dev-'):
             return await run_in_threadpool(runtime.control_development, operation, body)
         if operation == 'bridge':

@@ -22,6 +22,12 @@ class PluginManifestTests(unittest.TestCase):
             self.assertEqual(value,validated); validated['capabilities'].clear()
             self.assertEqual(len(value['capabilities']),2)
 
+    def test_platform_12_supports_fenced_course_sync_without_changing_frontend_protocol(self):
+        value = {**manifest(), 'platformApi': {'major': 1, 'minMinor': 2}}
+        self.assertEqual(validate_manifest(value), value)
+        with self.assertRaises(ApiError):
+            validate_manifest({**value, 'platformApi': {'major': 1, 'minMinor': 3}})
+
     def test_invalid_identity_version_api_capability_unknown_fields_and_entries(self):
         edits=[{'id':'../escape'},{'id':'Upper'},{'version':'01.0.0'},{'version':'1.0.0/dev'},
                {'platformApi':{'major':2,'minMinor':0}},{'frontendApi':{'major':1,'minMinor':2}},

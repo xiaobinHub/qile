@@ -192,6 +192,31 @@ class ReadAdapterTests(unittest.TestCase):
         with self.assertRaises(auth.AuthError):
             api.booking_page(self.client, {'status': 'upcoming', 'cursor': 'abc'})
 
+    def test_short_booking_pages_follow_explicit_total_for_live_and_history(self):
+        for status in ('upcoming', 'completed'):
+            with self.subTest(status=status):
+                self.client.booking_pages = {
+                    1: {'list': [self.client.record(1)], 'allPage': 2},
+                    2: {'list': [self.client.record(2)], 'allPage': 2},
+                }
+                first = api.booking_page(self.client, {'status': status, 'page': 1})
+                self.assertFalse(first['complete'])
+                second = api.booking_page(self.client, {'status': status, 'page': 2})
+                self.assertTrue(second['complete'])
+                self.assertEqual([row['cid'] for row in first['items'] + second['items']], ['1', '2'])
+
+    def test_booking_page_rejects_contradictory_metadata_and_empty_unfinished_pages(self):
+        for metadata in ({'allPage': 2, 'lastPage': True}, {'allPage': 1, 'lastPage': False}):
+            with self.subTest(metadata=metadata):
+                self.client.booking_pages = {1: {'list': [self.client.record(1)], **metadata}}
+                with self.assertRaises(auth.AuthError) as failure:
+                    api.booking_page(self.client, {'page': 1})
+                self.assertEqual(failure.exception.code, 'UPSTREAM_SCHEMA_CHANGED')
+        self.client.booking_pages = {1: {'list': [], 'allPage': 2, 'lastPage': False}}
+        with self.assertRaises(auth.AuthError) as failure:
+            api.booking_page(self.client, {'page': 1})
+        self.assertEqual(failure.exception.code, 'UPSTREAM_SCHEMA_CHANGED')
+
     def test_cancelled_missing_teacher_and_cid_are_nullable(self):
         self.client.cancel_pages = {1: [{'dateTime': '2099-01-02 18:00-18:25', 'teachername': '合成教师', 'course_name': '内容', 'courseware_id': '10001'}]}
         result = api.bookings(self.client, {'status': 'cancelled'})['items'][0]

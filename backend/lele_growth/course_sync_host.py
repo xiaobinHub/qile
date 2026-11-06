@@ -14,7 +14,9 @@ import uuid
 from datetime import datetime, timezone
 
 from lele_growth.child_service import ApiError, require
-from lele_growth.course_sync import SHANGHAI, CourseSyncConflict, clock, purge_incomplete, reconcile_current, validate_settings
+from lele_growth.course_sync import SHANGHAI, CourseSyncConflict, clock, purge_incomplete, validate_settings
+from lele_growth.course_sync_identity import reconcile_identified
+from lele_growth import course_sync_identity_store as identity_store
 from lele_growth.business_operations import uid
 from lele_growth.plugins import private_store
 from lele_growth.plugins.policy import row_dict
@@ -144,6 +146,35 @@ def purge_saved(service, cur, child_id, actor_id, account_id=None):
     return removed
 
 
+def confirmed_cancel(service, cur, scope, context, payload):
+    """Finish a CID-known cancellation atomically with its successful receipt.
+
+    Only the final succeeded operation reaches this path. Uncertain cancellation
+    responses and the first upstream cancellation step never remove a task.
+    """
+    account_id, contract_id = _identity(payload, 'accountId'), _identity(payload, 'contractId')
+    binding = private_store.get(cur, scope, 'login-session', 'current')
+    require(binding and str(binding['payload'].get('userid')) == account_id,
+            409, '美森账号已改变，本次取消记录没有同步。', 'BINDING_CHANGED')
+    lesson = payload.get('lesson')
+    require(isinstance(lesson, dict) and isinstance(lesson.get('cid'), str)
+            and lesson.get('status') == 'cancelled' and lesson.get('invalid') is False,
+            400, '取消课程的关联信息不完整。', 'VALIDATION_ERROR')
+    current = service.store.read(cur, scope['child_id'], locked=True)
+    identities = identity_store.load(cur, scope, account_id, contract_id)
+    identities = {cid: record for cid, record in identities.items() if cid == lesson['cid']}
+    updated, _, records = reconcile_identified(current['data'], [lesson],
+        associations={cid: record['payload'] for cid, record in identities.items()},
+        account_id=account_id, contract_id=contract_id, points=0, start_date='0001-01-01',
+        now=datetime.now(SHANGHAI))
+    # Cancellation alone does not create a calendar category before initial sync.
+    updated['categories'] = copy.deepcopy(current['data']['categories'])
+    _commit(service, cur, scope['child_id'], current, updated, context.get('actorId'), 'course.sync.cancel')
+    identity_store.save(cur, scope, identities, records)
+    snapshot, revision = identity_store.snapshot(cur, scope)
+    identity_store.advance(cur, scope, revision, snapshot)
+
+
 def handle(service, cur, scope, request_context, action, payload):
     require(scope.get("plugin_id") == PLUGIN_ID, 403, "此插件不能同步课程。", "plugin_capability_denied")
     actor_id = request_context.get("actorId")
@@ -152,7 +183,10 @@ def handle(service, cur, scope, request_context, action, payload):
     child_id = scope["child_id"]
     if action == "courseSync.get":
         stored, revision = _settings(cur, scope)
-        return {"ok": True, "data": _public(stored, revision, owner=owner)}
+        snapshot, snapshot_revision = identity_store.snapshot(cur, scope)
+        return {"ok": True, "data": {**_public(stored, revision, owner=owner),
+                'snapshotRevision': snapshot_revision, 'needsReview': snapshot.get('needsReview', 0),
+                'review': snapshot.get('review', [])}}
     if action == "courseSync.purge":
         require(owner or request_context.get("jobId"), 403, "只有儿童负责人可以设置课程同步。", "OWNER_REQUIRED")
         removed = purge_saved(service, cur, child_id, actor_id, payload.get("accountId"))
@@ -200,12 +234,19 @@ def handle(service, cur, scope, request_context, action, payload):
         return {"ok": True, "data": {"state": "paused" if reason != "disabled" else "disabled", "reason": reason}}
     if action != "courseSync.run":
         require(list_complete and not contract_error, 409, _reason_message(contract_error or "incomplete"), contract_error or "incomplete")
+    _, snapshot_revision = identity_store.snapshot(cur, scope)
+    if type(payload.get('snapshotRevision')) is not int or payload['snapshotRevision'] != snapshot_revision:
+        if action == 'courseSync.run':
+            return {'ok': True, 'data': {'state': 'paused', 'reason': 'snapshot-changed'}}
+        raise ApiError(409, '课程已被另一轮同步更新，请重新读取课程后重试。', 'SYNC_SNAPSHOT_CHANGED')
     current = service.store.read(cur, child_id, locked=True)
+    identities = identity_store.load(cur, scope, account_id, contract_id)
     try:
-        updated, summary = reconcile_current(
+        updated, summary, records = reconcile_identified(
             current["data"], courses, account_id=account_id, contract_id=contract_id, points=points,
             start_date=start_date, now=datetime.now(SHANGHAI), list_complete=list_complete,
-            archived=archived, contract_error=contract_error)
+            archived=archived, contract_error=contract_error,
+            associations={cid: record['payload'] for cid, record in identities.items()})
     except CourseSyncConflict as error:
         if action == "courseSync.run":
             return {"ok": True, "data": {"state": "paused", "reason": error.code}}
@@ -217,6 +258,8 @@ def handle(service, cur, scope, request_context, action, payload):
     if action == "courseSync.preview":
         return {"ok": True, "data": summary}
     _commit(service, cur, child_id, current, updated, actor_id, "course.sync")
+    identity_store.save(cur, scope, identities, records)
+    identity_store.advance(cur, scope, snapshot_revision, summary)
     if action == "courseSync.save" or stored.get("accountId") != account_id or stored.get("contractId") != contract_id:
         _store_settings(cur, scope, {"enabled": True, "points": points, "startDate": start_date,
                                       "accountId": account_id, "contractId": contract_id}, revision)
