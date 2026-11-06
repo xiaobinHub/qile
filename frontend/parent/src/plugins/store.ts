@@ -54,6 +54,8 @@ export function pluginReason(plugin: Plugin) {
   if (plugin.operationState === "updating")
     return "应用正在更新，完成后会自动刷新；期间可停用或卸载。"
   if (plugin.operationState === "failed") return "应用暂时无法运行，请稍后刷新。"
+  if (plugin.reason === "plugin_incompatible")
+    return "当前服务与此应用协议不兼容，请重启服务后再试。"
   if (plugin.reason === "plugin_manifest_invalid") return "应用版本定义无效，请联系管理员更新应用。"
   if (plugin.reason === "plugin_config_invalid") return "应用配置无效，请负责人重新检查配置。"
   if (plugin.configRequired) return "请由负责人完成配置后启用。"

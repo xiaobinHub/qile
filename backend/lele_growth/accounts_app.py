@@ -71,7 +71,8 @@ def create_app(config_path, surface='parent'):
     @app.get('/api/health')
     @app.get('/health')
     def health():
-        status={'environment':service.config['environment'],'service':'lele-task-manager','storage':'postgres'}
+        from lele_growth.plugins.manifest import FRONTEND_API_MINOR, PLATFORM_API_MINOR
+        status={'environment':service.config['environment'],'service':'lele-task-manager','storage':'postgres','platformMinor':PLATFORM_API_MINOR,'frontendMinor':FRONTEND_API_MINOR}
         try:
             service.transaction(lambda cur: cur.execute('SELECT 1'))
         except (ApiError,StoreError):

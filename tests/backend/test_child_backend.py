@@ -798,6 +798,7 @@ class ChildBackendTests(unittest.TestCase):
         health=unauth.get('/api/health')
         self.assertEqual(health.status_code,200)
         self.assertEqual(health.json()['service'],'lele-task-manager')
+        self.assertEqual(health.json()['frontendMinor'],1)
         self.assertTrue(health.json()['databaseReady'])
         self.assertNotIn('data',health.json())
 

@@ -141,3 +141,17 @@ class PluginManifestTests(unittest.TestCase):
         for edit in ({'group':1},{'maxItems':101},{'uniqueItems':False},{'items':{'type':'object'}},{'default':['reading','reading']}):
             with self.subTest(edit=edit),self.assertRaises(ApiError): validate_schema({'type':'object','properties':{'topics':{**field,**edit}}})
         with self.assertRaises(ApiError): validate_schema({'type':'object','properties':{'name':{'type':'string','group':[]}}})
+
+    def test_protocol_mismatch_is_not_reported_as_an_invalid_manifest(self):
+        from lele_growth.plugins.policy import eligibility_reason
+        context = dict(publication_status='published', in_scope=True, archived=False, deleted_at=None,
+                       installed=True, requires_reenable=False, enabled=True, operation_state='ready',
+                       release_id='release', manifest=manifest(), config={},
+                       config_schema={'type':'object','properties':{},'required':[]})
+        self.assertIsNone(eligibility_reason(context))
+        incompatible = copy.deepcopy(context)
+        incompatible['manifest']['frontendApi'] = {'major': 1, 'minMinor': 99}
+        self.assertEqual(eligibility_reason(incompatible), 'plugin_incompatible')
+        invalid = copy.deepcopy(context)
+        invalid['manifest']['version'] = 'bad'
+        self.assertEqual(eligibility_reason(invalid), 'plugin_manifest_invalid')

@@ -154,16 +154,24 @@ def health(url):
         return False
 
 
-def plugin_runtime_ready():
+def plugin_runtime_status():
     """Probe the authenticated control service, not just a possibly stale socket file."""
     from lele_growth.plugins.supervisor import unix_request
     sockets = RUNTIME / 'plugin-sockets'
     try:
         result = unix_request(sockets / 'control.sock', '/ready', {}, timeout=1,
                               credential=(sockets / 'control.token').read_text().strip())
-        return result.get('ok') is True and result.get('protocol') == '1.0'
     except Exception:
-        return False
+        return None
+    if result.get('ok') is True and result.get('protocol') == '1.0':
+        return result
+    return None
+
+
+def plugin_runtime_ready():
+    from lele_growth.plugins.manifest import FRONTEND_API_MINOR
+    status = plugin_runtime_status()
+    return status is not None and status.get('frontendMinor') == FRONTEND_API_MINOR
 
 
 def ensure_plugin_runtime():
@@ -179,6 +187,10 @@ def ensure_plugin_runtime():
     # Serialize two concurrent `start` or deployment commands.
     with (sockets / 'start.lock').open('a+') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
+        from lele_growth.plugins.manifest import FRONTEND_API_MINOR
+        status = plugin_runtime_status()
+        if status is not None and status.get('frontendMinor') != FRONTEND_API_MINOR:
+            stop_plugin_runtime()
         if plugin_runtime_ready():
             return
         # Do not replace an active runtime's socket if its readiness check failed.
@@ -188,7 +200,8 @@ def ensure_plugin_runtime():
             except BlockingIOError:
                 raise RuntimeError('插件运行服务进程仍在运行但未就绪，请查看 data/development/plugin-runtime.log。') from None
         environment = {**os.environ, 'PYTHONPATH': str(ROOT / 'backend'),
-                       'LELE_PLUGIN_ROOT': str(root), 'LELE_PLUGIN_SOCKET_ROOT': str(sockets)}
+                       'LELE_PLUGIN_ROOT': str(root), 'LELE_PLUGIN_SOCKET_ROOT': str(sockets),
+                       'LELE_DEV_RELOAD': '1'}
         vault_key = RUNTIME / 'plugin-vault.txt'
         if not vault_key.exists():
             import base64
@@ -257,7 +270,8 @@ def start():
                        'LELE_PLUGIN_SOCKET_ROOT': str(plugin_socket_root)}
         with (RUNTIME / (surface + '.log')).open('ab', buffering=0) as log:
             process = subprocess.Popen([sys.executable, '-m', 'uvicorn', 'lele_growth.accounts_app:create_from_env', '--factory',
-                                        '--host', '0.0.0.0', '--port', str(port), '--no-proxy-headers'],
+                                        '--host', '0.0.0.0', '--port', str(port), '--no-proxy-headers',
+                                        '--reload', '--reload-dir', str(ROOT / 'backend' / 'lele_growth')],
                                        cwd=ROOT, env=environment, stdin=subprocess.DEVNULL, stdout=log, stderr=log,
                                        start_new_session=True)
         pid_path.write_text(str(process.pid))

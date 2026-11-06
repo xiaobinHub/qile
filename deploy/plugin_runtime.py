@@ -16,6 +16,7 @@ import os
 from pathlib import Path
 import secrets
 import signal
+import subprocess
 import sys
 import threading
 import time
@@ -320,7 +321,8 @@ def create_app(config_path, root=None):
             raise ApiError(400, '请求格式不正确。') from None
         require(isinstance(body, dict), 400)
         if operation == 'ready':
-            return {'ok': True, 'protocol': '1.0'}
+            from lele_growth.plugins.manifest import FRONTEND_API_MINOR
+            return {'ok': True, 'protocol': '1.0', 'frontendMinor': FRONTEND_API_MINOR}
         if operation.startswith('dev-'):
             return await run_in_threadpool(runtime.control_development, operation, body)
         if operation == 'bridge':
@@ -344,12 +346,67 @@ def create_from_env():
     return create_app(config_path)
 
 
+def _code_stamp(root):
+    stamp = []
+    for path in root.rglob('*.py'):
+        if '__pycache__' in path.parts:
+            continue
+        try:
+            stamp.append((str(path.relative_to(root)), path.stat().st_mtime_ns))
+        except OSError:
+            continue
+    return tuple(sorted(stamp))
+
+
+def _reload_development_runtime(config, directory):
+    """Restart the runtime child when backend code changes. Development only."""
+    command = [sys.executable, str(Path(__file__).resolve()), '--config', str(config)]
+    env = os.environ.copy()
+    env['LELE_DEV_RELOAD_CHILD'] = '1'
+    watch = ROOT / 'backend' / 'lele_growth'
+    sock = directory / 'control.sock'
+    state = {'process': None, 'stop': False}
+
+    def stop(signum, _frame):
+        state['stop'] = True
+        process = state['process']
+        if process is not None and process.poll() is None:
+            process.terminate()
+
+    signal.signal(signal.SIGTERM, stop)
+    signal.signal(signal.SIGINT, stop)
+    while not state['stop']:
+        seen = _code_stamp(watch)
+        if sock.exists() or sock.is_symlink():
+            sock.unlink()
+        process = subprocess.Popen(command, env=env)
+        state['process'] = process
+        changed = False
+        while process.poll() is None and not state['stop']:
+            time.sleep(0.5)
+            if _code_stamp(watch) != seen:
+                changed = True
+                process.terminate()
+                break
+        try:
+            process.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait(timeout=5)
+        if state['stop'] or not changed:
+            return process.returncode or 0
+    process = state['process']
+    return process.returncode or 0 if process is not None else 0
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--config', required=True, type=Path)
     args = parser.parse_args(argv)
-    import uvicorn
     directory = private_directory(socket_root())
+    if os.environ.get('LELE_DEV_RELOAD') == '1' and os.environ.get('LELE_DEV_RELOAD_CHILD') != '1':
+        raise SystemExit(_reload_development_runtime(args.config, directory))
+    import uvicorn
     # umask also protects uvicorn's Unix socket from other local users.
     os.umask(0o077)
     uvicorn.run(create_app(args.config), uds=str(directory / 'control.sock'), access_log=False, log_level='warning')

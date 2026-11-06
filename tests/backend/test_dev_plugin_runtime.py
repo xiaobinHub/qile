@@ -40,6 +40,11 @@ class DevelopmentRuntimeTests(unittest.TestCase):
             self.assertFalse(dev.plugin_runtime_ready())
         with patch('lele_growth.plugins.supervisor.unix_request', return_value={'ok': True, 'protocol': 'invalid'}):
             self.assertFalse(dev.plugin_runtime_ready())
+        from lele_growth.plugins.manifest import FRONTEND_API_MINOR
+        with patch('lele_growth.plugins.supervisor.unix_request', return_value={'ok': True, 'protocol': '1.0'}):
+            self.assertFalse(dev.plugin_runtime_ready())
+        with patch('lele_growth.plugins.supervisor.unix_request', return_value={'ok': True, 'protocol': '1.0', 'frontendMinor': FRONTEND_API_MINOR}):
+            self.assertTrue(dev.plugin_runtime_ready())
 
     def test_start_creates_persistent_runtime_and_waits_for_authenticated_readiness(self):
         process = Mock(pid=12345)
@@ -54,6 +59,7 @@ class DevelopmentRuntimeTests(unittest.TestCase):
         self.assertTrue(options['start_new_session'])
         self.assertEqual(options['env']['LELE_PLUGIN_ROOT'], str(self.runtime / 'plugin-runtime'))
         self.assertEqual(options['env']['LELE_PLUGIN_SOCKET_ROOT'], str(self.runtime / 'plugin-sockets'))
+        self.assertEqual(options['env']['LELE_DEV_RELOAD'], '1')
         vault_key = Path(options['env']['LELE_PLUGIN_VAULT_KEY'])
         self.assertTrue(vault_key.is_file())
         self.assertEqual(vault_key.stat().st_mode & 0o777, 0o600)
@@ -85,6 +91,39 @@ class DevelopmentRuntimeTests(unittest.TestCase):
             dev.start()
         ensure.assert_called_once()
         launch.assert_not_called()
+
+    def test_web_processes_reload_backend_code(self):
+        process = Mock(pid=42)
+        process.poll.return_value = None
+        with patch.object(dev, 'prepare_database', return_value=self.source), \
+             patch('lele_growth.child_service.initialize'), \
+             patch.object(dev, 'ensure_plugin_runtime'), \
+             patch.object(dev, 'health', side_effect=[False, True, False, True]), \
+             patch.object(dev, '_lan_ip', return_value=None), \
+             patch.object(dev.subprocess, 'Popen', return_value=process) as launch, \
+             patch.object(dev.time, 'sleep'), contextlib.redirect_stdout(io.StringIO()):
+            dev.start()
+        self.assertEqual(launch.call_count, 2)
+        reload_dir = str(dev.ROOT / 'backend' / 'lele_growth')
+        for call in launch.call_args_list:
+            command = call.args[0]
+            self.assertIn('--reload', command)
+            self.assertIn(reload_dir, command)
+
+    def test_stale_runtime_protocol_is_restarted(self):
+        from lele_growth.plugins.manifest import FRONTEND_API_MINOR
+        process = Mock(pid=77)
+        process.poll.return_value = None
+        stale = {'ok': True, 'protocol': '1.0', 'frontendMinor': FRONTEND_API_MINOR - 1}
+        with patch.object(dev, 'plugin_runtime_status', return_value=stale), \
+             patch.object(dev, 'stop_plugin_runtime') as stop, \
+             patch.object(dev, 'plugin_runtime_ready', side_effect=[False, True]), \
+             patch.object(dev.subprocess, 'Popen', return_value=process) as launch, \
+             patch.object(dev.time, 'sleep'):
+            dev.ensure_plugin_runtime()
+        stop.assert_called_once()
+        launch.assert_called_once()
+        self.assertEqual(launch.call_args.kwargs['env']['LELE_DEV_RELOAD'], '1')
 
     def test_deployment_reuses_runtime_and_does_not_terminate_it(self):
         package = self.runtime / 'plugin.tar.gz'
@@ -134,7 +173,8 @@ class DevelopmentRuntimeTests(unittest.TestCase):
                 self.assertEqual(client.post('/ready', json={}, headers={'Authorization': 'Bearer incorrect'}).status_code, 403)
                 response = client.post('/ready', json={}, headers={'Authorization': 'Bearer ' + credential})
                 self.assertEqual(response.status_code, 200)
-                self.assertEqual(response.json(), {'ok': True, 'protocol': '1.0'})
+                from lele_growth.plugins.manifest import FRONTEND_API_MINOR
+                self.assertEqual(response.json(), {'ok': True, 'protocol': '1.0', 'frontendMinor': FRONTEND_API_MINOR})
 
     def test_bridge_identity_cannot_control_runtime_and_requires_signed_context(self):
         from fastapi.testclient import TestClient
