@@ -46,9 +46,60 @@ a {
   color: var(--brand-ink);
 }
 .app {
-  min-height: 100svh;
   margin: auto;
   max-width: 1920px;
+}
+@media screen {
+  html:has(.app) {
+    height: 100%;
+    overflow: hidden;
+    overscroll-behavior: none;
+  }
+  body:has(.app) {
+    position: fixed;
+    inset: 0;
+    overflow: hidden;
+    overscroll-behavior: none;
+  }
+  body:has(.app) > #root {
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .app {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    height: auto;
+    min-height: 0;
+    overflow: hidden;
+  }
+  /* Small visual-viewport differences in iPad standalone mode must not shorten
+     the shell. Only the software keyboard changes its usable height. */
+  html[data-app-keyboard-open] .app {
+    top: var(--app-visible-top, 0px);
+    bottom: auto;
+    height: var(--app-visible-height, 100dvh);
+  }
+  .app > .topbar {
+    flex: none;
+  }
+  .app > #main {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .app > #main > :not(.plugin-page, .calendar-panel) {
+    flex-shrink: 0;
+  }
+  .app > #main[data-scroll-mode="page"] {
+    display: block;
+    overflow: auto;
+    overscroll-behavior: contain;
+  }
 }
 .topbar {
   display: flex;
@@ -111,10 +162,23 @@ a {
   transition-property: color, background-color, border-color, box-shadow;
 }
 .plugin-page {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 20px;
   min-width: 0;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+.plugin-page[hidden] {
+  display: none;
+}
+.plugin-page:has(> .plugin-loading) {
+  overflow: visible;
+}
+.plugin-overlay[hidden] {
+  display: none;
 }
 .plugin-status-notice {
   display: flex;
@@ -127,19 +191,6 @@ a {
   border-radius: var(--radius-card);
   background: var(--card);
   color: var(--muted-foreground);
-}
-.plugin-page-heading {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-}
-.plugin-page-heading h1 {
-  min-width: 0;
-  overflow-wrap: anywhere;
-  font-size: var(--text-page);
-  line-height: var(--text-page--line-height);
-  font-weight: 600;
 }
 .plugin-placeholder {
   display: flex;
@@ -154,9 +205,52 @@ a {
 .plugin-placeholder p {
   color: var(--muted-foreground);
 }
+.plugin-loading {
+  position: absolute;
+  inset: calc(var(--content-gutter, 0px) * -1);
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--card);
+}
+.plugin-loading-bar,
+.plugin-loading-tools {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: none;
+  padding: 16px 20px;
+}
+.plugin-loading-bar {
+  min-height: 64px;
+}
+.plugin-loading-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
+  gap: 16px;
+  min-height: 0;
+  padding: 8px 20px 20px;
+}
+.plugin-loading-card {
+  height: 144px;
+}
 .plugin-host,
 .plugin-mount {
   min-width: 0;
+  flex: 1;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+.plugin-host:not([hidden]) {
+  display: flex;
+  flex-direction: column;
+}
+.plugin-mount > :not(.plugin-development-status) {
+  height: 100%;
+  min-height: 0;
 }
 .child-profile {
   height: auto;
@@ -198,9 +292,9 @@ a {
   line-height: var(--text-caption--line-height);
 }
 #main {
+  --content-gutter: 16px;
   min-width: 0;
-  padding: 16px max(24px, env(safe-area-inset-right, 0px))
-    max(24px, env(safe-area-inset-bottom, 0px)) max(24px, env(safe-area-inset-left, 0px));
+  padding: var(--content-gutter);
 }
 .app-loading {
   min-height: 100svh;
@@ -308,13 +402,15 @@ a {
 /* Auth pages retain the approved centered card composition. */
 .auth-screen {
   min-height: 100svh;
-  display: grid;
-  place-items: center;
-  padding: 32px 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 32px 20px 16px;
   background: var(--muted);
 }
 .login-card {
   width: min(100%, 416px);
+  margin-block: auto;
   padding: 0;
   gap: 0;
   overflow: hidden;
@@ -354,6 +450,20 @@ a {
 .login-help svg {
   width: 20px;
   margin-top: 3px;
+}
+.login-filing {
+  margin-top: 8px;
+  font-size: var(--text-caption);
+  line-height: var(--text-caption--line-height);
+  text-align: center;
+}
+.login-filing a {
+  color: var(--text-secondary);
+  text-decoration: none;
+}
+.login-filing a:hover,
+.login-filing a:focus-visible {
+  text-decoration: underline;
 }
 .input-with-icon {
   position: relative;
@@ -943,6 +1053,7 @@ a {
   border-radius: var(--radius-card);
   background: var(--card);
   padding: 0 20px 24px;
+  min-height: 100%;
 }
 .store-tabs {
   gap: 0;
@@ -1239,31 +1350,19 @@ a {
   white-space: normal;
   min-width: 160px;
 }
-/* Let the active ledger fill the page; its table owns desktop scrolling. */
-.app:has(.store-ledger) {
-  display: flex;
-  flex-direction: column;
-  min-height: 100dvh;
-}
-.app:has(.store-ledger) > .topbar {
-  flex-shrink: 0;
-}
+/* The ledger fills the app's allocated content area; its table scrolls. */
 .app:has(.store-ledger) #main {
   display: flex;
   flex: 1;
   flex-direction: column;
   min-height: 0;
-  padding-bottom: 0;
 }
 .store-page:has(.store-ledger) {
   display: flex;
   flex: 1;
   flex-direction: column;
   min-height: 0;
-  padding-bottom: env(safe-area-inset-bottom, 0px);
-  border-bottom: 0;
-  border-bottom-right-radius: 0;
-  border-bottom-left-radius: 0;
+  padding-bottom: 0;
 }
 .store-page:has(.store-ledger) .store-tabs,
 .store-tab-content:has(.store-ledger),
@@ -1283,9 +1382,6 @@ a {
   align-content: start;
 }
 @media (min-width: 681px) and (min-height: 600px) {
-  .app:has(.store-ledger) {
-    height: 100dvh;
-  }
   .store-ledger .ledger-desktop {
     display: flex;
     flex: 1;
@@ -2066,10 +2162,6 @@ a {
     padding-inline: max(16px, env(safe-area-inset-left, 0px))
       max(16px, env(safe-area-inset-right, 0px));
   }
-  #main {
-    padding-inline: max(16px, env(safe-area-inset-left, 0px))
-      max(16px, env(safe-area-inset-right, 0px));
-  }
 }
 
 @media (min-width: 768px) and (max-width: 1023px) {
@@ -2132,7 +2224,7 @@ a {
     padding-inline: 12px;
   }
   #main {
-    padding: 12px 14px 24px;
+    --content-gutter: 12px;
   }
   .calendar-toolbar {
     padding: 12px;

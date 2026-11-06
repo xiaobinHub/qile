@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Lele plugin manifest protocol 1.0",
+  "title": "Lele plugin manifest protocol 1.1",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -43,7 +43,25 @@
       "type": ["object", "null"]
     },
     "backend": {
-      "type": ["object", "null"]
+      "anyOf": [
+        {"const": null},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["entryModule"],
+          "properties": {
+            "entryModule": {
+              "type": "string",
+              "pattern": "^[A-Za-z_]\\w*(?:\\.[A-Za-z_]\\w*)*$"
+            },
+            "requestTimeoutSeconds": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 45
+            }
+          }
+        }
+      ]
     },
     "configSchema": {
       "type": ["string", "object"]
@@ -59,10 +77,23 @@
           "plugin.state.read",
           "plugin.state.write",
           "plugin.jobs.schedule",
-          "plugin.events.subscribe"
+          "plugin.events.subscribe",
+          "plugin.private-state",
+          "plugin.credentials",
+          "plugin.external-operations",
+          "plugin.resources"
         ]
       },
       "uniqueItems": true
+    },
+    "resourceOrigins": {
+      "type": "array",
+      "maxItems": 16,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^https://[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+$"
+      }
     },
     "tasks": {
       "type": "array"
@@ -103,7 +134,7 @@
           "const": 1
         },
         "minMinor": {
-          "const": 0
+          "enum": [0, 1]
         }
       }
     }

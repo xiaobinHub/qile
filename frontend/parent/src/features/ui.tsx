@@ -136,7 +136,9 @@ export function Modal({
           if (runtime.getSnapshot().busy) e.preventDefault()
         }}
       >
-        <DialogHeader className={bareHeader ? "ui-modal-header bare-modal-header" : "ui-modal-header"}>
+        <DialogHeader
+          className={bareHeader ? "ui-modal-header bare-modal-header" : "ui-modal-header"}
+        >
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription className={!description ? "sr-only" : ""}>
             {description || title + "，请填写以下内容。"}

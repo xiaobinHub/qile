@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import fcntl
 import json
 import os
 import secrets
@@ -153,19 +154,126 @@ def health(url):
         return False
 
 
+def plugin_runtime_status():
+    """Probe the authenticated control service, not just a possibly stale socket file."""
+    from lele_growth.plugins.supervisor import unix_request
+    sockets = RUNTIME / 'plugin-sockets'
+    try:
+        result = unix_request(sockets / 'control.sock', '/ready', {}, timeout=1,
+                              credential=(sockets / 'control.token').read_text().strip())
+    except Exception:
+        return None
+    if result.get('ok') is True and result.get('protocol') == '1.0':
+        return result
+    return None
+
+
+def plugin_runtime_ready():
+    from lele_growth.plugins.manifest import FRONTEND_API_MINOR, PLATFORM_API_MINOR
+    status = plugin_runtime_status()
+    return (status is not None and status.get('frontendMinor') == FRONTEND_API_MINOR
+            and status.get('platformMinor') == PLATFORM_API_MINOR)
+
+
+def ensure_plugin_runtime():
+    """Keep the development runtime alive across starts and plugin deployments."""
+    from lele_growth.child_service import load_config
+    config = load_config(CONFIG)
+    if config['environment'] != 'development' or config['database']['host'] not in ('127.0.0.1', 'localhost', '::1'):
+        raise RuntimeError('插件运行服务仅允许使用本机 development 配置。')
+    RUNTIME.mkdir(parents=True, exist_ok=True, mode=0o700)
+    root, sockets = RUNTIME / 'plugin-runtime', RUNTIME / 'plugin-sockets'
+    root.mkdir(parents=True, exist_ok=True, mode=0o700)
+    sockets.mkdir(parents=True, exist_ok=True, mode=0o700)
+    # Serialize two concurrent `start` or deployment commands.
+    with (sockets / 'start.lock').open('a+') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        from lele_growth.plugins.manifest import FRONTEND_API_MINOR, PLATFORM_API_MINOR
+        status = plugin_runtime_status()
+        if status is not None and (status.get('frontendMinor') != FRONTEND_API_MINOR
+                                   or status.get('platformMinor') != PLATFORM_API_MINOR):
+            stop_plugin_runtime()
+        if plugin_runtime_ready():
+            return
+        # Do not replace an active runtime's socket if its readiness check failed.
+        with (sockets / 'service.lock').open('a+') as owner:
+            try:
+                fcntl.flock(owner, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                raise RuntimeError('插件运行服务进程仍在运行但未就绪，请查看 data/development/plugin-runtime.log。') from None
+        environment = {**os.environ, 'PYTHONPATH': str(ROOT / 'backend'),
+                       'LELE_PLUGIN_ROOT': str(root), 'LELE_PLUGIN_SOCKET_ROOT': str(sockets),
+                       'LELE_DEV_RELOAD': '1'}
+        vault_key = RUNTIME / 'plugin-vault.txt'
+        if not vault_key.exists():
+            import base64
+            descriptor = os.open(vault_key, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            with os.fdopen(descriptor, 'w') as target:
+                target.write('local-v1:' + base64.urlsafe_b64encode(secrets.token_bytes(32)).decode() + '\n')
+        environment['LELE_PLUGIN_VAULT_KEY'] = str(vault_key)
+        with (RUNTIME / 'plugin-runtime.log').open('ab', buffering=0) as log:
+            process = subprocess.Popen([sys.executable, 'deploy/plugin_runtime.py', '--config', str(CONFIG)],
+                                       cwd=ROOT, env=environment, stdin=subprocess.DEVNULL,
+                                       stdout=log, stderr=log, start_new_session=True)
+        try:
+            for _ in range(80):
+                if plugin_runtime_ready():
+                    (RUNTIME / 'plugin-runtime.pid').write_text(str(process.pid))
+                    return
+                if process.poll() is not None:
+                    break
+                time.sleep(.1)
+        except BaseException:
+            process.terminate()
+            process.wait(timeout=5)
+            raise
+        process.terminate()
+        process.wait(timeout=5)
+        raise RuntimeError('插件运行服务启动失败，请查看 data/development/plugin-runtime.log。')
+
+
+def stop_plugin_runtime():
+    pid_path = RUNTIME / 'plugin-runtime.pid'
+    if not pid_path.is_file():
+        return
+    try:
+        pid = int(pid_path.read_text())
+        command = subprocess.check_output(['ps', '-p', str(pid), '-o', 'command='], text=True).strip()
+        if 'deploy/plugin_runtime.py' in command and str(CONFIG) in command:
+            os.kill(pid, signal.SIGTERM)
+            for _ in range(100):
+                current = subprocess.run(['ps', '-p', str(pid), '-o', 'command='], text=True, capture_output=True)
+                if current.returncode or 'deploy/plugin_runtime.py' not in current.stdout:
+                    break
+                time.sleep(.1)
+            else:
+                raise RuntimeError('插件运行服务尚未结束，请查看本机日志后重试。')
+    except (ValueError, ProcessLookupError, subprocess.CalledProcessError):
+        pass
+    pid_path.unlink(missing_ok=True)
+
+
 def start():
     config = prepare_database()
     from lele_growth.child_service import initialize
     initialize(CONFIG)
+    plugin_root = RUNTIME / 'plugin-runtime'
+    plugin_socket_root = RUNTIME / 'plugin-sockets'
+    plugin_root.mkdir(parents=True, exist_ok=True, mode=0o700)
+    plugin_socket_root.mkdir(parents=True, exist_ok=True, mode=0o700)
+    ensure_plugin_runtime()
     for surface, port in [('parent', 18787), ('admin', 18788)]:
         origin = config[surface + '_origin']
         if health(origin):
             continue
         pid_path = RUNTIME / (surface + '.pid')
-        environment = {**os.environ, 'PYTHONPATH': str(ROOT / 'backend'), 'LELE_ACCOUNTS_CONFIG': str(CONFIG), 'LELE_SURFACE': surface}
+        environment = {**os.environ, 'PYTHONPATH': str(ROOT / 'backend'), 'LELE_ACCOUNTS_CONFIG': str(CONFIG),
+                       'LELE_SURFACE': surface, 'LELE_PLUGIN_ROOT': str(plugin_root),
+                       'LELE_PLUGIN_SOCKET_ROOT': str(plugin_socket_root)}
         with (RUNTIME / (surface + '.log')).open('ab', buffering=0) as log:
             process = subprocess.Popen([sys.executable, '-m', 'uvicorn', 'lele_growth.accounts_app:create_from_env', '--factory',
-                                        '--host', '0.0.0.0', '--port', str(port), '--no-proxy-headers'],
+                                        '--host', '0.0.0.0', '--port', str(port), '--no-proxy-headers',
+                                        '--reload', '--reload-dir', str(ROOT / 'backend' / 'lele_growth')],
                                        cwd=ROOT, env=environment, stdin=subprocess.DEVNULL, stdout=log, stderr=log,
                                        start_new_session=True)
         pid_path.write_text(str(process.pid))
@@ -240,7 +348,102 @@ def stop():
             except (ValueError, ProcessLookupError, subprocess.CalledProcessError):
                 pass
             file.unlink(missing_ok=True)
-    print('本机新版 Web 服务已停止；开发数据库及数据保留。')
+    stop_plugin_runtime()
+    print('本机新版 Web 服务及插件运行服务已停止；开发数据库及数据保留。')
+
+
+def plugins_deploy(package_path):
+    """Deploy one development plugin package to the explicit local development root."""
+    package = Path(package_path).resolve()
+    require_file = subprocess.run([sys.executable, '-c', 'from pathlib import Path; import sys; p=Path(sys.argv[1]); print(p.is_file())', str(package)],
+                                  text=True, capture_output=True, check=True)
+    if require_file.stdout.strip() != 'True':
+        raise RuntimeError('插件包不存在：' + str(package))
+    from lele_growth.child_service import ChildService, initialize
+    from lele_growth.maintenance import initialize_plugin_platform
+    from lele_growth.plugins.deployment import PluginDeployment
+    from lele_growth.plugins.supervisor import RuntimeClient
+    prepare_database()
+    initialize(CONFIG)
+    initialize_plugin_platform(ChildService(CONFIG))
+    plugin_root = ROOT / 'data' / 'development' / 'plugin-runtime'
+    runtime_client = RuntimeClient(plugin_root)
+    runtime_client.sockets = RUNTIME / 'plugin-sockets'
+    manager = PluginDeployment(ChildService(CONFIG), root=plugin_root, runtime=runtime_client, actor='local-development')
+    ensure_plugin_runtime()
+    preview = manager.execute('deploy', package=package)
+    result = manager.execute('deploy', package=package, apply=True, confirm=preview['target']['targetId'])
+    print(json.dumps(result, ensure_ascii=False))
+
+
+def plugins_preview(package_path):
+    """Register a development-only package for UI review without a runtime service."""
+    package = Path(package_path).resolve()
+    if not package.is_file():
+        raise RuntimeError('插件包不存在：' + str(package))
+    from lele_growth.child_service import ChildService, initialize
+    from lele_growth.maintenance import initialize_plugin_platform
+    from lele_growth.plugins.catalog import register_release, set_publication, set_scope
+    from lele_growth.plugins.deployment import inspect_package, prepare_release
+    from lele_growth.plugins.policy import catalog_row
+    prepare_database()
+    initialize(CONFIG)
+    service = ChildService(CONFIG)
+    initialize_plugin_platform(service)
+    info = inspect_package(package)
+    root = ROOT / 'data' / 'development' / 'plugin-runtime'
+    prepare_release(info, root)
+    manifest = info['manifest']
+    plugin_id = manifest['id']
+    def register(cur):
+        cur.execute("SELECT operation_state FROM lele.plugin_catalog WHERE id=%s", (plugin_id,))
+        state = cur.fetchone()
+        if state and state[0] != 'ready':
+            cur.execute("UPDATE lele.plugin_catalog SET operation_state='ready',updated_at=now() WHERE id=%s", (plugin_id,))
+        release = register_release(cur, manifest, artifact_sha256=info['sha256'],
+                                   source_commit=info['descriptor']['sourceCommit'],
+                                   config_schema=info['configSchema'], activate=True)
+        revision = catalog_row(cur, plugin_id)['policy_revision']
+        set_scope(cur, plugin_id, {'scopeMode': 'all', 'childIds': [], 'expectedRevision': revision})
+        revision = catalog_row(cur, plugin_id)['policy_revision']
+        set_publication(cur, plugin_id, True, revision)
+        cur.execute('''SELECT c.id FROM lele.children c LEFT JOIN lele.child_plugins p
+                       ON p.child_id=c.id AND p.plugin_id=%s
+                       WHERE c.deleted_at IS NULL ORDER BY c.id''', (plugin_id,))
+        for (child_id,) in cur.fetchall():
+            cur.execute('''INSERT INTO lele.child_plugins(child_id,plugin_id,installed,enabled,revision,generation)
+                           VALUES(%s,%s,true,true,1,1)
+                           ON CONFLICT(child_id,plugin_id) DO UPDATE SET
+                             installed=true,enabled=true,requires_reenable=false,
+                             revision=lele.child_plugins.revision+1,
+                             generation=lele.child_plugins.generation+1''',
+                        (child_id, plugin_id))
+            cur.execute('''INSERT INTO lele.child_plugin_configs(child_id,plugin_id,config,config_schema_version)
+                           VALUES(%s,%s,'{}'::jsonb,1)
+                           ON CONFLICT(child_id,plugin_id) DO UPDATE SET
+                             config='{}'::jsonb,config_schema_version=1''',
+                        (child_id, plugin_id))
+        return release
+    release = service.transaction(register, exclusive=True)
+    print(json.dumps({'environment': 'development', 'pluginId': plugin_id,
+                      'version': manifest['version'], 'releaseId': release['release_id'],
+                      'mode': 'ui-preview'}, ensure_ascii=False))
+
+
+def plugins_inspect(plugin_id, child_id=None):
+    """Read one local development installation status without changing it."""
+    from lele_growth.child_service import ChildService
+    from lele_growth.plugins.installations import child_plugin
+    if child_id is None:
+        accounts_path = RUNTIME / 'accounts.json'
+        if not accounts_path.is_file():
+            raise RuntimeError('本机开发账号尚未初始化。')
+        child_id = json.loads(accounts_path.read_text()).get('initialChildId')
+    if not isinstance(child_id, str) or not child_id:
+        raise RuntimeError('没有可检查的本机开发儿童。')
+    service = ChildService(CONFIG)
+    result = service.transaction(lambda cur: child_plugin(cur, plugin_id, child_id))
+    print(json.dumps(result, ensure_ascii=False))
 
 
 def reset_admin(login_name):
@@ -267,8 +470,13 @@ def main():
     sub = parser.add_subparsers(dest='command', required=True)
     sub.add_parser('setup').add_argument('--source', help='可选：导入到本机开发库的旧版数据包；原文件只读')
     sub.add_parser('reset-admin').add_argument('--login-name', default='admin')
-    for name in ('start', 'stop', 'restart', 'plugins-setup', 'status', 'test'):
+    for name in ('start', 'stop', 'restart', 'plugins-setup', 'plugins-runtime-start', 'status', 'test'):
         sub.add_parser(name)
+    sub.add_parser('plugins-deploy').add_argument('package')
+    sub.add_parser('plugins-preview').add_argument('package')
+    inspect_parser = sub.add_parser('plugins-inspect')
+    inspect_parser.add_argument('plugin')
+    inspect_parser.add_argument('--child')
     args = parser.parse_args()
     try:
         if args.command == 'setup': setup(args.source)
@@ -290,9 +498,19 @@ def main():
             initialize(CONFIG)
             result=initialize_plugin_platform(ChildService(CONFIG))
             print(json.dumps({'environment':'development','plugins':result},ensure_ascii=False))
+        elif args.command == 'plugins-deploy':
+            plugins_deploy(args.package)
+        elif args.command == 'plugins-preview':
+            plugins_preview(args.package)
+        elif args.command == 'plugins-inspect':
+            plugins_inspect(args.plugin, args.child)
+        elif args.command == 'plugins-runtime-start':
+            ensure_plugin_runtime()
+            print('本机插件运行服务已就绪。')
         elif args.command == 'reset-admin': reset_admin(args.login_name)
         elif args.command == 'status':
-            print(json.dumps({surface: health('http://127.0.0.1:' + str(port)) for surface, port in [('parent',18787),('admin',18788)]}))
+            print(json.dumps({**{surface: health('http://127.0.0.1:' + str(port)) for surface, port in [('parent',18787),('admin',18788)]},
+                              'pluginRuntime': plugin_runtime_ready()}))
         else:
             prepare_database()
             environment = {**os.environ, 'PYTHONPATH': str(ROOT / 'backend'), 'LELE_TEST_CONFIG': str(TEST_RUNTIME / 'config.json'),

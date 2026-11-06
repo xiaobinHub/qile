@@ -17,6 +17,7 @@ const id = process.argv[2]
 if (!id || !/^[a-z][a-z0-9-]{1,63}$/.test(id)) throw Error("请指定有效的插件 ID。")
 const source = join(root, "plugins", id)
 const manifest = JSON.parse(readFileSync(join(source, "plugin.json"), "utf8"))
+const { pluginViteConfig } = await import("./plugin_vite_config.mjs")
 if (manifest.id !== id || !/^\d+\.\d+\.\d+$/.test(manifest.version))
   throw Error("插件标识或版本无效。")
 const output = join(root, "output/plugin-releases", id, manifest.version, "build")
@@ -24,9 +25,12 @@ rmSync(output, { recursive: true, force: true })
 mkdirSync(output, { recursive: true })
 if (manifest.frontend) {
   await build({
-    configFile: false,
-    root: source,
-    publicDir: false,
+    ...pluginViteConfig(root, id),
+    base: "./",
+    mode: "production",
+    define: {
+      "process.env.NODE_ENV": JSON.stringify("production"),
+    },
     build: {
       outDir: join(output, "frontend"),
       emptyOutDir: true,
@@ -36,7 +40,9 @@ if (manifest.frontend) {
         formats: ["es"],
         fileName: () => "entry.js",
       },
-      rollupOptions: { output: { assetFileNames: "style.[ext]" } },
+      rollupOptions: {
+        output: { assetFileNames: "style.[ext]", chunkFileNames: "[name]-[hash].js" },
+      },
       minify: true,
       cssCodeSplit: false,
     },

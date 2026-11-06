@@ -22,9 +22,15 @@ class PluginManifestTests(unittest.TestCase):
             self.assertEqual(value,validated); validated['capabilities'].clear()
             self.assertEqual(len(value['capabilities']),2)
 
+    def test_platform_12_supports_fenced_course_sync_without_changing_frontend_protocol(self):
+        value = {**manifest(), 'platformApi': {'major': 1, 'minMinor': 2}}
+        self.assertEqual(validate_manifest(value), value)
+        with self.assertRaises(ApiError):
+            validate_manifest({**value, 'platformApi': {'major': 1, 'minMinor': 3}})
+
     def test_invalid_identity_version_api_capability_unknown_fields_and_entries(self):
         edits=[{'id':'../escape'},{'id':'Upper'},{'version':'01.0.0'},{'version':'1.0.0/dev'},
-               {'platformApi':{'major':2,'minMinor':0}},{'frontendApi':{'major':1,'minMinor':1}},
+               {'platformApi':{'major':2,'minMinor':0}},{'frontendApi':{'major':1,'minMinor':2}},
                {'capabilities':['raw.sql']},{'dependencies':['other']},{'frontend':None},
                {'frontend':{'entry':'frontend/../escape.js'}},{'backend':{'entryModule':'x;exec'}},
                {'capabilities':['plugin.state.read','plugin.state.read']},{'events':['user.all']}]
@@ -141,3 +147,17 @@ class PluginManifestTests(unittest.TestCase):
         for edit in ({'group':1},{'maxItems':101},{'uniqueItems':False},{'items':{'type':'object'}},{'default':['reading','reading']}):
             with self.subTest(edit=edit),self.assertRaises(ApiError): validate_schema({'type':'object','properties':{'topics':{**field,**edit}}})
         with self.assertRaises(ApiError): validate_schema({'type':'object','properties':{'name':{'type':'string','group':[]}}})
+
+    def test_protocol_mismatch_is_not_reported_as_an_invalid_manifest(self):
+        from lele_growth.plugins.policy import eligibility_reason
+        context = dict(publication_status='published', in_scope=True, archived=False, deleted_at=None,
+                       installed=True, requires_reenable=False, enabled=True, operation_state='ready',
+                       release_id='release', manifest=manifest(), config={},
+                       config_schema={'type':'object','properties':{},'required':[]})
+        self.assertIsNone(eligibility_reason(context))
+        incompatible = copy.deepcopy(context)
+        incompatible['manifest']['frontendApi'] = {'major': 1, 'minMinor': 99}
+        self.assertEqual(eligibility_reason(incompatible), 'plugin_incompatible')
+        invalid = copy.deepcopy(context)
+        invalid['manifest']['version'] = 'bad'
+        self.assertEqual(eligibility_reason(invalid), 'plugin_manifest_invalid')

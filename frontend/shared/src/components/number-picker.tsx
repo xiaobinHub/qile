@@ -17,6 +17,7 @@ type NumberPickerProps = Omit<
   max?: number
   step?: number
   loop?: boolean
+  portalContainer?: HTMLElement | null
   onChange: (value: number) => void
 }
 
@@ -27,6 +28,7 @@ export function NumberPicker({
   max,
   step = 1,
   loop = false,
+  portalContainer,
   onChange,
   disabled,
   readOnly,
@@ -77,6 +79,7 @@ export function NumberPicker({
       </div>
       <PopoverContent
         ref={panel}
+        portalContainer={portalContainer}
         aria-label={`选择${label}`}
         className={cn(cyclic ? "w-36" : "w-48", "gap-0 overflow-hidden p-0")}
         align="start"

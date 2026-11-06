@@ -351,7 +351,7 @@ async function exerciseChildManagement({
     assert.equal(await dad.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth),true)
     if(width>680){
       const box=await dad.locator('.settings-sidebar').boundingBox()
-      assert.ok(Math.abs(box.y+box.height-(height-24))<2,'Sidebar reaches the bottom page padding')
+      assert.ok(Math.abs(box.y+box.height-(height-16))<2,'Sidebar reaches the bottom page padding')
     }
   }
   await dad.setViewportSize({width:1135,height:789})

@@ -14,8 +14,13 @@ type PickerBase = AriaAttributes & {
   disabledDates?: Matcher | Matcher[]
   placeholder?: string
   className?: string
+  portalContainer?: HTMLElement | null
 }
-export type DatePickerProps = PickerBase & { value?: string; onChange: (value: string) => void }
+export type DatePickerProps = PickerBase & {
+  value?: string
+  onChange: (value: string) => void
+  openDownwards?: boolean
+}
 export function DatePicker({
   value,
   onChange,
@@ -25,6 +30,8 @@ export function DatePicker({
   disabledDates,
   placeholder = "选择日期",
   className,
+  portalContainer,
+  openDownwards = false,
   ...aria
 }: DatePickerProps) {
   const [open, setOpen] = useState(false)
@@ -52,7 +59,12 @@ export function DatePicker({
           {selected ? formatLocalDate(selected) : placeholder}
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-auto p-0">
+      <PopoverContent
+        className="w-auto p-0"
+        portalContainer={portalContainer}
+        side={openDownwards ? "bottom" : undefined}
+        avoidCollisions={openDownwards ? false : undefined}
+      >
         <Calendar
           mode="single"
           selected={selected}
@@ -83,6 +95,7 @@ export function DateRangePicker({
   disabledDates,
   placeholder = "选择日期范围",
   className,
+  portalContainer,
   weekOnly = false,
   ...aria
 }: DateRangePickerProps) {
@@ -119,7 +132,7 @@ export function DateRangePicker({
             : placeholder}
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-auto p-0">
+      <PopoverContent className="w-auto p-0" portalContainer={portalContainer}>
         <Calendar
           mode="range"
           selected={from ? { from, to } : undefined}

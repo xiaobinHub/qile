@@ -1,4 +1,5 @@
 import { operationId, runtime } from "../lib/runtime"
+import { frontendHeaders } from "./protocol"
 import type {
   CatalogView,
   ConfigResponse,
@@ -69,7 +70,7 @@ export const pluginClient = {
       `${pluginBase(childId, pluginId)}/entry`,
       "GET",
       undefined,
-      {},
+      frontendHeaders,
       signal,
     )
   },

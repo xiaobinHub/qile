@@ -146,12 +146,28 @@ async function exerciseLedger({
       await page.locator('[data-view="store"]').click()
       await page.locator('[data-store-tab="ledger"]').click()
       if (width > 680) {
-        assert.equal(await page.locator('[data-ledger-id="still-complete"] [data-ledger-task-date]').innerText(), "——")
-        assert.equal(await page.locator('[data-ledger-id="new-completion"] [data-ledger-task-date]').innerText(), `${month}-03`)
+        assert.equal(
+          await page
+            .locator('[data-ledger-id="still-complete"] [data-ledger-task-date]')
+            .innerText(),
+          "——",
+        )
+        assert.equal(
+          await page
+            .locator('[data-ledger-id="new-completion"] [data-ledger-task-date]')
+            .innerText(),
+          `${month}-03`,
+        )
       } else {
-        const cards=panel.locator('.ledger-mobile-card')
-        assert.match(await cards.filter({hasText:'验收记录-still-complete'}).innerText(), /任务日期：——/)
-        assert.match(await cards.filter({hasText:'验收记录-new-completion'}).innerText(), new RegExp(`任务日期：${month}-03`))
+        const cards = panel.locator(".ledger-mobile-card")
+        assert.match(
+          await cards.filter({ hasText: "验收记录-still-complete" }).innerText(),
+          /任务日期：——/,
+        )
+        assert.match(
+          await cards.filter({ hasText: "验收记录-new-completion" }).innerText(),
+          new RegExp(`任务日期：${month}-03`),
+        )
       }
       assert.equal(new URL(page.url()).pathname, `/children/${firstId}`)
       assert.ok(await page.title())
@@ -186,6 +202,7 @@ async function exerciseLedger({
             pageBottom:
               document.querySelector(".store-page").getBoundingClientRect().bottom + scrollY,
             documentHeight: document.documentElement.scrollHeight,
+            contentGutter: parseFloat(getComputedStyle(document.querySelector("#main")).paddingTop),
             viewportHeight: innerHeight,
             tableBottom: container.getBoundingClientRect().bottom,
             tableHeight: container.clientHeight,
@@ -202,13 +219,13 @@ async function exerciseLedger({
         })
         assert.equal(geometry.overlappingControls, false, "Toolbar controls never overlap")
         assert.ok(
-          Math.abs(geometry.pageBottom - geometry.documentHeight) <= 1,
-          "No gray gap after the store page",
+          Math.abs(geometry.pageBottom + geometry.contentGutter - geometry.documentHeight) <= 1,
+          "Store bottom gap matches the top content gutter",
         )
         if (width > 680 && height >= 600) {
           assert.ok(
-            Math.abs(geometry.tableBottom - height) <= 1,
-            "Table extends to viewport bottom",
+            Math.abs(geometry.tableBottom + geometry.contentGutter + 1 - height) <= 1,
+            "Table ends inside the card above the content gutter",
           )
           assert.ok(
             geometry.documentHeight <= height + 1,

@@ -1,19 +1,9 @@
 /* Calendar-owned layout: business geometry stays in calendar.tsx. */
-.app:has(> #main > .calendar-panel) {
-  display: flex;
-  flex-direction: column;
-  height: 100dvh;
-  min-height: 0;
-}
-.app:has(> #main > .calendar-panel) > .topbar {
-  flex: none;
-}
 #main:has(> .calendar-panel) {
   display: flex;
   flex-direction: column;
   flex: 1;
   min-height: 0;
-  padding-bottom: max(16px, env(safe-area-inset-bottom, 0px));
 }
 #main > .calendar-panel {
   display: flex;
@@ -30,6 +20,8 @@
   min-height: 0;
   max-height: none;
   overflow: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-x pan-y pinch-zoom;
 }
 .calendar-panel .month-grid {
   align-items: stretch;

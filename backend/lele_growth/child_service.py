@@ -261,7 +261,7 @@ class ChildService:
             return False
         return address.is_loopback or address.is_private or address.is_link_local
 
-    def request(self, method, path, body, token, csrf, origin, surface, client):
+    def request(self, method, path, body, token, csrf, origin, surface, client, *, frontend_api=None):
         require(surface in ('parent','admin'))
         require(isinstance(body,dict))
         write=method not in ('GET','HEAD')
@@ -307,7 +307,7 @@ class ChildService:
                 result=public_user(cur.fetchone())
                 self.audit(cur,user[0],'account.profile')
                 return {'user':result}
-            plugin_result = self.plugins.handle(cur,user,method,path,body)
+            plugin_result = self.plugins.handle(cur,user,method,path,body,frontend_api=frontend_api)
             if plugin_result is not NotImplemented:
                 return plugin_result
             if path.startswith('admin/'):

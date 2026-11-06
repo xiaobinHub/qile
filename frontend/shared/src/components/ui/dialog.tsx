@@ -41,16 +41,18 @@ function DialogOverlay({
 
 function DialogContent({
   className,
+  portalContainer,
   children,
   showCloseButton = true,
   backdrop = "default",
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
+  portalContainer?: HTMLElement | null
   showCloseButton?: boolean
   backdrop?: "default" | "immersive"
 }) {
   return (
-    <DialogPortal>
+    <DialogPortal container={portalContainer}>
       <DialogOverlay className={backdrop === "immersive" ? "ui-overlay-immersive" : undefined} />
       <DialogPrimitive.Content
         data-slot="dialog-content"

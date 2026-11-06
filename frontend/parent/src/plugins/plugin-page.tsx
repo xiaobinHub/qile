@@ -29,23 +29,29 @@ export function PluginPage({
   child,
   epoch,
   notify,
-  openSettings,
+  active,
 }: {
   pluginId: string
   child: Child
   epoch: number
   notify: (message: string) => void
-  openSettings: () => void
+  active: boolean
 }) {
   const state = usePlugins()
   const plugin =
     state.childId === child.id && state.epoch === epoch
       ? state.plugins.find((item) => item.id === pluginId)
       : undefined
+  const section = useRef<HTMLElement>(null)
   const host = useRef<HTMLDivElement>(null)
   const notifyRef = useRef(notify)
+  const activeRef = useRef(active)
+  const session = useRef<{ setActive(active: boolean): void } | null>(null)
+  const scrolls = useRef(new Map<HTMLElement, { top: number; left: number }>())
   notifyRef.current = notify
+  activeRef.current = active
   const [failure, setFailure] = useState("")
+  const [requiresReload, setRequiresReload] = useState(false)
   const [loading, setLoading] = useState(false)
   const [retry, setRetry] = useState(0)
   const effective =
@@ -56,7 +62,28 @@ export function PluginPage({
     plugin.operationState === "ready" &&
     !child.archived
   useLayoutEffect(() => {
+    const node = section.current
+    if (!node) return
+    const remember = (event: Event) => {
+      const target = event.target
+      if (target instanceof HTMLElement)
+        scrolls.current.set(target, { top: target.scrollTop, left: target.scrollLeft })
+    }
+    node.addEventListener("scroll", remember, true)
+    return () => node.removeEventListener("scroll", remember, true)
+  }, [])
+  useLayoutEffect(() => {
+    session.current?.setActive(active)
+    if (!active || !section.current) return
+    for (const [element, position] of scrolls.current) {
+      if (!section.current.contains(element)) continue
+      element.scrollTop = position.top
+      element.scrollLeft = position.left
+    }
+  }, [active])
+  useLayoutEffect(() => {
     setFailure("")
+    setRequiresReload(false)
     if (!effective || !plugin || !host.current) {
       setLoading(false)
       return
@@ -71,21 +98,29 @@ export function PluginPage({
       epoch,
       signal: controller.signal,
       notify: (message) => notifyRef.current(message),
+      onDevelopmentChange: () => setRetry((value) => value + 1),
+      onDevelopmentError: (message) => setFailure(message),
     })
-      .then((cleanup) => {
-        if (controller.signal.aborted) cleanup()
+      .then((handle) => {
+        if (controller.signal.aborted) handle.dispose()
         else {
-          dispose = cleanup
+          dispose = handle.dispose
+          session.current = handle
+          handle.setActive(activeRef.current)
           setLoading(false)
         }
       })
       .catch((error) => {
         if (controller.signal.aborted) return
         setLoading(false)
+        setRequiresReload(
+          error instanceof ApiError && error.code === "plugin_frontend_incompatible",
+        )
         if (!(error instanceof ApiError && error.kind === "stale")) setFailure(pluginError(error))
         void pluginStore.refresh()
       })
     return () => {
+      session.current = null
       controller.abort()
       dispose?.()
     }
@@ -102,13 +137,14 @@ export function PluginPage({
     retry,
   ])
   return (
-    <section className="plugin-page" aria-label={plugin?.name || "应用"}>
-      <div className="plugin-page-heading">
-        <h1>{plugin?.name || "应用"}</h1>
-        <Button variant="outline" onClick={openSettings}>
-          应用设置
-        </Button>
-      </div>
+    <section
+      ref={section}
+      className="plugin-page"
+      aria-label={plugin?.name || "应用"}
+      hidden={!active}
+      inert={!active}
+      aria-hidden={active ? undefined : true}
+    >
       {!effective ? (
         <div className="plugin-placeholder" role="status">
           <h2>
@@ -138,24 +174,42 @@ export function PluginPage({
           <Button
             variant="outline"
             onClick={() => {
+              if (requiresReload) {
+                window.location.reload()
+                return
+              }
               void pluginStore.refresh()
               setRetry((value) => value + 1)
             }}
           >
-            重试
+            {requiresReload ? "刷新页面" : "重试"}
           </Button>
         </div>
       ) : loading ? (
-        <div role="status" className="plugin-placeholder">
-          <Skeleton className="h-10 w-48" />
-          <p>正在加载应用…</p>
+        <div role="status" className="plugin-loading" aria-busy="true">
+          <p className="sr-only">正在加载应用…</p>
+          <div className="plugin-loading-bar">
+            <Skeleton className="h-8 w-36" />
+            <Skeleton className="h-8 w-24" />
+          </div>
+          <div className="plugin-loading-tools">
+            <Skeleton className="h-9 w-48" />
+            <Skeleton className="h-9 w-32" />
+            <Skeleton className="ml-auto h-9 w-20" />
+          </div>
+          <div className="plugin-loading-grid">
+            {Array.from({ length: 4 }, (_, index) => (
+              <Skeleton key={index} className="plugin-loading-card" />
+            ))}
+          </div>
         </div>
       ) : null}
       <div
         ref={host}
         className="plugin-host"
         hidden={!effective || !!failure}
-        aria-busy={loading}
+        aria-busy={loading || undefined}
+        inert={loading || undefined}
       />
     </section>
   )

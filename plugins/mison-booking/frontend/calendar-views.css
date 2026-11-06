@@ -1,0 +1,47 @@
+/* Mison-only geometry; independent of the host calendar and its styles. */
+:where(.mison-calendar-view) {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-x pan-y pinch-zoom;
+}
+.mison-calendar-month-scroll {
+  overflow-anchor: none;
+}
+:where(.mison-calendar-view) .mison-calendar-weekday-row,
+:where(.mison-calendar-view) .mison-calendar-month-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  width: 100%;
+  min-width: 0;
+}
+:where(.mison-calendar-view) .mison-calendar-weekday-row {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--card);
+  border-block: 1px solid var(--border);
+}
+:where(.mison-calendar-view) .mison-calendar-weekday-row > div {
+  text-align: center;
+  padding: 16px 0;
+  border-right: 1px solid var(--border);
+}
+:where(.mison-calendar-view) .mison-calendar-month-grid {
+  grid-auto-rows: minmax(148px, auto);
+}
+:where(.mison-calendar-view) .mison-calendar-month-cell {
+  position: relative;
+  min-width: 0;
+  min-height: 148px;
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  padding: 8px 12px;
+}
+:where(.mison-calendar-view) .mison-calendar-month-cell:nth-child(7n) {
+  border-right: 0;
+}
+:where(.mison-calendar-view) .mison-calendar-month-cell.mison-calendar-weekend {
+  background: color-mix(in srgb, var(--muted) 35%, var(--card));
+}

@@ -1,0 +1,54 @@
+.pdf-preview {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+.pdf-preview-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-x pan-y pinch-zoom;
+  background: var(--muted);
+  padding: 16px;
+}
+.pdf-preview-pages {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-inline: auto;
+}
+.pdf-preview-page {
+  position: relative;
+  flex: none;
+  width: 100%;
+  background: white;
+  color: black;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 15%);
+}
+.pdf-preview-page canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.pdf-preview-message,
+.pdf-preview-page-message {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 24px;
+}
+.pdf-preview-page-message {
+  position: absolute;
+  inset: 0;
+}
+.pdf-preview-page-number {
+  position: absolute;
+  bottom: 12px;
+  left: 12px;
+}

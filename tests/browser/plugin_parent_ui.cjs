@@ -224,6 +224,7 @@ async function mock(context, role) {
     if (action === "entry") {
       assert.equal(plugin.type, "page")
       assert.equal(plugin.effectiveEnabled, true)
+      assert.equal(request.headers()["x-plugin-frontend-api"], "1.1")
       const response = {
         entry:
           pluginId === "unsafe-demo"
@@ -232,11 +233,13 @@ async function mock(context, role) {
         styles: [`/plugin-assets/${pluginId}/${plugin.version}/style.css`],
         version: plugin.version,
         releaseId: plugin.releaseId,
+        frontendApi: plugin.frontendApi || { major: 1, minMinor: 0 },
       }
       await gated(`${id}:${pluginId}:entry`)
       return json(response)
     }
     if (action === "runtime") {
+      assert.equal(request.headers()["x-plugin-frontend-api"], "1.1")
       state.runtimeCalls.push({
         id,
         pluginId,
@@ -694,18 +697,92 @@ async function run() {
     const runtimeGate = gate("a:page-demo:runtime")
     await page.locator("[data-plugin-api]").click()
     await runtimeGate.captured
+    const mountsBeforeLeave = await page.evaluate(
+      () => window.__pluginEvents.filter((event) => event === "mount:a:page-demo:1.0.0").length,
+    )
     await page.locator('[data-view="calendar"]').click()
     runtimeGate.release()
     await page.waitForFunction(
+      () => window.__pluginEvents.filter((event) => event === "api:响应-a").length >= 2,
+    )
+    assert.equal(await page.locator("[data-plugin-root]").count(), 1)
+    assert.equal(await page.locator(".plugin-page[hidden]").count(), 1)
+    assert.equal(await page.locator(".plugin-overlay[hidden]").count(), 1)
+    assert.ok((await page.locator('link[href*="/plugin-assets/"]').count()) > 0)
+    assert.equal(
+      await page.evaluate(() =>
+        window.__pluginEvents.some(
+          (event) => event.startsWith("dispose:") || event.startsWith("abort:"),
+        ),
+      ),
+      false,
+    )
+    await page.locator('[data-view="plugin:page-demo"]').click()
+    await page.getByText("应用儿童：甲", { exact: true }).waitFor()
+    assert.equal(
+      await page.evaluate(
+        () => window.__pluginEvents.filter((event) => event === "mount:a:page-demo:1.0.0").length,
+      ),
+      mountsBeforeLeave,
+    )
+    assert.equal(await page.locator(".plugin-page[hidden]").count(), 0)
+    checks.push("core views keep the mounted page plugin, its request and styles")
+
+    await page.locator('[data-view="plugin:slow-demo"]').click()
+    await page.locator('[data-plugin-root="slow-demo"]').waitFor()
+    const mountsAfterSecondPlugin = await page.evaluate(() => ({
+      page: window.__pluginEvents.filter((event) => event === "mount:a:page-demo:1.0.0").length,
+      slow: window.__pluginEvents.filter((event) => event === "mount:a:slow-demo:1.0.0").length,
+    }))
+    await page.locator('[data-view="plugin:page-demo"]').click()
+    await page.locator('[data-plugin-root="page-demo"]').waitFor()
+    assert.equal(await page.locator("[data-plugin-root]").count(), 2)
+    assert.equal(
+      await page.locator('.plugin-page[hidden] [data-plugin-root="slow-demo"]').count(),
+      1,
+    )
+    assert.equal(await page.locator(".plugin-overlay[hidden]").count(), 1)
+    assert.equal(await page.locator(".plugin-overlay:not([hidden])").count(), 1)
+    await page.locator('[data-view="plugin:slow-demo"]').click()
+    await page.locator('[data-plugin-root="slow-demo"]').waitFor()
+    assert.deepEqual(
+      await page.evaluate(() => ({
+        page: window.__pluginEvents.filter((event) => event === "mount:a:page-demo:1.0.0").length,
+        slow: window.__pluginEvents.filter((event) => event === "mount:a:slow-demo:1.0.0").length,
+      })),
+      mountsAfterSecondPlugin,
+    )
+    await page.locator('[data-view="calendar"]').click()
+    assert.equal(await page.locator("[data-plugin-root]").count(), 2)
+    assert.equal(await page.locator(".plugin-page[hidden]").count(), 2)
+    assert.equal(await page.locator(".plugin-overlay[hidden]").count(), 2)
+    assert.equal(
+      await page.evaluate(() =>
+        window.__pluginEvents.some((event) => event.startsWith("dispose:")),
+      ),
+      false,
+    )
+    checks.push("switching page plugins keeps every visited plugin mounted")
+
+    await page.locator('[data-view="plugin:page-demo"]').click()
+    const switchGate = gate("a:page-demo:runtime")
+    await page.locator('[data-plugin-root="page-demo"] [data-plugin-api]').click()
+    await switchGate.captured
+    await switchChild(page, "b")
+    switchGate.release()
+    await page.waitForFunction(
       () =>
         window.__pluginEvents?.includes("dispose:a:page-demo") &&
-        window.__pluginEvents?.includes("api-aborted:a"),
+        window.__pluginEvents?.includes("dispose:a:slow-demo") &&
+        window.__pluginEvents?.includes("api-aborted:a") &&
+        window.__pluginEvents?.includes("abort:a:page-demo") &&
+        window.__pluginEvents?.includes("abort:a:slow-demo"),
     )
     assert.equal(await page.locator("[data-plugin-root]").count(), 0)
     assert.equal(await page.locator('link[href*="/plugin-assets/"]').count(), 0)
-    checks.push(
-      "lazy ESM mount, release header, business request abortion, disposer and CSS cleanup",
-    )
+    assert.equal(await page.locator(".plugin-overlay").count(), 0)
+    await switchChild(page, "a")
+    checks.push("child switch disposes every retained plugin and aborts its request")
 
     await page.locator('[data-view="plugin:page-demo"]').click()
     await page.getByText("应用儿童：甲", { exact: true }).waitFor()
@@ -758,15 +835,18 @@ async function run() {
       "shared disable removes tabs, disabled config remains editable, uninstall preserves config, reinstall/enable",
     )
 
-    const slow = gate("asset:slow-demo:1.0.0:entry.js")
+    getPlugin("a", "slow-demo").version = "1.0.1"
+    const slow = gate("asset:slow-demo:1.0.1:entry.js")
     await page.locator('[data-view="plugin:slow-demo"]').click()
     await slow.captured
     await switchChild(page, "b")
     slow.release()
-    await page.waitForFunction(() => window.__moduleEvaluations?.includes("slow-demo:1.0.0"))
+    await page.waitForFunction(() => window.__moduleEvaluations?.includes("slow-demo:1.0.1"))
     assert.equal(await page.locator("[data-plugin-root]").count(), 0)
     assert.equal(
-      await page.evaluate(() => window.__pluginEvents.some((e) => e.includes("mount:a:slow-demo"))),
+      await page.evaluate(() =>
+        window.__pluginEvents.some((e) => e.includes("mount:a:slow-demo:1.0.1")),
+      ),
       false,
     )
     assert.equal(await page.locator('[data-view="plugin:service-demo"]').count(), 0)
@@ -1028,6 +1108,24 @@ async function run() {
     )
     checks.push(
       "mobile width, bounded scrolling config dialog, keyboard dismissal/focus return, accessibility",
+    )
+    await page.setViewportSize({ width: 1280, height: 900 })
+    const future = getPlugin("a", "page-demo")
+    future.version = "1.0.99"
+    future.releaseId = "page-demo-future"
+    future.frontendApi = { major: 1, minMinor: 2 }
+    await focus(page)
+    await page.locator('[data-view="plugin:page-demo"]').click()
+    await page.getByRole("heading", { name: "应用加载失败", exact: true }).waitFor()
+    await page.getByText("此应用需要新版页面，请刷新整个页面后重试。", { exact: true }).waitFor()
+    await page.getByRole("button", { name: "刷新页面", exact: true }).waitFor()
+    assert.equal(
+      state.assets.some((asset) => asset.includes("/page-demo/1.0.99/")),
+      false,
+    )
+    await page.screenshot({ path: path.join(out, "frontend-protocol-refresh.png") })
+    checks.push(
+      "frontend API negotiation: 1.0 remains supported; incompatible requirements show whole-page refresh before importing code",
     )
     assert.deepEqual(state.errors, [])
     assert.deepEqual(state.consoleErrors, [])

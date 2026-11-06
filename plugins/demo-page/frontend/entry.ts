@@ -283,7 +283,13 @@ export function mount(container: HTMLElement, context: PluginContext) {
       if (timer) clearInterval(timer)
       timer = result.config.autoRefresh
         ? setInterval(() => {
-            if (active() && document.visibilityState === "visible" && !writing && !recordsBusy) {
+            if (
+              active() &&
+              context.isActive() &&
+              document.visibilityState === "visible" &&
+              !writing &&
+              !recordsBusy
+            ) {
               void loadInfo().then((ok) => {
                 if (ok && active()) void Promise.all([loadRecords(), loadActivity()])
               })

@@ -72,10 +72,12 @@ def inspect_schema(service):
     return service.transaction(run, exclusive=True, schema_check=False)
 
 
-PLUGIN_TABLES = ('plugin_platform_versions', 'plugin_catalog', 'plugin_releases', 'plugin_scope_children',
-                 'child_plugins', 'child_plugin_configs', 'child_plugin_records', 'plugin_operations',
-                 'plugin_jobs', 'plugin_event_outbox', 'plugin_event_deliveries', 'plugin_effects', 'plugin_deployments')
-PLUGIN_SCHEMA_VERSION = 2
+PLUGIN_TABLES_V1 = ('plugin_platform_versions', 'plugin_catalog', 'plugin_releases', 'plugin_scope_children',
+                    'child_plugins', 'child_plugin_configs', 'child_plugin_records', 'plugin_operations',
+                    'plugin_jobs', 'plugin_event_outbox', 'plugin_event_deliveries', 'plugin_effects', 'plugin_deployments')
+PLUGIN_TABLES_V3 = (*PLUGIN_TABLES_V1, 'plugin_private_records', 'plugin_credentials',
+                    'plugin_external_operations', 'plugin_external_leases', 'plugin_resource_tickets')
+PLUGIN_SCHEMA_VERSION = 3
 
 
 def plugin_schema_source():
@@ -84,23 +86,26 @@ def plugin_schema_source():
 
 def plugin_schema_migrations():
     return {1: plugin_schema_source(),
-            2: (Path(__file__).with_name('db') / 'migrate_plugin_v1_to_v2.sql').read_text()}
+            2: (Path(__file__).with_name('db') / 'migrate_plugin_v1_to_v2.sql').read_text(),
+            3: (Path(__file__).with_name('db') / 'migrate_plugin_v2_to_v3.sql').read_text()}
 
 
 def plugin_schema_status(cur):
-    cur.execute("SELECT tablename FROM pg_tables WHERE schemaname='lele' AND tablename=ANY(%s)", (list(PLUGIN_TABLES),))
+    cur.execute("SELECT tablename FROM pg_tables WHERE schemaname='lele' AND tablename=ANY(%s)", (list(PLUGIN_TABLES_V3),))
     existing = {row[0] for row in cur.fetchall()}
-    pending = [table for table in PLUGIN_TABLES if table not in existing]
     version = None
+    pending = [table for table in PLUGIN_TABLES_V1 if table not in existing]
     if 'plugin_platform_versions' in existing:
         cur.execute('SELECT version,source_sha256 FROM lele.plugin_platform_versions ORDER BY version')
         rows = cur.fetchall()
         if rows:
             known = [(number, hashlib.sha256(source.encode()).hexdigest())
                      for number, source in plugin_schema_migrations().items()]
+            version = rows[-1][0] if rows else None
+            required = list(PLUGIN_TABLES_V1) if version is None or version < 3 else list(PLUGIN_TABLES_V3)
+            pending = [table for table in required if table not in existing]
             require(rows == known[:len(rows)] and len(rows) <= len(known) and not pending,
                     409, '插件数据库结构与维护版本不一致。')
-            version = rows[-1][0]
     return {'version': version, 'pendingTables': pending,
             'pendingMigrations': list(range((version or 0) + 1, PLUGIN_SCHEMA_VERSION + 1))}
 
@@ -128,7 +133,7 @@ def initialize_plugin_platform(service, *, audit_detail=None):
         if status['version'] == PLUGIN_SCHEMA_VERSION:
             return {'initialized': False, 'version': PLUGIN_SCHEMA_VERSION}
         if status['version'] is None:
-            require(len(status['pendingTables']) == len(PLUGIN_TABLES), 409, '检测到未登记的插件结构，维护停止。')
+            require(len(status['pendingTables']) == len(PLUGIN_TABLES_V1), 409, '检测到未登记的插件结构，维护停止。')
         for version, source in plugin_schema_migrations().items():
             if version > (status['version'] or 0):
                 cur.execute(source)

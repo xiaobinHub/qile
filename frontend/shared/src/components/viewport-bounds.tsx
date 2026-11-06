@@ -17,8 +17,12 @@ export function ViewportBounds({ children }: { children: ReactNode }) {
         const layoutHeight = Math.max(root.clientHeight, innerHeight)
         const keyboardOpen = layoutHeight - height > Math.max(120, layoutHeight * 0.15)
         const changed = root.hasAttribute("data-app-keyboard-open") !== keyboardOpen
-        root.style.setProperty("--app-visible-height", `${height}px`)
-        root.style.setProperty("--app-visible-top", `${top}px`)
+        const heightValue = `${height}px`
+        const topValue = `${top}px`
+        if (root.style.getPropertyValue("--app-visible-height") !== heightValue)
+          root.style.setProperty("--app-visible-height", heightValue)
+        if (root.style.getPropertyValue("--app-visible-top") !== topValue)
+          root.style.setProperty("--app-visible-top", topValue)
         root.toggleAttribute("data-app-keyboard-open", keyboardOpen)
 
         const dialogs = root.querySelectorAll<HTMLElement>('[data-keyboard-scroll="true"]')
@@ -49,17 +53,23 @@ export function ViewportBounds({ children }: { children: ReactNode }) {
       })
     }
     const resize = () => measure(true)
-    const scroll = () => measure()
+    // Only keyboard panning needs to reposition the shell. Ordinary touch
+    // scrolling must not write viewport dimensions or resize a plugin.
+    const scroll = () => {
+      if (root.hasAttribute("data-app-keyboard-open")) measure()
+    }
     resize()
     viewport?.addEventListener("resize", resize, { passive: true })
     viewport?.addEventListener("scroll", scroll, { passive: true })
     window.addEventListener("resize", resize, { passive: true })
+    window.addEventListener("pageshow", resize)
     document.addEventListener("focusin", resize)
     return () => {
       cancelAnimationFrame(frame)
       viewport?.removeEventListener("resize", resize)
       viewport?.removeEventListener("scroll", scroll)
       window.removeEventListener("resize", resize)
+      window.removeEventListener("pageshow", resize)
       document.removeEventListener("focusin", resize)
       root.removeAttribute("data-app-keyboard-open")
       root.style.removeProperty("--app-visible-height")

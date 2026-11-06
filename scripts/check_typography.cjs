@@ -18,7 +18,11 @@ function walk(folder) {
     }
   }
 }
-for (const folder of ["frontend/parent/src", "frontend/admin/src", "frontend/shared/src"]) walk(path.join(root, folder))
+const folders = ["frontend/parent/src", "frontend/admin/src", "frontend/shared/src"]
+if (process.argv.includes("--plugins")) {
+  for (const plugin of process.argv.slice(process.argv.indexOf("--plugins") + 1)) folders.push(path.join("plugins", plugin, "frontend"))
+} else folders.push("plugins/mison-booking/frontend")
+for (const folder of folders) if (fs.existsSync(path.join(root, folder))) walk(path.join(root, folder))
 if (violations.length) {
   console.error("Use shared typography roles; see docs/ui/字体与响应式规范.md\n" + violations.join("\n"))
   process.exitCode = 1

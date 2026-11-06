@@ -78,9 +78,13 @@ def eligibility_reason(context, *, require_enabled=True):
     from .configuration import validate_config
     try:
         validate_manifest(context['manifest'],config_schema=context['config_schema'])
+    except ApiError as error:
+        # A stale process can reject a newer protocol. That is not a corrupt package.
+        return 'plugin_incompatible' if error.kind == 'plugin_incompatible' else 'plugin_manifest_invalid'
+    try:
         validate_config(context['config_schema'], context['config'])
-    except ApiError:
-        return 'plugin_config_required'
+    except ApiError as error:
+        return 'plugin_config_required' if error.kind == 'plugin_config_required' else 'plugin_config_invalid'
     return None
 
 

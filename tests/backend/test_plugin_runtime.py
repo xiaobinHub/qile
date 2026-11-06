@@ -286,7 +286,7 @@ class GatewayDatabaseTests(DatabaseFixture):
             supervisor = PluginSupervisor(root)
             service = self.service
             class ArchiveDuringRPC:
-                def call(inner, context, action, payload):
+                def call(inner, context, action, payload, *, timeout=None):
                     # A separate DB transaction must finish while the worker RPC
                     # is in progress. It would timeout if gateway retained locks.
                     service.transaction(lambda cur: cur.execute('UPDATE lele.children SET archived=true WHERE id=%s', (self.child_id,)))

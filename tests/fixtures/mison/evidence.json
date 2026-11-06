@@ -1,0 +1,25 @@
+{
+  "source": "Mison user-provided report and app HAR files",
+  "capturedAt": "2026-10-24",
+  "hosts": {
+    "wechatApi": "https://mp.mison.cn/wechatapi/",
+    "courseApi": "https://api.mison.cn/v2/",
+    "resourceOrigin": "https://file.mison.cn"
+  },
+  "requests": [
+    {"endpoint": "onevoneGetTeacherInfo", "input": {"tid": "4317", "userid": "734178", "ddate": "2026-11-06"}, "success": "code == 200"},
+    {"endpoint": "onevoneGetDaysAvailable", "input": {"tid": "4317", "userid": "734178"}, "success": "code == 200"},
+    {"endpoint": "getRecommendCourseware", "input": {"user1v1_id": "84078", "userid": "734178", "count": 1}, "success": "code == 200"},
+    {"endpoint": "getCoursewareCategoryTree", "input": {"liveid": "5911"}, "success": "code == 200"},
+    {"endpoint": "onevoneGetCancelCourseware", "input": {"user1v1_id": "84078", "userid": "734178", "page": 1, "limit": 1000}, "success": "code == 200"},
+    {"endpoint": "onevoneGetChangeCoursewareTimes", "input": {"userid": "734178", "user1v1_id": "84078"}, "success": "code == 200"},
+    {"endpoint": "onevoneAppointment", "input": {"tid": "4317", "userid": "734178", "ddate": "2026-11-06", "dtime": "18:00", "user1v1_id": "84078", "lesson_period": 1, "courseware_id": "2555"}, "success": "code == 200", "result": {"cid": null}},
+    {"endpoint": "course/getLiveList", "input": {"classid": "1580740", "page_size": 10000, "page_no": 1, "courseway": 0, "blockid": 0}, "success": "status == 0"},
+    {"endpoint": "course/getBackList", "input": {"classid": "1580740", "page_size": 10000, "page_no": 1, "courseway": 0, "blockid": 0, "is_lesson_status": 1}, "success": "status == 0"},
+    {"endpoint": "onevoneGetCancelLesson", "input": {"userid": "734178", "classid": "84078", "page": 1, "limit": 10000}, "success": "code == 200"},
+    {"endpoint": "cancelLesson", "input": {"userid": "734178", "cid": "1055401"}, "success": "code == 200 && data.status == 1"},
+    {"endpoint": "onevoneSaveCancelLesson", "input": {"cid": "1055401", "status": 1, "userid": "734178", "adjust_lessons": 0}, "success": "code == 200"},
+    {"endpoint": "getTeacherCollect", "input": {"userid": "734178"}, "success": "code == 200"}
+  ],
+  "redacted": ["token", "password", "cookie", "phone", "login name"]
+}

@@ -1,5 +1,6 @@
 .settings-workspace {
   padding: 0;
+  min-height: 100%;
   color: var(--foreground);
 }
 .settings-menu-trigger {
@@ -1865,21 +1866,12 @@
   padding-block: 8px;
 }
 @media (min-width: 681px) {
-  .app:has(.settings-workspace) {
-    display: flex;
-    flex-direction: column;
-    min-height: 100dvh;
-  }
-  .app:has(.settings-workspace) > #main {
-    display: flex;
-    flex-direction: column;
-    flex: 1;
-  }
   .app:has(.settings-workspace) .settings-workspace {
     display: flex;
     flex-direction: column;
     flex: 1;
     min-width: 0;
+    min-height: 100%;
   }
   .app:has(.settings-workspace) .settings-columns {
     flex: 1;
