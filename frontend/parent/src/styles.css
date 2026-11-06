@@ -170,6 +170,12 @@ a {
   min-height: 0;
   overflow: hidden;
 }
+.plugin-page[hidden] {
+  display: none;
+}
+.plugin-overlay[hidden] {
+  display: none;
+}
 .plugin-status-notice {
   display: flex;
   align-items: center;

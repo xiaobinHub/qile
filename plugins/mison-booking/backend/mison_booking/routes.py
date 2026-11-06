@@ -30,6 +30,18 @@ def handle(context, path, method, body):
     if path == "connection" and method == "DELETE":
         from .auth import bridge, public_connection
         return success(public_connection(bridge(context, 'session.disconnect', body)))
+    if path == "course-sync" and method == "GET":
+        from .course_sync import get_settings
+        return success(get_settings(context))
+    if path == "course-sync/preview" and method == "POST":
+        from .course_sync import preview
+        return success(preview(context, body))
+    if path == "course-sync" and method == "POST":
+        from .course_sync import save
+        return success(save(context, body))
+    if path == "course-sync/run" and method == "POST":
+        from .course_sync import run_now
+        return success(run_now(context, body))
     from .upstream import Client
     from . import drafts, courseware, operations
     client = Client(context)

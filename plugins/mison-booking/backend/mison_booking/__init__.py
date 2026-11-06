@@ -7,6 +7,17 @@ def health():
     return {"ok": True}
 
 
+def handle_job(context, task, payload):
+    from .course_sync import handle_job as sync_job
+    from .auth import AuthError
+    try:
+        return sync_job(context, task, payload)
+    except AuthError as error:
+        if error.code in ("RECONNECT_REQUIRED", "CONTRACT_SELECTION_REQUIRED", "NO_ACTIVE_CONTRACT", "QUERY_TOO_LARGE"):
+            return {"state": "paused", "reason": error.code}
+        raise
+
+
 def handle_request(context, path, method, body):
     from . import routes
     from .auth import AuthError

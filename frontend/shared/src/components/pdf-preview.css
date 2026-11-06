@@ -6,20 +6,6 @@
   min-height: 0;
   overflow: hidden;
 }
-.pdf-preview-tools {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  flex-wrap: wrap;
-  flex: none;
-  gap: 8px;
-  padding: 8px 16px;
-  border-bottom: 1px solid var(--border);
-}
-.pdf-preview-tools > span {
-  margin-right: auto;
-  color: var(--muted-foreground);
-}
 .pdf-preview-scroll {
   flex: 1;
   min-height: 0;

@@ -469,10 +469,12 @@ async function main() {
   const ownStyles = () => page.locator('style[data-vite-dev-id*="/plugins/mison-booking/"]').count()
   assert.ok((await ownStyles()) > 0)
   await page.locator('[data-view="calendar"]').click()
-  await waitFor(async () => (await ownStyles()) === 0, "development styles detached on unmount")
+  await page.locator(".calendar-panel").waitFor()
+  assert.ok((await ownStyles()) > 0, "development styles stay while the page plugin is suspended")
+  assert.equal(await page.locator(".plugin-page[hidden]").count(), 1)
   await page.locator('[data-view="plugin:mison-booking"]').click()
   await page.locator("#mison-login-title").waitFor()
-  assert.ok((await ownStyles()) > 0, "cached styles restored on remount")
+  assert.ok((await ownStyles()) > 0, "returning reuses the suspended development module")
   const registryFile = path.join(runtime, "registry/mison-booking.json")
   const descriptor = JSON.parse(fs.readFileSync(registryFile, "utf8"))
   fs.writeFileSync(registryFile, JSON.stringify({ ...descriptor, state: "draining" }))
@@ -485,7 +487,7 @@ async function main() {
   )
   await page.locator("#mison-login-title").waitFor()
   assert.equal(sockets.length, 1, "backend reload keeps existing HMR client")
-  checks.push("unmount removes dev styles; remount restores; draining recovers automatically")
+  checks.push("core navigation suspends the dev module; draining recovers automatically")
   violations.push(...(await page.evaluate(() => window.__proxyCspViolations)))
   assert.deepEqual(violations, [])
   assert.deepEqual(errors, [])
@@ -496,12 +498,16 @@ async function main() {
     "Parent credentials must never reach Vite",
   )
   await page.locator('[data-view="calendar"]').click()
-  await waitFor(async () => (await ownStyles()) === 0, "clean styles before session stop")
+  assert.ok((await ownStyles()) > 0, "styles remain suspended outside the plugin view")
   let oldSocketClosed = false
   sockets[0].on("close", () => {
     oldSocketClosed = true
   })
   fs.unlinkSync(registryFile)
+  await waitFor(
+    async () => (await ownStyles()) === 0,
+    "session stop removes styles outside the plugin view",
+  )
   await waitFor(() => oldSocketClosed, "old HMR connection closed on session stop")
   await page.locator('[data-view="calendar"]').waitFor()
   assert.equal(await ownStyles(), 0)

@@ -178,6 +178,20 @@ def sync_series(series):
         series[k] = copy.deepcopy(latest["effectiveFrom"] if k == "startDate" else latest.get(k))
 
 
+def synced_course(value):
+    source = value.get("source") if isinstance(value, dict) else None
+    return isinstance(source, dict) and source.get("provider") == "mison"
+
+
+def reject_synced(data, key):
+    if not isinstance(key, str) or "@" not in key:
+        return
+    series = next((item for item in data["series"] if item.get("id") == key.rsplit("@", 1)[0]), None)
+    completion = next((item for item in data["completions"] if item.get("occurrenceKey") == key), None)
+    if synced_course(series) or synced_course((completion or {}).get("snapshot")):
+        fail("美森课程由约课插件同步，不能手动修改、删除或完成。", HTTPStatus.CONFLICT)
+
+
 def referenced(data, cid):
     return (any(x.get("categoryId") == cid or any(r.get("categoryId") == cid for r in x.get("revisions") or []) for x in data["series"])
             or any(x.get("categoryId") == cid for x in data.get("taskPresets", []))
@@ -244,6 +258,7 @@ def _apply(data, kind, p, stamp, today):
         data["series"].append({"id": uid(), **task, "revisions": [revision(task, task["startDate"])], "createdAt": stamp, "updatedAt": stamp})
     elif kind in ("task.edit", "task.delete"):
         fields(p, ("occurrenceKey", "task", "scope") if kind == "task.edit" else ("occurrenceKey", "scope"), ("occurrenceKey", "scope"))
+        reject_synced(data, p["occurrenceKey"])
         old = occurrence(data, p["occurrenceKey"])
         if any(c["occurrenceKey"] == p["occurrenceKey"] and c["completed"] for c in data["completions"]):
             fail("已完成任务已冻结，请先撤销完成。", HTTPStatus.CONFLICT)
@@ -307,6 +322,7 @@ def _apply(data, kind, p, stamp, today):
         fields(p, ("occurrenceKey", "completed"), ("occurrenceKey", "completed"))
         if type(p["completed"]) is not bool:
             fail("完成状态不正确。")
+        reject_synced(data, p["occurrenceKey"])
         c = next((c for c in data["completions"] if c["occurrenceKey"] == p["occurrenceKey"]), None)
         if bool(c and c["completed"]) == p["completed"]:
             return

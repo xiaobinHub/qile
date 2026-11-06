@@ -70,3 +70,40 @@ export const createDraft = (context: PluginContextLike, body: unknown) =>
   request<Draft>(context, "drafts", { method: "POST", body })
 export const getBookings = (context: PluginContextLike, status: string) =>
   request<BookingQuery>(context, `bookings?status=${status}`)
+
+export type CourseSyncSettings = {
+  enabled: boolean
+  points: number | null
+  startDate: string | null
+  revision: number
+  canManage: boolean
+  serverDate: string
+}
+export type CourseSyncSummary = {
+  state: string
+  reason?: string
+  added?: number
+  addedAttended?: number
+  newlyCompleted?: number
+  points?: number
+  removed?: number
+  clawback?: number
+  skipped?: number
+  revision?: number
+}
+export const courseSyncChanged = (summary: CourseSyncSummary) =>
+  (["added", "removed", "newlyCompleted", "points", "clawback"] as const).some(
+    (key) => Number(summary[key] || 0) > 0,
+  )
+export const getCourseSync = (context: PluginContextLike) =>
+  request<CourseSyncSettings>(context, "course-sync")
+export const previewCourseSync = (
+  context: PluginContextLike,
+  body: { points: number; startDate: string },
+) => request<CourseSyncSummary>(context, "course-sync/preview", { method: "POST", body })
+export const saveCourseSync = (
+  context: PluginContextLike,
+  body: { operationId: string; enabled: boolean; points: number; startDate: string },
+) => request<CourseSyncSummary>(context, "course-sync", { method: "POST", body })
+export const runCourseSync = (context: PluginContextLike, operationId: string) =>
+  request<CourseSyncSummary>(context, "course-sync/run", { method: "POST", body: { operationId } })

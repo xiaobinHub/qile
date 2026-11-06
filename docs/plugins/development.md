@@ -8,7 +8,7 @@
 
 需要覆盖完整接入特性时，参考 `plugins/demo-page/` 和 `plugins/demo-service/`；[完整 Demo 指南](demo-plugins.md)提供能力矩阵、测试步骤与独立验收命令。
 
-- 页面型：`type=page`，启用后自动出现顶部入口。进入页面时才加载 ESM 与样式；使用 `mount(container, context)` 并返回清理函数。
+- 页面型：`type=page`，启用后自动出现顶部入口。第一次进入时才加载 ESM 与样式；使用 `mount(container, context)` 并返回清理函数。
 - 后台型：`type=service`，`frontend=null`，没有顶部入口。配置弹窗由平台统一渲染，不执行插件页面代码。
 - 页面型也可以声明后端任务。插件 ID、类型和代码入口由技术清单决定，管理员编辑展示资料，不编辑执行路径。
 
@@ -18,15 +18,23 @@
 
 独立 ESM 导出 `mount(container, context)`，在容器中构建自己的界面。`context` 提供当前儿童显示信息、活动版本、AbortSignal、本插件 API、通知和返回核心页面的导航。禁止导入平台内部业务对象或宿主带哈希的构建分块。
 
-CSS 仅作用于插件根节点，不能重置 body、按钮或宿主主题。dispose 必须移除定时器、监听和本插件 DOM；异步响应应检查 signal，不能在儿童切换后继续渲染。
+从日历、积分商城、设置或其他页面插件离开时，宿主保留当前儿童、当前会话里已经打开过的全部页面插件，不重新加载入口。页面只是被挂起：移出布局和焦点，`signal` 不中止。只有正在显示的插件可见，其余插件和它们的浮层保持隐藏且不可交互。某个插件第一次进入时才加载；不要因为插件数量淘汰已打开的实例。`context.isActive()` 表示当前是否正在显示；`context.onVisibility` 在离开和返回时通知。返回后可以静默刷新轻量状态，不要清空列表、滚动位置、草稿或打开中的弹窗。
+
+弹窗、抽屉和浮层必须渲染到宿主提供的 `context.overlay`，不要挂到 `document.body`。挂起时要放开焦点圈定、页面点击锁和 Escape，避免挡住日历或其他插件，但不要因此关掉弹窗。
+
+以下情况仍卸载并中止该范围内的全部页面插件：切换或归档儿童、退出登录、会话代次变化，以及插件状态尚未确认。停用、卸载、更新、版本或配置变化、加载失败后重试和开发热更新只卸载对应插件。dispose 必须移除定时器、监听和本插件 DOM；异步响应应检查 signal，不能在这些上下文变化后继续渲染。
+
+CSS 仅作用于插件根节点，不能重置 body、按钮或宿主主题。
 
 插件记录接口通过 context.api 调用：
 
 ```ts
-const result = await context.api<{records: Array<{id: string; payload: unknown}>}>("records/notes")
+const result = await context.api<{ records: Array<{ id: string; payload: unknown }> }>(
+  "records/notes",
+)
 await context.api("records/notes/record-123", {
   method: "PUT",
-  body: {payload: {text: "今天的小进步"}, operationId: crypto.randomUUID()},
+  body: { payload: { text: "今天的小进步" }, operationId: crypto.randomUUID() },
 })
 ```
 

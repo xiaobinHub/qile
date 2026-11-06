@@ -7,6 +7,12 @@ export type Rule = {
   until?: string
   count?: number
 }
+export type CourseSource = {
+  provider: string
+  accountId?: string
+  contractId?: string
+  cid?: string
+}
 export type Task = {
   title: string
   note: string
@@ -16,6 +22,7 @@ export type Task = {
   categoryId: string
   points: number
   recurrence: Rule | null
+  source?: CourseSource | null
 }
 export type Revision = Omit<Task, "startDate"> & { id: string; effectiveFrom: string }
 export type Series = Task & {
@@ -36,6 +43,7 @@ export type Occurrence = {
   categoryId: string
   points: number
   recurring: boolean
+  source?: CourseSource | null
 }
 export type Category = { id: string; name: string; color: string; active: boolean }
 export type Preset = Omit<Task, "note" | "startDate" | "recurrence"> & { id: string }

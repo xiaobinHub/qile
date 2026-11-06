@@ -697,6 +697,12 @@
 .mison-overlay.is-modal.is-contained {
   height: min(720px, 85dvh, calc(var(--app-visible-height, 100dvh) - 32px));
 }
+.mison-overlay.is-modal.is-wide.is-preview {
+  width: min(1240px, calc(100vw - 32px));
+  max-width: min(1240px, calc(100vw - 32px));
+  max-height: calc(var(--app-visible-height, 100dvh) - 24px);
+  height: min(94dvh, calc(var(--app-visible-height, 100dvh) - 24px));
+}
 .mison-overlay-header {
   display: flex;
   flex-direction: row;
@@ -705,6 +711,35 @@
   gap: 16px;
   padding: 20px;
   flex-shrink: 0;
+}
+.mison-overlay-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+}
+.mison-overlay-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mison-overlay-heading > small,
+.mison-overlay-heading-actions {
+  flex: none;
+}
+.mison-overlay-heading-actions {
+  margin-left: 4px;
+}
+.mison-overlay-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+}
+.mison-overlay.is-preview .mison-overlay-body.is-contained {
+  padding: 0;
 }
 .mison-overlay-scroll {
   flex: 1;
@@ -1000,18 +1035,136 @@
   flex-wrap: wrap;
   gap: 8px;
 }
-.mison-account-form {
+.mison-account {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.mison-overlay-body .mison-account-message {
+  margin: 0;
+}
+.mison-account-session {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.mison-account-identity {
+  min-width: 0;
+  flex: 1;
+}
+.mison-account-status {
+  color: var(--muted-foreground);
+  font-size: var(--text-caption);
+  line-height: var(--text-caption--line-height);
+}
+.mison-account-name {
+  margin-top: 2px;
+  overflow-wrap: anywhere;
+  font-size: var(--text-card);
+  line-height: var(--text-card--line-height);
+  font-weight: 600;
+}
+.mison-account-logout {
+  flex: none;
+}
+.mison-account-session + .mison-sync-settings,
+.mison-account-session + .mison-account-message {
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+}
+.mison-sync-settings {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  margin: 20px 0;
+}
+.mison-sync-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.mison-sync-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.mison-sync-title {
+  font-size: var(--text-card);
+  line-height: var(--text-card--line-height);
+  font-weight: 600;
+}
+.mison-sync-toggle {
+  flex: none;
+}
+.mison-sync-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+.mison-sync-heading + .mison-sync-actions {
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+.mison-sync-field {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.mison-sync-field > label {
+  font-size: var(--text-caption);
+  line-height: var(--text-caption--line-height);
+  font-weight: 600;
+}
+.mison-sync-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
+.mison-sync-saved {
+  margin-right: auto;
+  color: var(--muted-foreground);
+  font-size: var(--text-caption);
+  line-height: var(--text-caption--line-height);
+}
+.mison-sync-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.mison-sync-preview dl {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+.mison-sync-preview dl > div {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 12px;
+  align-items: baseline;
+  padding: 10px 12px;
+}
+.mison-sync-preview dl > div + div {
+  border-top: 1px solid var(--border);
+}
+.mison-sync-preview dt {
+  color: var(--muted-foreground);
+  font-size: var(--text-caption);
+  line-height: var(--text-caption--line-height);
+}
+.mison-sync-preview dd {
+  margin: 0;
+  text-align: right;
+  font-weight: 600;
 }
 .mison-login-feedback {
   height: var(--text-body--line-height);
   min-height: var(--text-body--line-height);
-}
-.mison-connected-account {
-  margin-top: 16px !important;
 }
 @container mison (max-width:1100px) {
   .mison-workspace.is-expanded {
@@ -1109,6 +1262,9 @@
   }
   .mison-overlay-footer > small {
     flex-basis: 100%;
+  }
+  .mison-sync-fields {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 

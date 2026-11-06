@@ -85,7 +85,7 @@ export async function mountPlugin(options: {
   notify: (message: string) => void
   onDevelopmentChange?: () => void
   onDevelopmentError?: (message: string) => void
-}): Promise<() => void> {
+}): Promise<{ dispose(): void; setActive(active: boolean): void }> {
   const { host, plugin, child, epoch, signal, notify } = options
   const links: HTMLLinkElement[] = []
   const root = document.createElement("div")
@@ -95,18 +95,44 @@ export async function mountPlugin(options: {
   let disposed = false
   let monitor: number | undefined
   let developmentStatus: HTMLElement | undefined
+  let pageActive = true
+  const listeners = new Set<(active: boolean) => void>()
+  const overlay = document.createElement("div")
+  overlay.className = "plugin-overlay"
+  overlay.dataset.pluginOverlay = plugin.id
+  const setActive = (next: boolean) => {
+    if (disposed || pageActive === next) return
+    pageActive = next
+    overlay.hidden = !next
+    overlay.inert = !next
+    if (
+      !next &&
+      document.body.style.pointerEvents === "none" &&
+      !document.querySelector(".plugin-overlay:not([hidden])")
+    )
+      document.body.style.pointerEvents = ""
+    for (const listener of listeners) {
+      try {
+        listener(next)
+      } catch {
+        /* A plugin visibility handler must not block core navigation. */
+      }
+    }
+  }
   const dispose = () => {
     if (disposed) return
     disposed = true
     window.clearTimeout(monitor)
     developmentStatus?.remove()
     signal.removeEventListener("abort", dispose)
+    listeners.clear()
     try {
       unmount?.()
     } catch {
       /* A faulty plugin disposer must not block core navigation. */
     }
     root.remove()
+    overlay.remove()
     links.forEach((link) => link.remove())
   }
   const assertActive = () => {
@@ -149,10 +175,17 @@ export async function mountPlugin(options: {
     const module = (await import(/* @vite-ignore */ entryUrl)) as PluginModule
     assertActive()
     if (typeof module.mount !== "function") throw new Error("应用入口缺少挂载方法，请联系管理员。")
+    document.body.append(overlay)
     const context: PluginContext = {
       child: { ...child },
       releaseId: entry.releaseId,
       signal,
+      overlay,
+      isActive: () => pageActive,
+      onVisibility: (listener) => {
+        listeners.add(listener)
+        return () => listeners.delete(listener)
+      },
       api: async <T>(
         path: string,
         options?: { method?: "GET" | "POST" | "PUT" | "DELETE"; body?: unknown },
@@ -184,6 +217,10 @@ export async function mountPlugin(options: {
       navigateCore: (view) => {
         assertActive()
         if (["calendar", "store", "settings"].includes(view)) runtime.setView(view)
+      },
+      refreshChild: () => {
+        assertActive()
+        return runtime.refresh(true)
       },
     }
     if (dev) {
@@ -240,7 +277,7 @@ export async function mountPlugin(options: {
       }
       monitor = window.setTimeout(check, 2000)
     }
-    return dispose
+    return { dispose, setActive }
   } catch (error) {
     dispose()
     throw error

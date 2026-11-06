@@ -29,20 +29,27 @@ export function PluginPage({
   child,
   epoch,
   notify,
+  active,
 }: {
   pluginId: string
   child: Child
   epoch: number
   notify: (message: string) => void
+  active: boolean
 }) {
   const state = usePlugins()
   const plugin =
     state.childId === child.id && state.epoch === epoch
       ? state.plugins.find((item) => item.id === pluginId)
       : undefined
+  const section = useRef<HTMLElement>(null)
   const host = useRef<HTMLDivElement>(null)
   const notifyRef = useRef(notify)
+  const activeRef = useRef(active)
+  const session = useRef<{ setActive(active: boolean): void } | null>(null)
+  const scrolls = useRef(new Map<HTMLElement, { top: number; left: number }>())
   notifyRef.current = notify
+  activeRef.current = active
   const [failure, setFailure] = useState("")
   const [loading, setLoading] = useState(false)
   const [retry, setRetry] = useState(0)
@@ -53,6 +60,26 @@ export function PluginPage({
     plugin.type === "page" &&
     plugin.operationState === "ready" &&
     !child.archived
+  useLayoutEffect(() => {
+    const node = section.current
+    if (!node) return
+    const remember = (event: Event) => {
+      const target = event.target
+      if (target instanceof HTMLElement)
+        scrolls.current.set(target, { top: target.scrollTop, left: target.scrollLeft })
+    }
+    node.addEventListener("scroll", remember, true)
+    return () => node.removeEventListener("scroll", remember, true)
+  }, [])
+  useLayoutEffect(() => {
+    session.current?.setActive(active)
+    if (!active || !section.current) return
+    for (const [element, position] of scrolls.current) {
+      if (!section.current.contains(element)) continue
+      element.scrollTop = position.top
+      element.scrollLeft = position.left
+    }
+  }, [active])
   useLayoutEffect(() => {
     setFailure("")
     if (!effective || !plugin || !host.current) {
@@ -72,10 +99,12 @@ export function PluginPage({
       onDevelopmentChange: () => setRetry((value) => value + 1),
       onDevelopmentError: (message) => setFailure(message),
     })
-      .then((cleanup) => {
-        if (controller.signal.aborted) cleanup()
+      .then((handle) => {
+        if (controller.signal.aborted) handle.dispose()
         else {
-          dispose = cleanup
+          dispose = handle.dispose
+          session.current = handle
+          handle.setActive(activeRef.current)
           setLoading(false)
         }
       })
@@ -86,6 +115,7 @@ export function PluginPage({
         void pluginStore.refresh()
       })
     return () => {
+      session.current = null
       controller.abort()
       dispose?.()
     }
@@ -102,7 +132,14 @@ export function PluginPage({
     retry,
   ])
   return (
-    <section className="plugin-page" aria-label={plugin?.name || "应用"}>
+    <section
+      ref={section}
+      className="plugin-page"
+      aria-label={plugin?.name || "应用"}
+      hidden={!active}
+      inert={!active}
+      aria-hidden={active ? undefined : true}
+    >
       {!effective ? (
         <div className="plugin-placeholder" role="status">
           <h2>

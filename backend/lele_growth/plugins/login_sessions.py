@@ -33,11 +33,16 @@ def current(cur, scope, vault, owner):
 
 
 def handle(cur, scope, context, action, payload, vault):
-    cur.execute('''SELECT 1 FROM lele.memberships m JOIN lele.users u ON u.id=m.user_id
+    # A signed plugin job has no user actor, but may read the saved Mison session.
+    job_reader = action == 'session.get' and bool(context.get('jobId')) and not context.get('actorId')
+    if job_reader:
+        owner = False
+    else:
+        cur.execute('''SELECT 1 FROM lele.memberships m JOIN lele.users u ON u.id=m.user_id
 WHERE m.child_id=%s AND m.user_id=%s AND u.status='active' ''', (scope['child_id'], context['actorId']))
-    require(cur.fetchone() is not None, 403, '当前用户无权访问该儿童的美森账号。', 'OWNER_REQUIRED')
-    cur.execute('SELECT owner_id FROM lele.children WHERE id=%s', (scope['child_id'],))
-    owner = cur.fetchone()[0] == context['actorId']
+        require(cur.fetchone() is not None, 403, '当前用户无权访问该儿童的美森账号。', 'OWNER_REQUIRED')
+        cur.execute('SELECT owner_id FROM lele.children WHERE id=%s', (scope['child_id'],))
+        owner = cur.fetchone()[0] == context['actorId']
     if action == 'session.get':
         return {'ok': True, 'data': current(cur, scope, vault, owner)}
     if action == 'session.invalidate':

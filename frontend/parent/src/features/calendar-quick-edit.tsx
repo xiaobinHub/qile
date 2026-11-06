@@ -11,7 +11,7 @@ import { CalendarTrash } from "./calendar-trash"
 import type { TrashDrop } from "./calendar-trash"
 import { Button } from "./ui"
 import { ApiError, operationId, runtime } from "../lib/runtime"
-import { fmtFull, isDone } from "../domain/calendar"
+import { fmtFull, isDone, isSyncedCourse } from "../domain/calendar"
 import {
   addDraftTask,
   calendarDraftOperations,
@@ -56,6 +56,10 @@ export function useCalendarQuickEdit(data: BusinessData) {
   const active = !!session
   const place = (item: CalendarDragItem, target: string, origin?: CalendarDragOrigin) => {
     if (!session || frozen) return
+    if (item.kind === "occurrence" && isSyncedCourse(item.occurrence)) {
+      setError("美森课程由约课插件同步，不能拖动或删除。")
+      return
+    }
     if (target === "delete" && item.kind === "preset") {
       setAnnouncement("常用任务不会被删除，请将卡片拖到日期中。")
       return
@@ -165,7 +169,7 @@ export function useCalendarQuickEdit(data: BusinessData) {
       document.getElementById("quickEditBtn")?.focus({ preventScroll: true }),
     )
   }
-  const blockedDrag = (event: ReactPointerEvent<HTMLElement>) => {
+  const blockedDrag = (event: ReactPointerEvent<HTMLElement>, message?: string) => {
     if (!active || frozen || !event.isPrimary || event.button !== 0) return
     blockedDragStop.current()
     const card = event.currentTarget
@@ -189,7 +193,7 @@ export function useCalendarQuickEdit(data: BusinessData) {
         card.classList.remove("quick-task-blocked-shake")
         blockedShakeTimer.current = null
       }, 280)
-      setAnnouncement("已完成任务不可调整，请先退出快捷编辑并撤销完成。")
+      setAnnouncement(message || "已完成任务不可调整，请先退出快捷编辑并撤销完成。")
     }
     const stop = () => {
       if (shaken) blockedClickUntil.current = performance.now() + 100
@@ -257,8 +261,10 @@ export function useCalendarQuickEdit(data: BusinessData) {
     occurrencesForDate: (date: string) =>
       draftOccurrences(session?.data || data, date, date, draft),
     saveTask: (task: Task) => {
-      if (!session || frozen || !editingOccurrence || isDone(session.data, editingOccurrence))
-        throw Error("当前任务不可修改。")
+      if (!session || frozen || !editingOccurrence) throw Error("当前任务不可修改。")
+      if (isSyncedCourse(editingOccurrence))
+        throw Error("美森课程由约课插件同步，不能手动修改、删除或完成。")
+      if (isDone(session.data, editingOccurrence)) throw Error("当前任务不可修改。")
       const next = editDraftTask(draft, editingOccurrence, task)
       if (calendarDraftSummary(next).total > 200)
         throw Error("每次最多保存 200 项调整，请先保存当前改动。")
@@ -281,6 +287,10 @@ export function useCalendarQuickEdit(data: BusinessData) {
       setAnnouncement("已进入快捷编辑。拖动手柄，或选择任务后点击日期；已完成任务不可调整。")
     },
     choose: (item: CalendarDragItem) => {
+      if (item.kind === "occurrence" && isSyncedCourse(item.occurrence)) {
+        setAnnouncement("美森课程由约课插件同步，不能拖动或删除。")
+        return
+      }
       if (frozen || drag.suppressClick()) return
       setSelected((current) =>
         current && dragItemKey(current) === dragItemKey(item) ? null : item,
@@ -433,14 +443,17 @@ export function QuickEditTask({
   edit: CalendarQuickEdit
   occurrence: Occurrence
 }) {
-  const locked = isDone(edit.baseData, o)
+  const synced = isSyncedCourse(o)
+  const locked = synced || isDone(edit.baseData, o)
   const item: CalendarDragItem = { kind: "occurrence", occurrence: o }
   const selected =
     edit.selected?.kind === "occurrence" &&
     edit.selected.occurrence.occurrenceKey === o.occurrenceKey
-  const label = locked
-    ? `已完成任务不可调整：${o.title}`
-    : `拖动任务：${o.title}，${fmtFull(o.date)} ${o.startTime}`
+  const label = synced
+    ? `美森课程不能调整：${o.title}`
+    : locked
+      ? `已完成任务不可调整：${o.title}`
+      : `拖动任务：${o.title}，${fmtFull(o.date)} ${o.startTime}`
   const change = edit.draft.added.some((task) => task.occurrenceKey === o.occurrenceKey)
     ? "added"
     : edit.draft.changes[o.occurrenceKey]
@@ -459,9 +472,11 @@ export function QuickEditTask({
         aria-describedby="quickEditHelp"
         aria-pressed={selected}
         title={
-          locked
-            ? "已完成任务已冻结，请先退出快捷编辑并撤销完成"
-            : "拖动调整日期；也可点击后选择日期"
+          synced
+            ? "美森课程由约课插件同步，不能拖动或删除"
+            : locked
+              ? "已完成任务已冻结，请先退出快捷编辑并撤销完成"
+              : "拖动调整日期；也可点击后选择日期"
         }
         disabled={locked || edit.frozen}
         onPointerDown={(event) => edit.drag.begin(event, item)}

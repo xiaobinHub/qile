@@ -31,7 +31,8 @@ class PluginBridge:
             assert_fences(current, context)
             require(action in ('actor.info', 'private.get', 'private.put', 'private.delete',
                                'credential.get', 'session.get', 'session.begin', 'session.finish', 'session.fail', 'session.disconnect', 'session.invalidate', 'operation.begin', 'operation.mark-dispatch',
-                               'operation.stage', 'operation.finish', 'operation.get', 'operation.list', 'resource.issue'),
+                               'operation.stage', 'operation.finish', 'operation.get', 'operation.list', 'resource.issue',
+                               'courseSync.get', 'courseSync.preview', 'courseSync.save', 'courseSync.run', 'courseSync.purge'),
                     400, '插件Bridge动作不存在。', 'plugin_bridge_action_unavailable')
             if action == 'actor.info':
                 cur.execute('SELECT owner_id FROM lele.children WHERE id=%s', (child_id,))
@@ -39,11 +40,27 @@ class PluginBridge:
             if action == 'resource.issue':
                 from .resources import issue
                 return {'ok': True, 'data': issue(cur, current, context, payload)}
+            if action.startswith('courseSync.'):
+                require(plugin_id == 'mison-booking', 403, '此插件不能同步课程。', 'plugin_capability_denied')
+                from lele_growth.course_sync_host import handle as sync_courses
+                return sync_courses(self.service, cur, current, context, action, payload)
             if action.startswith('session.'):
                 self._capability(current, 'plugin.credentials')
                 self._capability(current, 'plugin.private-state')
                 from . import login_sessions
-                return login_sessions.handle(cur, current, context, action, payload, self.vault)
+                before = private_store.get(cur, current, 'login-session', 'current') if action in ('session.disconnect', 'session.finish') and plugin_id == 'mison-booking' else None
+                result = login_sessions.handle(cur, current, context, action, payload, self.vault)
+                if plugin_id == 'mison-booking' and action == 'session.disconnect':
+                    from lele_growth.course_sync_host import purge_saved
+                    purge_saved(self.service, cur, child_id, actor_id)
+                elif plugin_id == 'mison-booking' and action == 'session.finish':
+                    after = private_store.get(cur, current, 'login-session', 'current')
+                    old_account = (before or {}).get('payload', {}).get('userid') if before else None
+                    new_account = (after or {}).get('payload', {}).get('userid') if after else None
+                    if old_account and old_account != new_account:
+                        from lele_growth.course_sync_host import purge_saved
+                        purge_saved(self.service, cur, child_id, actor_id, old_account)
+                return result
             if action == 'private.get':
                 self._capability(current, 'plugin.private-state')
                 include_expired = payload.get('includeExpired', False)

@@ -35,14 +35,18 @@ import {
 } from "@shared/components/ui/sheet"
 import { Separator } from "@shared/components/ui/separator"
 import { DatePicker as SharedDatePicker } from "@shared/components/date-picker"
+import { NumberPicker as SharedNumberPicker } from "@shared/components/number-picker"
 import { PopoverContent as SharedPopoverContent } from "@shared/components/ui/popover"
 import { cn } from "@shared/lib/utils"
 export { Input } from "@shared/components/ui/input"
 
-import { PortalContext, ImageContext } from "./contexts"
+import { PortalContext, ImageContext, PageActiveContext } from "./contexts"
 export { PortalContext, ImageContext } from "./contexts"
 export function DatePicker(props: React.ComponentProps<typeof SharedDatePicker>) {
   return <SharedDatePicker {...props} portalContainer={useContext(PortalContext)} />
+}
+export function NumberPicker(props: React.ComponentProps<typeof SharedNumberPicker>) {
+  return <SharedNumberPicker {...props} portalContainer={useContext(PortalContext)} />
 }
 export function PopoverContent(props: React.ComponentProps<typeof SharedPopoverContent>) {
   return <SharedPopoverContent {...props} portalContainer={useContext(PortalContext)} />
@@ -217,6 +221,8 @@ export function Avatar({
 
 export function Overlay({
   title,
+  titleMeta,
+  actions,
   children,
   footer,
   onClose,
@@ -225,8 +231,11 @@ export function Overlay({
   busy = false,
   confirm = false,
   contained = false,
+  preview = false,
 }: {
   title: string
+  titleMeta?: ReactNode
+  actions?: ReactNode
   children: ReactNode
   footer?: ReactNode
   onClose(): void
@@ -235,8 +244,10 @@ export function Overlay({
   busy?: boolean
   confirm?: boolean
   contained?: boolean
+  preview?: boolean
 }) {
   const portal = useContext(PortalContext)
+  const pageActive = useContext(PageActiveContext)
   const returnFocus = useRef(document.activeElement as HTMLElement | null)
   const Root = confirm ? AlertDialog : drawer ? Sheet : Dialog
   const Content = confirm ? AlertDialogContent : drawer ? SheetContent : DialogContent
@@ -244,24 +255,31 @@ export function Overlay({
   const Title = confirm ? AlertDialogTitle : drawer ? SheetTitle : DialogTitle
   const Footer = confirm ? AlertDialogFooter : drawer ? SheetFooter : DialogFooter
   const preventClose = (event: { preventDefault(): void }) => {
-    if (busy) event.preventDefault()
+    if (busy || !pageActive) event.preventDefault()
   }
   return (
     <Root
       open
+      modal={pageActive}
       onOpenChange={(open) => {
-        if (!open && !busy) onClose()
+        if (!open && (busy || !pageActive)) return
+        if (!open) onClose()
       }}
     >
       <Content
         portalContainer={portal}
-        {...(!confirm ? { showCloseButton: false, onInteractOutside: preventClose } : {})}
+        onEscapeKeyDown={preventClose}
+        onPointerDownOutside={preventClose}
+        onInteractOutside={preventClose}
+        onFocusOutside={preventClose}
+        {...(!confirm ? { showCloseButton: false } : {})}
         aria-describedby={undefined}
         className={cn(
           "mison-overlay",
           drawer ? "is-drawer" : "is-modal",
           wide && "is-wide",
           contained && "is-contained",
+          preview && "is-preview",
         )}
         onCloseAutoFocus={(event) => {
           if (returnFocus.current?.isConnected) {
@@ -269,19 +287,26 @@ export function Overlay({
             returnFocus.current.focus({ preventScroll: true })
           }
         }}
-        onEscapeKeyDown={preventClose}
       >
         <Header className="mison-overlay-header">
-          <Title>{title}</Title>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            aria-label={`关闭${title}`}
-            disabled={busy}
-            onClick={onClose}
-          >
-            <X data-icon="inline-start" />
-          </Button>
+          <div className="mison-overlay-heading">
+            <Title className={preview || titleMeta ? "mison-overlay-title" : undefined}>
+              {title}
+            </Title>
+            {titleMeta ? <small>{titleMeta}</small> : null}
+            {actions ? <div className="mison-overlay-heading-actions">{actions}</div> : null}
+          </div>
+          <div className="mison-overlay-header-actions">
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label={`关闭${title}`}
+              disabled={busy}
+              onClick={onClose}
+            >
+              <X data-icon="inline-start" />
+            </Button>
+          </div>
         </Header>
         <Separator />
         {contained ? (

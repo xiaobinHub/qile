@@ -66,7 +66,11 @@ class PluginRoutes:
             prefix='/plugin-assets/'+plugin_id+'/'+context['version']+'/'
             return dict(entry=prefix+safe_relative_path(frontend['entry']),styles=[prefix+safe_relative_path(s) for s in frontend.get('styles',[])],releaseId=context['release_id'],version=context['version'])
         if method=='POST' and action in ('install','enable','disable') or method=='DELETE' and action=='installation':
-            result=installations.mutate_installation(cur,plugin_id,child_id,user[0],'uninstall' if action=='installation' else action,body)
+            performed='uninstall' if action=='installation' else action
+            result=installations.mutate_installation(cur,plugin_id,child_id,user[0],performed,body)
+            if plugin_id=='mison-booking' and performed in ('disable','uninstall'):
+                from lele_growth.course_sync_host import purge_saved
+                purge_saved(self.service,cur,child_id,user[0])
             self.service.audit(cur,user[0],'plugin.'+action,child_id,{'pluginId':plugin_id,'revision':result['plugin']['revision']})
             return result
         require(False,405,'接口不支持此操作。')

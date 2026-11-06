@@ -12,11 +12,13 @@ export function BookingsDrawer({
   bindingRevision,
   onClose,
   onResource,
+  onScheduleChanged,
 }: {
   context: PluginContext
   bindingRevision: number
   onClose(): void
   onResource(resource: Resource): void
+  onScheduleChanged?(): void
 }) {
   const [status, setStatus] = useState("upcoming"),
     [items, setItems] = useState<Booking[]>([])
@@ -126,6 +128,7 @@ export function BookingsDrawer({
       if (r.state === "succeeded") {
         setCancel(null)
         void load()
+        onScheduleChanged?.()
       } else {
         setCancelMessage(r.message || "结果待核对，请刷新预约记录。")
         setCancelUncertain(!["failed", "cancelled"].includes(r.state))
@@ -146,6 +149,7 @@ export function BookingsDrawer({
       if (r.state === "succeeded") {
         setCancel(null)
         void load()
+        onScheduleChanged?.()
       } else {
         setCancelMessage(r.message)
         if (["failed", "cancelled"].includes(r.state)) {
@@ -174,40 +178,40 @@ export function BookingsDrawer({
           }}
         >
           <div className="mison-booking-pinned">
-          <TabsList variant="line" className="mison-booking-tabs" aria-label="预约状态">
-            {[
-              ["upcoming", "预约中"],
-              ["completed", "已上课"],
-              ["cancelled", "已取消"],
-            ].map(([key, name]) => (
-              <TabsTrigger key={key} value={key}>
-                {name}
-                {key === status && total !== null ? ` ${total}` : ""}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-          <div className="mison-booking-toolbar">
-            <small>{status === "upcoming" ? "按上课时间排列" : "最近课程在前"}</small>
-            <div className="mison-actions">
-              <DatePicker
-                className="mison-date-picker"
-                aria-label="预约日期筛选"
-                placeholder="筛选日期"
-                value={date}
-                onChange={setDate}
-              />
-              <Button
-                variant="outline"
-                size="icon"
-                aria-label="刷新预约"
-                disabled={loading}
-                onClick={() => void load()}
-              >
-                <RefreshCw />
-              </Button>
+            <TabsList variant="line" className="mison-booking-tabs" aria-label="预约状态">
+              {[
+                ["upcoming", "预约中"],
+                ["completed", "已上课"],
+                ["cancelled", "已取消"],
+              ].map(([key, name]) => (
+                <TabsTrigger key={key} value={key}>
+                  {name}
+                  {key === status && total !== null ? ` ${total}` : ""}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+            <div className="mison-booking-toolbar">
+              <small>{status === "upcoming" ? "按上课时间排列" : "最近课程在前"}</small>
+              <div className="mison-actions">
+                <DatePicker
+                  className="mison-date-picker"
+                  aria-label="预约日期筛选"
+                  placeholder="筛选日期"
+                  value={date}
+                  onChange={setDate}
+                />
+                <Button
+                  variant="outline"
+                  size="icon"
+                  aria-label="刷新预约"
+                  disabled={loading}
+                  onClick={() => void load()}
+                >
+                  <RefreshCw />
+                </Button>
+              </div>
             </div>
-          </div>
-          {error ? <Notice error>{error}</Notice> : null}
+            {error ? <Notice error>{error}</Notice> : null}
           </div>
           <TabsContent className="mison-booking-list" value={status} aria-busy={loading}>
             {items.map((booking) => {

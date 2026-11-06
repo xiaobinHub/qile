@@ -61,6 +61,21 @@ function Application() {
   const calendarPrefs = useRef({ mode: "month", cursor: today() })
   const printReturnFocus = useRef<HTMLElement | null>(null)
   const settingsInitialPage = useRef<string | undefined>(undefined)
+  const retainedPlugins = useRef<{ pluginId: string; childId: string; epoch: number }[]>([])
+  const activePluginId = typeof snapshot.view === "object" ? snapshot.view.pluginId : ""
+  if (!child || snapshot.error) retainedPlugins.current = []
+  else {
+    const current = retainedPlugins.current.filter(
+      (item) => item.childId === child.id && item.epoch === snapshot.epoch,
+    )
+    if (activePluginId && !current.some((item) => item.pluginId === activePluginId))
+      current.push({ pluginId: activePluginId, childId: child.id, epoch: snapshot.epoch })
+    retainedPlugins.current = current
+  }
+  const suspendedPlugins = [...retainedPlugins.current].sort(
+    (left, right) =>
+      Number(left.pluginId === activePluginId) - Number(right.pluginId === activePluginId),
+  )
   const notify = (message: string) => toast({ title: message })
   useEffect(() => pluginStore.start(), [])
   useEffect(() => {
@@ -276,67 +291,74 @@ function Application() {
                 <ErrorText message={snapshot.error} />
                 <Button onClick={() => void runtime.enter()}>重新加载</Button>
               </div>
-            ) : snapshot.view === "settings" ? (
-              <SettingsPage
-                menuOpen={settingsMenuOpen}
-                onMenuOpenChange={setSettingsMenuOpen}
-                key={`${child?.id || "account"}:${snapshot.epoch}`}
-                controller={controller}
-                initialPage={settingsInitialPage.current}
-              />
-            ) : !child ? (
-              <Onboarding user={user} controller={controller} />
-            ) : typeof snapshot.view === "object" ? (
-              <PluginBoundary key={`${child.id}:${snapshot.epoch}:${snapshot.view.pluginId}`}>
-                <PluginPage
-                  child={child}
-                  epoch={snapshot.epoch}
-                  pluginId={snapshot.view.pluginId}
-                  notify={notify}
-                />
-              </PluginBoundary>
             ) : (
-              data && (
-                <>
-                  {snapshot.view === "calendar" ? (
-                    <CalendarPage
-                      key={`${child.id}:${snapshot.epoch}`}
-                      prefs={calendarPrefs.current}
-                      data={data}
-                      child={child}
-                      openTask={(options) => setEditor({ type: "task", ...options })}
-                      openPrint={(trigger) => {
-                        printReturnFocus.current = trigger
-                        setEditor({ type: "print" })
-                      }}
-                    />
-                  ) : (
-                    <Suspense
-                      fallback={
-                        <section
-                          role="status"
-                          aria-label="正在读取积分商城"
-                          className="store-loading"
-                        >
-                          <Skeleton className="h-10 w-48" />
-                          <div className="gift-grid">
-                            {[0, 1, 2].map((n) => (
-                              <Skeleton key={n} className="h-64" />
-                            ))}
-                          </div>
-                        </section>
-                      }
-                    >
-                      <StorePage
-                        key={`${child.id}:${snapshot.epoch}`}
-                        data={data}
+              <>
+                {child &&
+                  suspendedPlugins.map((item) => (
+                    <PluginBoundary key={`${item.childId}:${item.epoch}:${item.pluginId}`}>
+                      <PluginPage
                         child={child}
+                        epoch={item.epoch}
+                        pluginId={item.pluginId}
                         notify={notify}
+                        active={item.pluginId === activePluginId}
                       />
-                    </Suspense>
-                  )}
-                </>
-              )
+                    </PluginBoundary>
+                  ))}
+                {snapshot.view === "settings" ? (
+                  <SettingsPage
+                    menuOpen={settingsMenuOpen}
+                    onMenuOpenChange={setSettingsMenuOpen}
+                    key={`${child?.id || "account"}:${snapshot.epoch}`}
+                    controller={controller}
+                    initialPage={settingsInitialPage.current}
+                  />
+                ) : !child ? (
+                  <Onboarding user={user} controller={controller} />
+                ) : typeof snapshot.view === "object" ? null : (
+                  data && (
+                    <>
+                      {snapshot.view === "calendar" ? (
+                        <CalendarPage
+                          key={`${child.id}:${snapshot.epoch}`}
+                          prefs={calendarPrefs.current}
+                          data={data}
+                          child={child}
+                          openTask={(options) => setEditor({ type: "task", ...options })}
+                          openPrint={(trigger) => {
+                            printReturnFocus.current = trigger
+                            setEditor({ type: "print" })
+                          }}
+                        />
+                      ) : (
+                        <Suspense
+                          fallback={
+                            <section
+                              role="status"
+                              aria-label="正在读取积分商城"
+                              className="store-loading"
+                            >
+                              <Skeleton className="h-10 w-48" />
+                              <div className="gift-grid">
+                                {[0, 1, 2].map((n) => (
+                                  <Skeleton key={n} className="h-64" />
+                                ))}
+                              </div>
+                            </section>
+                          }
+                        >
+                          <StorePage
+                            key={`${child.id}:${snapshot.epoch}`}
+                            data={data}
+                            child={child}
+                            notify={notify}
+                          />
+                        </Suspense>
+                      )}
+                    </>
+                  )
+                )}
+              </>
             )}
           </main>
         </div>

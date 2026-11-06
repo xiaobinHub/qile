@@ -51,6 +51,20 @@ export function revisionForDate(s: Series, date: string) {
       .find((r) => r.effectiveFrom <= date) || revisions[0]
   )
 }
+export function isSyncedCourse(
+  value:
+    | {
+        source?: { provider?: string } | string | null
+        seriesId?: string
+        occurrenceKey?: string
+      }
+    | null
+    | undefined,
+) {
+  if (!value || typeof value !== "object") return false
+  if (typeof value.source === "object" && value.source?.provider === "mison") return true
+  return (value.seriesId || value.occurrenceKey || "").startsWith("mison.")
+}
 export function makeOcc(s: Series, date: string, originalDate = date): Occurrence {
   return {
     seriesId: s.id,
@@ -64,6 +78,7 @@ export function makeOcc(s: Series, date: string, originalDate = date): Occurrenc
     categoryId: s.categoryId,
     points: Number(s.points) || 0,
     recurring: !!s.recurrence || (s.revisions?.length || 0) > 1,
+    ...(s.source ? { source: s.source } : {}),
   }
 }
 function endAllows(r: Rule, d: string, index: number) {

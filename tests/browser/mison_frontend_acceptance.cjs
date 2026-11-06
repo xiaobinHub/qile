@@ -1431,9 +1431,13 @@ async function main() {
     await page.getByRole("dialog", { name: "我的预约" }).waitFor()
     assert.equal(bookingCalls, 1, "restoring an operation only reads its receipt")
     await page.evaluate(() => document.querySelector('[data-view="settings"]').click())
-    await page.waitForFunction(() => !document.querySelector(".mison-ui"))
+    await page.waitForFunction(
+      () =>
+        document.querySelector(".plugin-page")?.hasAttribute("hidden") &&
+        document.querySelector(".plugin-overlay")?.hasAttribute("hidden"),
+    )
     assert.equal(
-      await page.locator('[data-slot="sheet-overlay"], [data-slot="dialog-overlay"]').count(),
+      await page.locator(".plugin-overlay:not([hidden]) [data-slot='sheet-overlay'], .plugin-overlay:not([hidden]) [data-slot='dialog-overlay']").count(),
       0,
     )
     await page.waitForFunction(

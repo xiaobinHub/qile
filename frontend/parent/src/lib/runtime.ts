@@ -348,7 +348,7 @@ export class Runtime {
       child: { ...this.state.child, membershipVersion: pkg.context.membershipVersion },
     })
   }
-  refresh = async () => {
+  refresh = async (quiet = false) => {
     if (this.state.busy) return
     const id = this.state.child?.id
     if (!id) {
@@ -356,6 +356,7 @@ export class Runtime {
       return
     }
     this.load(await this.api<DataPackage>(`/api/children/${id}/data`))
+    if (quiet) return
     this.patch({
       message:
         this.pending || this.completionJobs.size

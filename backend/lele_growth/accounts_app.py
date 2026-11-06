@@ -82,7 +82,7 @@ def create_app(config_path, surface='parent'):
     def plugin_video(child_id: str, plugin_id: str, ticket: str, request: Request):
         from lele_growth.plugins.resources import open_video
         stream = open_video(service, request.cookies.get(cookie_name), surface, child_id, plugin_id, ticket,
-                            request.method, request.headers.get('range'))
+                            request.method, request.headers.get('range'), request.query_params.get('filename'))
         return StreamingResponse(stream.body(), status_code=stream.status, headers=stream.headers,
                                  background=BackgroundTask(stream.close))
 

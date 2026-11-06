@@ -142,7 +142,22 @@ class VideoStream:
 
     def close(self): self.connection.close()
 
-def open_video(service, token, surface, child_id, plugin_id, ticket, method='GET', range_header=None):
+def pdf_download_disposition(filename):
+    """Use the courseware title for a user-initiated download without header injection."""
+    from urllib.parse import quote
+    raw = filename if isinstance(filename, str) else ''
+    name = re.sub(r'[\x00-\x1f\x7f\\/:*?"<>|]+', ' ', raw)
+    name = re.sub(r'\s+', ' ', name).strip(' .')[:120] or '课件'
+    if not name.lower().endswith('.pdf'):
+        name += '.pdf'
+    ascii_name = re.sub(r'[^A-Za-z0-9._ -]+', '_', name)
+    ascii_name = re.sub(r'\s+', '_', ascii_name).strip('._') or 'courseware'
+    if not ascii_name.lower().endswith('.pdf'):
+        ascii_name += '.pdf'
+    return f"attachment; filename=\"{ascii_name}\"; filename*=UTF-8''{quote(name)}"
+
+
+def open_video(service, token, surface, child_id, plugin_id, ticket, method='GET', range_header=None, download_name=None):
     url = authorize(service, token, surface, child_id, plugin_id, ticket)
     require(method in ('GET', 'HEAD'), 405)
     require(range_header is None or re.fullmatch(r'bytes=(?:[0-9]+-[0-9]*|-[0-9]+)', range_header), 416, '视频分段范围不正确。')
@@ -157,7 +172,7 @@ def open_video(service, token, surface, child_id, plugin_id, ticket, method='GET
         require(response.status in (200, 206), 416 if response.status == 416 else 502, '视频暂时不可用。')
         stream = VideoStream(connection, response, method == 'HEAD', mime)
         if mime == 'application/pdf':
-            stream.headers['Content-Disposition'] = 'inline; filename=courseware.pdf'
+            stream.headers['Content-Disposition'] = pdf_download_disposition(download_name) if isinstance(download_name, str) and download_name.strip() else 'inline; filename=courseware.pdf'
             stream.headers['Content-Security-Policy'] = "sandbox; default-src 'none'; frame-ancestors 'self'; base-uri 'none'"
         authorize(service, token, surface, child_id, plugin_id, ticket)
         return stream

@@ -6,9 +6,8 @@ import "./utilities.css"
 import "./style.css"
 
 export function mount(container: HTMLElement, context: Parameters<typeof App>[0]["context"]) {
-  const portal = document.createElement("div")
-  portal.className = "mison-ui"
-  document.body.appendChild(portal)
+  const portal = context.overlay
+  portal.classList.add("mison-ui")
   const root = createRoot(container)
   root.render(
     createElement(
@@ -23,6 +22,7 @@ export function mount(container: HTMLElement, context: Parameters<typeof App>[0]
   )
   return () => {
     root.unmount()
-    portal.remove()
+    portal.replaceChildren()
+    portal.classList.remove("mison-ui")
   }
 }

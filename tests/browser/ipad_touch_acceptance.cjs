@@ -255,15 +255,14 @@ async function exerciseMisonTouch({ page, browserContext, origin, entryUrl, out,
       listTop,
       "PDF doesn't scroll underlying sheet",
     )
-    const zoom = pdf.getByRole("button", { name: "放大 PDF", exact: true })
-    await zoom.click()
-    await zoom.click()
-    await gesture(pdfScroll, { horizontal: true })
-    assert.ok(
-      await pdfScroll.evaluate((element) => element.scrollLeft > 30),
-      "Zoomed PDF pans horizontally",
-    )
-    await pdf.getByRole("button", { name: "PDF 适合宽度" }).click()
+    await pdf.locator(".mison-overlay-header").getByText("共 8 页", { exact: true }).waitFor()
+    assert.equal(await pdf.locator(".pdf-preview-tools").count(), 0)
+    assert.equal(await pdf.getByRole("button", { name: "放大 PDF" }).count(), 0)
+    const downloadPromise = page.waitForEvent("download")
+    await pdf.getByRole("button", { name: "下载", exact: true }).click()
+    const download = await downloadPromise
+    assert.equal(download.suggestedFilename(), "触控课件.pdf")
+    await download.delete()
     await page.setViewportSize({ width: 820, height: 1180 })
     await pdf.locator('[data-pdf-page="1"][data-rendered="true"]').waitFor()
     await scrolls(pdfScroll, "PDF portrait after rotation")

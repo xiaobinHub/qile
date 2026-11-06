@@ -1,19 +1,28 @@
 import { useEffect, useRef, useState } from "react"
 import { getDocument, PDFWorker } from "pdfjs-dist/legacy/build/pdf.mjs"
 import type { PDFDocumentLoadingTask, PDFDocumentProxy, RenderTask } from "pdfjs-dist"
-import { Minus, Plus, RotateCcw } from "lucide-react"
+import { RotateCcw } from "lucide-react"
 import { Button } from "./ui/button"
 import "./pdf-preview.css"
 
 /** A native scrollport, with canvases allocated only near the visible pages. */
-export default function PdfPreview({ url, title }: { url: string; title: string }) {
+export default function PdfPreview({
+  url,
+  title,
+  onPages,
+}: {
+  url: string
+  title: string
+  onPages?: (pages: number | null) => void
+}) {
   const scrollport = useRef<HTMLDivElement>(null)
+  const onPagesRef = useRef(onPages)
   const [pdf, setPdf] = useState<PDFDocumentProxy | null>(null)
   const [error, setError] = useState(false)
   const [attempt, setAttempt] = useState(0)
   const [width, setWidth] = useState(0)
-  const [zoom, setZoom] = useState(1)
   const [ratio, setRatio] = useState(Math.SQRT2)
+  onPagesRef.current = onPages
   useEffect(() => {
     const element = scrollport.current
     if (!element) return
@@ -25,7 +34,6 @@ export default function PdfPreview({ url, title }: { url: string; title: string 
     let alive = true
     setPdf(null)
     setError(false)
-    setZoom(1)
     scrollport.current?.scrollTo(0, 0)
     let port: Worker | undefined
     let worker: PDFWorker | undefined
@@ -72,39 +80,12 @@ export default function PdfPreview({ url, title }: { url: string; title: string 
         })
     }
   }, [url, attempt])
+  useEffect(() => {
+    onPagesRef.current?.(pdf ? pdf.numPages : null)
+  }, [pdf])
+  const pageWidth = Math.floor(width)
   return (
     <div className="pdf-preview">
-      <div className="pdf-preview-tools" role="group" aria-label="PDF 缩放">
-        <span role="status">
-          {pdf ? `共 ${pdf.numPages} 页` : error ? "加载失败" : "正在加载 PDF…"}
-        </span>
-        <Button
-          variant="outline"
-          size="icon"
-          aria-label="缩小 PDF"
-          disabled={!pdf || zoom <= 0.75}
-          onClick={() => setZoom((value) => Math.max(0.75, value - 0.25))}
-        >
-          <Minus />
-        </Button>
-        <Button
-          variant="outline"
-          disabled={!pdf}
-          onClick={() => setZoom(1)}
-          aria-label="PDF 适合宽度"
-        >
-          {zoom === 1 ? "适合宽度" : `${Math.round(zoom * 100)}%`}
-        </Button>
-        <Button
-          variant="outline"
-          size="icon"
-          aria-label="放大 PDF"
-          disabled={!pdf || zoom >= 2}
-          onClick={() => setZoom((value) => Math.min(2, value + 0.25))}
-        >
-          <Plus />
-        </Button>
-      </div>
       <div
         className="pdf-preview-scroll"
         ref={scrollport}
@@ -127,13 +108,13 @@ export default function PdfPreview({ url, title }: { url: string; title: string 
             </Button>
           </div>
         ) : pdf && width ? (
-          <div className="pdf-preview-pages" style={{ width: Math.floor(width * zoom) }}>
+          <div className="pdf-preview-pages" style={{ width: pageWidth }}>
             {Array.from({ length: pdf.numPages }, (_, index) => (
               <PdfPage
                 key={index}
                 pdf={pdf}
                 number={index + 1}
-                width={Math.floor(width * zoom)}
+                width={pageWidth}
                 ratio={ratio}
                 scrollport={scrollport.current!}
               />

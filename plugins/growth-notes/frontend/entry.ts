@@ -70,7 +70,11 @@ export function mount(container: HTMLElement, context: PluginContext) {
     if (!disposed)
       status.textContent = error instanceof Error ? error.message : "暂时无法读取随记。"
   })
+  const stopSeeing = context.onVisibility((visible) => {
+    if (visible && !disposed) void refresh()
+  })
   return () => {
+    stopSeeing()
     disposed = true
     form.onsubmit = null
     root.remove()

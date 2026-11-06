@@ -133,6 +133,9 @@ export function createFixtureContext(): PluginContext {
     child: { id: "demo-child", name: "乐乐" },
     releaseId: "design-preview",
     signal: controller.signal,
+    overlay: (globalThis.document?.createElement("div") ?? {}) as HTMLElement,
+    isActive: () => true,
+    onVisibility: () => () => {},
     notify() {},
     navigateCore() {},
     async api<T>(relative: string, options?: { method?: string; body?: unknown }): Promise<T> {

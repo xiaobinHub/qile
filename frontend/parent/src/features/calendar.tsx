@@ -39,6 +39,7 @@ import {
   ErrorText,
   useAsync,
 } from "./ui"
+import { useToast } from "@shared/components/ui/toast"
 import { runtime } from "../lib/runtime"
 import {
   addDays,
@@ -46,6 +47,7 @@ import {
   fmtDate,
   fmtFull,
   isDone,
+  isSyncedCourse,
   layoutWeekEvents,
   minutes,
   monthStart,
@@ -142,8 +144,18 @@ export function CalendarPage({
     if (wasUnconfirmed.current && !snapshot.unconfirmed) setCompletionError("")
     wasUnconfirmed.current = snapshot.unconfirmed
   }, [snapshot.unconfirmed])
+  const { toast } = useToast()
+  const rejectSyncedCourse = () =>
+    toast({
+      title: "美森课程由约课插件同步，不能手动修改、删除或完成。",
+      variant: "destructive",
+    })
   const toggleCompletion = (o: Occurrence) => {
     if (child.archived) return
+    if (isSyncedCourse(o)) {
+      rejectSyncedCourse()
+      return
+    }
     setCompletionError("")
     if (isDone(data, o)) {
       setUndoOccurrence(o)
@@ -533,7 +545,9 @@ export function TaskEditor({
     [notesOpen, setNotesOpen] = useState(() => !!options.occurrence?.note)
   const action = useAsync(),
     o = options.occurrence
-  const readOnly = child.archived || !!(o && isDone(data, o))
+  const synced = !!(o && isSyncedCourse(o))
+  const readOnly = child.archived || synced || !!(o && isDone(data, o))
+  const locked = action.busy || readOnly || deleting
   const durationMinutes = minutes(task.endTime) - minutes(task.startTime)
   const durationError =
     durationMinutes <= 0
@@ -558,6 +572,7 @@ export function TaskEditor({
   }
   const rule = task.recurrence
   async function save() {
+    if (synced) throw Error("美森课程由约课插件同步，不能手动修改、删除或完成。")
     if (readOnly)
       throw Error(child.archived ? "当前孩子仅可查看。" : "已完成任务已冻结，请先撤销完成。")
     if (!o && !data.categories.some((c) => c.id === task.categoryId && c.active))
@@ -594,14 +609,14 @@ export function TaskEditor({
     update({ recurrence: { ...rule!, ...next } })
   return (
     <Modal
-      title={o ? "编辑任务" : "新建任务"}
+      title={synced ? "查看课程" : o ? "编辑任务" : "新建任务"}
       id="taskDialog"
       size="complex"
       keyboardScroll
       onClose={onClose}
       footer={
         <>
-          {o && (
+          {o && !synced && (
             <Button
               id="deleteTaskBtn"
               type="button"
@@ -624,11 +639,13 @@ export function TaskEditor({
             disabled={action.busy || deleting}
             onClick={onClose}
           >
-            取消
+            {synced ? "关闭" : "取消"}
           </Button>
-          <Button type="submit" form="taskForm" disabled={action.busy || readOnly || deleting}>
-            {action.busy ? "正在保存…" : "保存任务"}
-          </Button>
+          {!synced && (
+            <Button type="submit" form="taskForm" disabled={action.busy || readOnly || deleting}>
+              {action.busy ? "正在保存…" : "保存任务"}
+            </Button>
+          )}
         </>
       }
     >
@@ -642,12 +659,14 @@ export function TaskEditor({
       >
         {readOnly && (
           <p className="notice" role="status">
-            {child.archived
-              ? "孩子已归档，当前仅可查看任务。"
-              : "已完成任务已冻结，请先点击日历中的圆圈取消完成，再进行修改。"}
+            {synced
+              ? "这是美森同步课程，时间和完成状态跟随美森，不能手动修改、删除或完成。"
+              : child.archived
+                ? "孩子已归档，当前仅可查看任务。"
+                : "已完成任务已冻结，请先点击日历中的圆圈取消完成，再进行修改。"}
           </p>
         )}
-        <fieldset disabled={action.busy || readOnly || deleting} className="task-editor-fields">
+        <fieldset disabled={locked} className="task-editor-fields">
           <div className="task-identity-grid">
             <Field label="任务名称" id="taskTitle">
               {o ? (
@@ -684,6 +703,7 @@ export function TaskEditor({
                 id="taskCategory"
                 label="任务类型"
                 openDownwards
+                disabled={locked}
                 value={task.categoryId}
                 onChange={(categoryId) => update({ categoryId })}
                 options={data.categories
@@ -699,6 +719,7 @@ export function TaskEditor({
               <NumberPicker
                 id="taskPoints"
                 label="奖励积分"
+                disabled={locked}
                 min={0}
                 max={100}
                 step={5}
@@ -713,6 +734,7 @@ export function TaskEditor({
             <Field label="日期" id="taskDate">
               <DatePicker
                 id="taskDate"
+                disabled={locked}
                 value={task.startDate}
                 onChange={(startDate) => update({ startDate })}
               />
@@ -720,6 +742,7 @@ export function TaskEditor({
             <Field label="开始时间" id="taskStart">
               <TimePicker
                 id="taskStart"
+                disabled={locked}
                 value={task.startTime}
                 onChange={(startTime) => update({ startTime })}
               />
@@ -727,6 +750,7 @@ export function TaskEditor({
             <Field label="持续时长" id="taskDuration" error={durationError || undefined}>
               <TimePicker
                 id="taskDuration"
+                disabled={locked}
                 kind="duration"
                 maxDurationMinutes={1439 - minutes(task.startTime)}
                 value={timeAt(Math.max(0, durationMinutes))}
@@ -773,6 +797,7 @@ export function TaskEditor({
                 </div>
                 <Switch
                   id="taskRepeat"
+                  disabled={locked}
                   checked={!!rule}
                   onCheckedChange={(checked) =>
                     update({
@@ -796,6 +821,7 @@ export function TaskEditor({
                       <Choice
                         id="repeatFreq"
                         label="重复频率"
+                        disabled={locked}
                         value={rule.freq}
                         onChange={(freq) => setRule({ freq: freq as typeof rule.freq })}
                         options={[
@@ -809,6 +835,7 @@ export function TaskEditor({
                       <NumberPicker
                         id="repeatInterval"
                         label="间隔"
+                        disabled={locked}
                         min={1}
                         max={15}
                         loop
@@ -826,6 +853,7 @@ export function TaskEditor({
                           <Checkbox
                             name="repeatWeekday"
                             value={index}
+                            disabled={locked}
                             checked={rule.weekdays?.includes(index)}
                             onCheckedChange={(checked) =>
                               setRule({
@@ -845,6 +873,7 @@ export function TaskEditor({
                       <Field label="每月日期" id="repeatMonthDay">
                         <MonthDayPicker
                           id="repeatMonthDay"
+                          disabled={locked}
                           value={rule.monthDay || Number(task.startDate.slice(8))}
                           onChange={(monthDay) => setRule({ monthDay })}
                         />
@@ -856,6 +885,7 @@ export function TaskEditor({
                       <Choice
                         id="repeatEndType"
                         label="结束方式"
+                        disabled={locked}
                         value={rule.endType}
                         onChange={(endType) =>
                           setRule({
@@ -875,6 +905,7 @@ export function TaskEditor({
                       <Field label="截止日期" id="repeatUntil">
                         <DatePicker
                           id="repeatUntil"
+                          disabled={locked}
                           value={rule.until || addDays(task.startDate, 30)}
                           onChange={(until) => setRule({ until })}
                         />
@@ -893,6 +924,7 @@ export function TaskEditor({
                         <NumberPicker
                           id="repeatCount"
                           label="重复次数"
+                          disabled={locked}
                           min={1}
                           max={60}
                           loop
@@ -918,6 +950,7 @@ export function TaskEditor({
               <Choice
                 id="taskScope"
                 label="修改范围"
+                disabled={locked}
                 value={scope}
                 onChange={setScope}
                 options={[
@@ -1349,12 +1382,22 @@ function MonthCalendar({
                       } as React.CSSProperties
                     }
                     onPointerDownCapture={
-                      quickEdit.active && isDone(data, o) && !quickEdit.frozen
-                        ? quickEdit.blockedDrag
+                      quickEdit.active &&
+                      !quickEdit.frozen &&
+                      (isDone(data, o) || isSyncedCourse(o))
+                        ? (event) =>
+                            quickEdit.blockedDrag(
+                              event,
+                              isSyncedCourse(o)
+                                ? "美森课程由约课插件同步，不能拖动或删除。"
+                                : undefined,
+                            )
                         : undefined
                     }
                     onClickCapture={
-                      quickEdit.active && isDone(data, o) ? quickEdit.blockedClick : undefined
+                      quickEdit.active && (isDone(data, o) || isSyncedCourse(o))
+                        ? quickEdit.blockedClick
+                        : undefined
                     }
                   >
                     {quickEdit.active ? (
