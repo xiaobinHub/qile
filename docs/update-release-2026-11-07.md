@@ -2,6 +2,8 @@
 
 北京时间 **2026-11-07 06:59:33** 完成切换，随后完成公网和数据核验。
 
+**当前生产已于 07:29:10 更新至主应用 `2731e82`、美森 `1.0.35`／Python SDK `1.1.1`**，修正首次真实使用时出现的 Linux worker 并发读取失败。当前标签为 `prod-20261107-2731e82`；详细热修复和新备份记录见本文末节。下面保留 06:59 首发记录。
+
 ## 固定来源与范围
 
 - `codex/meisen-course-booking-plugin` 的 9 个提交先合并至 `main`；功能分支保留。
@@ -81,3 +83,25 @@ runuser -u lele -- /opt/lele-growth/releases/20261107-62ef95c/.venv/bin/python \
 回退脚本为服务器 `/root/lele-growth-deployment/tencent-mison-20261107/rollback.py`，默认只预览。添加 `--apply --confirm prod-20261107-62ef95c` 才执行：停服、通过正常目录服务下架美森、原子切换至兼容版本、重启及检查两端健康。保留安装记录、凭据、密钥、任务、积分、OSS 和当前数据库增量，**不恢复旧备份覆盖上线后的数据**。本次只运行该脚本预览，未执行正式回退。
 
 服务器私有操作和发布记录：`/root/lele-growth-deployment/tencent-mison-20261107/`。本机不含凭据的发布、HTTP 和回退证据：`output/operations/tencent-release-20261107/`。正式数据库备份、配置归档、密钥和原始业务快照没有下载至本机。
+
+## 07:29 Linux worker 并发读取热修复
+
+用户报告进入美森后出现“应用进程暂时无法处理请求”。生产日志显示首次登录后并发调用返回 503，之后短暂恢复，加载教师和头像时又出现失败；主服务未异常重启，systemd 没有内存耗尽记录。
+
+根因为 Python SDK 对 Linux worker 的虚拟地址空间设置了 192 MiB 上限，不能承载正常 Python 多线程及缓存的地址空间需求。该指标与实际驻留内存不同：排障时 worker 实际占用约 34 MiB，地址空间峰值已接近限制；并发调用丢失 worker 并进入重启退避。先前的单次健康探针未覆盖此场景。
+
+对同一个正式 worker 临时调高地址空间限制后，相同四路宿主设置只读调用全部成功；随后发布持久修复。新建进程已确认自带 `RLIMIT_AS=536870912`，不依赖临时 `prlimit`。观察到虚拟地址空间约 335 MiB、实际内存约 39 MiB。原有并发上限、CPU 限额和 systemd 的 512 MiB 总实际内存预算保持不变。
+
+- 来源提交：`2731e8202e58b7cccb3ee36b4b02a8195fecc913`，已提交并推送 main。
+- 固定生产标签：`prod-20261107-2731e82`。
+- 主应用路径：`/opt/lele-growth/releases/20261107-2731e82`。
+- 主应用包：`lele-growth-20261106-232441-2731e82.tar.gz`，SHA-256 `29973a500cd3b3a3e5ce2a23c5f62754692f20411332e142e3afdca38aaceb78`。
+- 美森包：`mison-booking-1.0.35.tar.gz`，SHA-256 `ec1f8c81a9e03f79223e7682415b6d644bf6c63053cdc71ed4e4f2bfa2009f25`，包含 SDK 1.1.1。宿主同时兼容旧 SDK 1.0.0、1.1.0。
+- 本机 424 项非 Demo 后台回归通过；腾讯云相同 systemd 隔离和 512 MiB 内存预算下 9 项真实 worker/包验证测试通过，新增 64 MiB 合成缓存及四路同时调用场景。测试不连接正式库、不访问美森。
+- 07:28:50–07:29:10 完成最终备份和切换；无数据库迁移，宿主依赖版本不变，未发布 Demo。
+- 以正常私有 RPC 和现有连接只读验证：四路 `course-sync` GET、`bootstrap`、`teacher-filters`、`teachers` 均为 HTTP 200 / `ok=true`，实际教师列表返回 20 条。未重新登录、预约、取消或变更同步设置，未输出账号或 token。
+- 三个服务均 active，`NRestarts=0`。安装资格、配置、绑定、加密凭据及私有记录在更新前后逐字一致，业务数据及修订号未变，现有密钥和生产配置未变。
+
+新增原生备份为 `/var/lib/lele-growth/release-backups/20261107-mison-release/worker-hotfix-before.dump`，10,110,653 字节，包含当时 42 张表、1417 行及现有加密登录记录。SHA-256 为 `a4e93e3f077ab935d23312e68805d81d12ee397f514c4b083d7cd988df7ae4db`。同目录保存前后完整核验快照及 `plugin-vault-before-worker-hotfix.txt` 私有密钥备份；这些原始文件未下载至本机。
+
+本次热修复的操作目录为 `/root/lele-growth-deployment/tencent-worker-hotfix-20261107/`，本机不含秘密的证据为 `output/operations/tencent-worker-hotfix-20261107/`。该目录的 `rollback.py` 默认只预览，需 `--apply --confirm prod-20261107-2731e82` 才回退宿主至 `20261107-62ef95c`；保留已安装的美森 1.0.35 / SDK 1.1.1 和当前数据库，不退回包含 192 MiB 限额的旧插件。本次未实际执行回退。
