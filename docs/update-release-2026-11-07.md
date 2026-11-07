@@ -105,3 +105,27 @@ runuser -u lele -- /opt/lele-growth/releases/20261107-62ef95c/.venv/bin/python \
 新增原生备份为 `/var/lib/lele-growth/release-backups/20261107-mison-release/worker-hotfix-before.dump`，10,110,653 字节，包含当时 42 张表、1417 行及现有加密登录记录。SHA-256 为 `a4e93e3f077ab935d23312e68805d81d12ee397f514c4b083d7cd988df7ae4db`。同目录保存前后完整核验快照及 `plugin-vault-before-worker-hotfix.txt` 私有密钥备份；这些原始文件未下载至本机。
 
 本次热修复的操作目录为 `/root/lele-growth-deployment/tencent-worker-hotfix-20261107/`，本机不含秘密的证据为 `output/operations/tencent-worker-hotfix-20261107/`。该目录的 `rollback.py` 默认只预览，需 `--apply --confirm prod-20261107-2731e82` 才回退宿主至 `20261107-62ef95c`；保留已安装的美森 1.0.35 / SDK 1.1.1 和当前数据库，不退回包含 192 MiB 限额的旧插件。本次未实际执行回退。
+
+## 15:08 CDN 直链与单 worker CPU 限额
+
+北京时间 **2026-11-07 15:08:15** 完成切换。`codex/plugin-performance` 已快进合并到 `main` 并推送，部署源就是该提交。
+
+- 部署提交：`8698661f936a024f7618da3dd9d484e959adff18`。正式标签 `prod-20261107-8698661` 只指向该提交；之后的发布记录不移动标签。
+- 主应用：`/opt/lele-growth/releases/20261107-8698661`。上一个可回退宿主为 `/opt/lele-growth/releases/20261107-2731e82`。
+- 美森活动版本 `1.0.36`，SDK `1.1.2`。磁盘仍保留 `1.0.34` 和 `1.0.35`，没有覆盖 `1.0.35`。
+- 无数据库迁移，依赖版本不变，未部署 Demo，未恢复任何旧备份。
+
+| 制品 | SHA-256 |
+| --- | --- |
+| `lele-growth-20261107-063647-8698661.tar.gz` | `79071028350bef4980d8c1da5dd3ab9898b29b9e777625dc06e02a9c8ab8dc1c` |
+| `mison-booking-1.0.36.tar.gz` | `6cd63c8e9c6a90cf509b24cdefb6fbb327afc3b742f3e27a7e66485e8569a293` |
+
+15:02 的第一次激活已准备好新宿主并装上美森 1.0.36，但检查脚本把 systemd 实际返回的 `Delegate=yes` 误判为委托未生效。自动回退已把宿主恢复到 `20261107-2731e82`、活动插件恢复到 `1.0.35`，三个服务恢复健康；没有恢复数据库。修正检查后，15:07:56–15:08:15 重新停服、取得新的一致性备份并完成切换。
+
+最终原生备份为 `/var/lib/lele-growth/release-backups/20261107-mison-release/cdncpu2-before.dump`，10,382,574 字节，SHA-256 为 `125d5b843da2f026c4755fc3d7e993be19766f0498f8671f5df055ecef93e00b`。当时 42 张表、1484 行、3 个儿童；业务及修订号 SHA-256 在切换前后均为 `0af5592cfbf8744a2e11c9d165eebdb66b0b10cb1a9dadb4b8fd5a281644f0ad`。安装、绑定、加密凭据、私有记录和密钥配置未变。
+
+运行核验：三个服务均为 active，`NRestarts=0`，进程目录均为本次 release。CPU 委托仅包含 cpu 控制器，`DelegateSubgroup=supervisor`，supervisor 权重 400；美森 worker 的 `cpu.max` 为 `100000 100000`，进程 CPU 时间限制为 unlimited。服务总 `CPUQuota=150%` 和 `MemoryMax=512M` 保持不变。
+
+家长端和管理端在自然解析及固定腾讯云地址下的 HTTPS 健康检查均通过，两个域名的 HTTP 均返回 301。未使用正式账号做登录、预约或积分写入。
+
+回退脚本为服务器 `/root/lele-growth-deployment/tencent-cdn-cpu-20261107/rollback.py`，默认只预览。执行需要 `--apply --confirm prod-20261107-8698661`：先把美森退回已保留的 `1.0.35`，再恢复原服务单元和宿主 `20261107-2731e82`。保留当前数据库增量，不用旧备份覆盖上线后的数据。本次只运行了预览。本机不含凭据的脚本和摘要位于 `output/operations/tencent-cdn-cpu-20261107/`。
