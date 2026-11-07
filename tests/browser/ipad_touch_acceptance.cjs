@@ -286,12 +286,29 @@ async function exerciseMisonTouch({ page, browserContext, origin, entryUrl, out,
     await pdf.waitFor({ state: "hidden" })
     assert.equal(await bookings.isVisible(), true)
     await scrolls(list, "bookings after closing PDF")
-    // Invalid PDF responses exercise retry without changing the resource ticket.
-    await page.route(
-      "**/media/fixture-pdf",
-      (route) => route.fulfill({ contentType: "application/pdf", body: "invalid PDF" }),
-      { times: 1 },
-    )
+    // The first direct CDN response is invalid; retry loads the fixture again.
+    let invalidPdf = true
+    await page.route("https://file.mison.cn/fixtures/touch-courseware.pdf", async (route) => {
+      const request = route.request()
+      if (request.method() === "OPTIONS") {
+        return route.fulfill({
+          status: 204,
+          headers: {
+            "access-control-allow-origin": "*",
+            "access-control-allow-methods": "GET, HEAD, OPTIONS",
+            "access-control-allow-headers": "Range",
+          },
+        })
+      }
+      if (!invalidPdf) return route.fallback()
+      invalidPdf = false
+      return route.fulfill({
+        status: 200,
+        contentType: "application/pdf",
+        headers: { "access-control-allow-origin": "*" },
+        body: "invalid PDF",
+      })
+    })
     await list.evaluate((element) => (element.scrollTop = 0))
     await bookings.getByRole("button", { name: "课程资料", exact: true }).first().click()
     await pdf.getByRole("alert").waitFor()

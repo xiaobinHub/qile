@@ -2,9 +2,11 @@
 
 > 当前交付状态（2026-11-06，源码候选 1.0.30）：直接登录、唯一有效合约自动关联、教师/预约只读查询、收藏、持久草稿、单/多连续课时预约、两步取消及学生 PDF 已接入。真实预约/取消闭环未完成；批量顺延、预约后更换课件及 PC 原生学习协议未交付。当前证据与限制统一见 [上游核验记录](upstream-verification.md)，部署要求为插件结构 v3、前端协议 1.1，见 [部署说明](../deployment.md)。
 
+> 2026-11-07：教师视频、学员课件 PDF 和已约课程学生 PDF 返回美森 HTTPS 直链。PDF 只允许 `https://file.mison.cn` 且路径以 `.pdf` 结尾；视频允许 `file.mison.cn` 与 `mp.mison.cn` 且路径以 `.mp4` 结尾。浏览器直接加载并使用 HTTP 缓存。宿主已删除 `resource.issue` 和 `/media/{ticket}`，不为旧插件保留中转。
+
 > 2026-11-03：教师档案返回introVideo.inline与同源短期视频URL，新增resource.issue（purpose=teacher-intro-video）和媒体GET/HEAD流代理，支持Range。具体时段筛选改为多选，times仍采用已核验的CSV参数；日期使用共享DatePicker。视频流校验主应用身份、儿童/插件/绑定/凭据与发布版本，令牌不进入资源URL。
 
-> 2026-11-02 历史实现记录：插件改用直接登录，`POST connection/login` 请求为 `{operationId,bindingRevision,username,password}`，成功返回下文 `Connection`，GET bootstrap读取保存的状态，DELETE connection退出。使用 `session.begin/finish/fail/get/disconnect` 私有Bridge，Token仅服务端加密保存；本机Bridge在同一Unix socket按凭证隔离控制与Bridge身份。下文 authenticate→候选课程→PUT connection 为未交付的多合约选择规划，当前前端不调用。查询缓存采用worker内有界TTL缓存（5分钟、账号与查询隔离），worker重启后旧游标明确过期；头像通过插件JSON接口按需返回限域限大小的图片data URI，以避免修改宿主CSP。
+> 2026-11-02 历史实现记录：插件改用直接登录，`POST connection/login` 请求为 `{operationId,bindingRevision,username,password}`，成功返回下文 `Connection`，GET bootstrap读取保存的状态，DELETE connection退出。使用 `session.begin/finish/fail/get/disconnect` 私有Bridge，Token仅服务端加密保存；本机Bridge在同一Unix socket按凭证隔离控制与Bridge身份。下文 authenticate→候选课程→PUT connection 为未交付的多合约选择规划，当前前端不调用。查询缓存采用worker内有界TTL缓存（5分钟、账号与查询隔离），worker重启后旧游标明确过期。头像、PDF 和教师视频返回固定 CDN 直链，由浏览器缓存；业务接口仍不把美森 token 交给浏览器。
 
 
 设计基线：1.0 / 2026-11-02，配套[实施方案](../../superpowers/plans/2026-11-02-mison-booking-implementation.md)。本文保留原设计的候选课程、多合约绑定、批量顺延及修复等规划，不能据路由表推断这些能力已交付；当前实现以本文开头的交付状态、末尾适配器补充及上游核验记录为准。“上游已记录”不代表本次已在线复测，隔离样例通过不代表真实写入验收通过。
@@ -17,7 +19,7 @@
 /api/children/{childId}/plugins/mison-booking/runtime/
 ```
 
-前端一律使用宿主`PluginContext.api(relativePath, options)`，由宿主携带平台session、CSRF与活动releaseId。不要直接fetch美森，不把美森token交给浏览器。
+前端业务接口一律使用宿主`PluginContext.api(relativePath, options)`，由宿主携带平台session、CSRF与活动releaseId。不要直接调用美森业务 API，不把美森 token 交给浏览器。接口返回的头像、PDF 和视频地址由浏览器向允许的 CDN 直接加载。
 
 GET通过query传值，数组采用逗号分隔；现有accounts_app会把query转为body传给worker，worker的path不含query。参数解析必须显式转换并拒绝未知字段。写操作仅POST/PUT/DELETE，当前SDK不支持PATCH。
 
@@ -100,7 +102,7 @@ type Bootstrap = {
 type Label = { id: ID; name: string };
 type Teacher = {
   id: ID; name: string; intro: string;
-  avatarUrl: string | null; // 同源资源票据URL
+  avatarUrl: string | null; // 美森公开图片地址，仅 mp.mison.cn 或 file.mison.cn
   labels: Label[]; favorite: boolean;
   recommended: boolean; smartMatched: boolean;
   nextAvailable: null | { date: DateOnly; time: LocalTime };
@@ -257,7 +259,7 @@ PUT/DELETE connection必须使用实施方案的binding.commit/disconnect一次�
 | GET `courseware` | `categoryId,draftId,slotStart,cursor?` | `{items:Courseware[],nextCursor,total}`；只接叶子分类 |
 | GET `courseware/unlearned` | `draftId,slotStart,cursor?` | 同上；来源为取消/作废关联的待补学列表 |
 | GET `courseware/quota` | 无 | Quota |
-| POST `courseware/{coursewareId}/preview` | `{operationId,bindingRevision,draftId,expectedRevision,slotStart}` | Operation；从当前草稿的 `student_file_url` 签发同源学员PDF资源，不调用扣额接口，不受Quota限制 |
+| POST `courseware/{coursewareId}/preview` | `{operationId,bindingRevision,draftId,expectedRevision,slotStart}` | Operation；从当前草稿的 `student_file_url` 返回学员 PDF 直链，不调用扣额接口，不受Quota限制 |
 | PUT `drafts/{draftId}/lessons/{slotStart}/courseware` | `{operationId,bindingRevision,expectedRevision,coursewareId,source:'category'\|'unlearned'}` | Operation(result.draft)；验证可选/去重，只修改草稿，不消耗额度 |
 
 草稿的推荐课件和manual selectionReceipt只在服务端签发。selectionReceipt绑定draftId、revision、slotStart、coursewareId、bindingRevision，不可跨草稿复用。它记录已经执行的选课流程，不能允许客户端自报“已扣额度”。
@@ -303,11 +305,11 @@ PUT/DELETE connection必须使用实施方案的binding.commit/disconnect一次�
 |---|---|---|
 | GET `bookings/{bookingKey}/resources` | 无 | `{items:Resource[]}`；只读元数据，无观看登记或额度消耗 |
 | POST `bookings/{bookingKey}/actions/{kind}` | `{operationId,bindingRevision,snapshotVersion}`，kind为prestudy/homework/classroom/replay | Operation(result.resource)；有上游副作用时纳入日志 |
-| POST `resources/{resourceId}/ticket` | `{bindingRevision}` | Resource；仅为已授权资源刷新同源票据，不重扣额 |
+| POST `resources/{resourceId}/ticket` | — | 已删除。不再刷新同源票据 |
 
 resourceId是服务端解析后的资源引用，不接受用户直接提交URL。对于已完成的课件预览、资料下载、教师视频，通过该引用签发票据；打开资料不能自动调用具有扣额语义的预览接口。
 
-公共CDN代理允许范围由活动清单resourceOrigins固定，初始为`https://file.mison.cn`；资源引用绑定儿童/插件/bindingRevision和授权来源。票据只到代理，不构成直接公开URL权限；media请求仍检查宿主会话。官方外部学习URL按G05确认的精确origin和路径规则单独审核，不借公共CDN清单绕过课堂身份要求。
+PDF 与视频不再经过宿主代理。插件只接受固定 HTTPS 主机和扩展名，前端再次校验后才写入播放器或 PDF.js。`mp.mison.cn` 不用于 PDF。官方外部学习 URL 仍按 G05 的精确规则单独审核，不能借用这两个 CDN 主机绕过课堂身份要求。
 
 `action=external`只返回经证实的官方HTTPS地址，不带插件持久JWT；若官方协议必须用短时一次性票据，只返回该票据和准确TTL，并验证不会泄漏长期token。无可用PC协议则`action=instructions`，显示准确的App页面路径。`action=unavailable`给出具体原因，不能用一段成功Toast替代入口。
 
@@ -317,7 +319,7 @@ resourceId是服务端解析后的资源引用，不接受用户直接提交URL�
 主机B：`https://api.mison.cn/v2/`，JSON成功条件`status == 0`。
 除登录外使用`Authorization: Bearer <JWT>`。HTTP200不等于业务成功；HTML不能交给前端执行或作为成功数据。
 
-worker HTTP client仅调用以上两个固定origin与适配器登记的路径，TLS验证开启；业务API默认拒绝重定向，不能将Bearer跟随302发到其他域名。上游JSON响应读取上限2MiB，超量返回明确结构/容量错误；流式读每一段均受同一35秒绝对deadline约束，重试、阶段切换不能重置截止时间。公开DTO仍受900KiB单次响应预算约束，资源字节走独立media代理。
+worker HTTP client仅调用以上两个固定origin与适配器登记的路径，TLS验证开启；业务API默认拒绝重定向，不能将Bearer跟随302发到其他域名。上游JSON响应读取上限2MiB，超量返回明确结构/容量错误；流式读每一段均受同一35秒绝对deadline约束，重试、阶段切换不能重置截止时间。公开DTO仍受900KiB单次响应预算约束。PDF 和视频字节不进入插件响应。
 
 下表中的标识值必须来自当前绑定；原报告样本ID不是配置默认值。
 
@@ -347,7 +349,7 @@ worker HTTP client仅调用以上两个固定origin与适配器登记的路径�
 | 取消步骤2 | A `onevoneSaveCancelLesson` POST | cid,status=1,userid,adjust_lessons=0/1 | 步骤1成功后才调用；顺延副作用单独核验 |
 | 批量顺延 | G04定位 | G04核验 | 报告只记录UI及资格，没有完整端点/排序算法 |
 | 学生PDF资料 | B `course/courseClassResource` → `download/pdf` | lessonid,type,cid,producttype → fid | 已接通学生PDF；上课/回放/预习/作业仍返回App操作说明 |
-| 教师视频 | GET data.intro_video | 不带Bearer | 使用返回URL，禁止猜tno+姓名拼文件名 |
+| 教师视频 | GET data.intro_video | 不带Bearer | 返回允许的 MP4 直链，禁止猜tno+姓名拼文件名 |
 
 **字段细节：**
 
@@ -492,7 +494,7 @@ book已明确成功但pendingRecordSync=true时，同样保留时段占用屏障
 - 学员PDF缺失/来源不支持、同操作重复点击、零额度下选择/预览/预约、历史扣额回执只读恢复。
 - 预约成功无cid、响应丢失、旧预约同时间匹配歧义、部分课时成功。
 - 两阶段取消第二步失败、第二步已顺延后断线、再次repair不重复顺延。
-- GET媒体票据无自定义版本头仍验证权限；Range206/416、重定向、私网、恶意mime、票据过期。
+- 不再提供媒体票据。直链必须是允许的 HTTPS 主机和扩展名；不受支持的地址拒绝，不回退到宿主代理。
 - 平台核心登录未被美森鉴权失败影响；浏览器存储/公开DTO/日志不含凭据。
 
 **完成定义：** 接口契约、前端真实请求、独立worker、平台Bridge与数据库状态在隔离集成中贯通；G01–G07有可审查证据。未支持的PC学习动作只能以经验证的官方入口回退交付，不能以“后端以后再接”结束任务。

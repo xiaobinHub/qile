@@ -1,4 +1,4 @@
-import { Component, useLayoutEffect, useRef, useState, type ReactNode } from "react"
+import { Component, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react"
 import { Button } from "@shared/components/ui/button"
 import { Skeleton } from "@shared/components/ui/skeleton"
 import { ApiError, runtime } from "../lib/runtime"
@@ -54,7 +54,20 @@ export function PluginPage({
   const [requiresReload, setRequiresReload] = useState(false)
   const [loading, setLoading] = useState(false)
   const [retry, setRetry] = useState(0)
+  const [entryCheck, setEntryCheck] = useState(0)
+  useEffect(() => {
+    if (!active) return
+    let cancel = false
+    void pluginStore.refresh().finally(() => {
+      if (!cancel) setEntryCheck((value) => value + 1)
+    })
+    return () => {
+      cancel = true
+    }
+  }, [active, child.id, epoch, pluginId])
+  const awaitingEntry = active && entryCheck === 0
   const effective =
+    entryCheck > 0 &&
     state.confirmed &&
     !!plugin?.installed &&
     !!plugin.effectiveEnabled &&
@@ -148,24 +161,28 @@ export function PluginPage({
       {!effective ? (
         <div className="plugin-placeholder" role="status">
           <h2>
-            {!state.confirmed && !state.loading
-              ? "应用状态未确认"
-              : state.loading
-                ? "正在读取应用状态…"
+            {awaitingEntry || state.loading
+              ? "正在读取应用状态…"
+              : !state.confirmed
+                ? "应用状态未确认"
                 : plugin?.operationState === "updating"
                   ? "应用更新中"
                   : "应用暂不可用"}
           </h2>
           <p>
-            {!state.confirmed
-              ? state.error || "请先刷新确认应用状态，再使用应用。"
-              : plugin
-                ? pluginReason(plugin) || "应用已停用或当前儿童不可使用，请在应用管理中查看。"
-                : state.error || "请在应用管理中查看最新状态。"}
+            {awaitingEntry
+              ? "正在确认当前应用是否可继续使用。"
+              : !state.confirmed
+                ? state.error || "请先刷新确认应用状态，再使用应用。"
+                : plugin
+                  ? pluginReason(plugin) || "应用已停用或当前儿童不可使用，请在应用管理中查看。"
+                  : state.error || "请在应用管理中查看最新状态。"}
           </p>
-          <Button variant="outline" onClick={() => void pluginStore.refresh()}>
-            刷新状态
-          </Button>
+          {!awaitingEntry && (
+            <Button variant="outline" onClick={() => void pluginStore.refresh()}>
+              刷新状态
+            </Button>
+          )}
         </div>
       ) : failure ? (
         <div className="plugin-placeholder" role="alert">

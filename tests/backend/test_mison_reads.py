@@ -1,5 +1,4 @@
 """Read adapters with synthetic upstream records. No external service or business writes."""
-import base64
 from copy import deepcopy
 from datetime import datetime, timedelta
 import io
@@ -7,11 +6,11 @@ import json
 from pathlib import Path
 import sys
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path[:0] = [str(ROOT/'plugins/mison-booking/backend'), str(ROOT/'packages/plugin-sdk-python/src')]
-from mison_booking import read_api as api, read_store, images, auth, handle_request
+from mison_booking import read_api as api, read_store, images, media, auth, handle_request
 from mison_booking.upstream import Client
 
 class FakeClient:
@@ -241,19 +240,47 @@ class ReadAdapterTests(unittest.TestCase):
         self.assertEqual(cache.get('b'), {'value': 2})
         with self.assertRaises(auth.AuthError): cache.put('oversize', {'value': 'x' * 101})
 
-    def test_teacher_profile_issues_inline_video_without_exposing_source_url(self):
+    def test_teacher_profile_returns_direct_video_url(self):
         original = self.client.call
         def with_video(endpoint, body):
             value = original(endpoint, body)
             if endpoint == 'onevoneGetTeacherInfo': value['data']['intro_video'] = 'https://file.mison.cn/teacher.mp4'
             return value
         self.client.call = with_video
-        with patch.object(auth, 'bridge', return_value={'url': '/api/children/a/plugins/p/media/ticket', 'mimeType':'video/mp4'}) as issue:
+        with patch.object(auth, 'bridge') as issue:
             profile = api.profile(self.client, '101')
         self.assertEqual(profile['introVideo']['action'], 'inline')
-        self.assertEqual(profile['introVideo']['url'], '/api/children/a/plugins/p/media/ticket')
-        self.assertNotIn('file.mison.cn/teacher.mp4', json.dumps(profile))
-        self.assertEqual(issue.call_args.args[1], 'resource.issue')
+        self.assertEqual(profile['introVideo']['url'], 'https://file.mison.cn/teacher.mp4')
+        self.assertEqual(profile['introVideo']['mimeType'], 'video/mp4')
+        issue.assert_not_called()
+
+    def test_public_media_urls_stay_on_allowlisted_files(self):
+        encoded = media.public_media_url('https://file.mison.cn/courseware/91/PU0 U4 At home L2 语音练习1.pdf', 'pdf')
+        self.assertEqual(encoded, 'https://file.mison.cn/courseware/91/PU0%20U4%20At%20home%20L2%20%E8%AF%AD%E9%9F%B3%E7%BB%83%E4%B9%A01.pdf')
+        self.assertEqual(media.public_media_url('https://file.mison.cn/a%20b.pdf', 'pdf'), 'https://file.mison.cn/a%20b.pdf')
+        self.assertEqual(media.public_media_url('https://mp.mison.cn/teacher.mp4', 'video'), 'https://mp.mison.cn/teacher.mp4')
+        self.assertEqual(media.public_media_url('https://file.mison.cn:443/teacher.mp4', 'video'), 'https://file.mison.cn/teacher.mp4')
+        self.assertIsNone(media.public_media_url('https://file.mison.cn/teacher.mp4#fragment', 'video'))
+        for url, kind in (
+            ('http://file.mison.cn/a.pdf', 'pdf'),
+            ('https://mp.mison.cn/a.pdf', 'pdf'),
+            ('https://file.mison.cn/a.pptx', 'pdf'),
+            ('https://file.mison.cn.evil.test/a.mp4', 'video'),
+            ('https://u:p@file.mison.cn/a.mp4', 'video'),
+            ('https://file.mison.cn:444/a.mp4', 'video'),
+            ('https://mp.mison.cn/a.mp4\n', 'video'),
+        ):
+            with self.subTest(url=url, kind=kind):
+                self.assertIsNone(media.public_media_url(url, kind))
+        original = self.client.call
+        def bad_video(endpoint, body):
+            value = original(endpoint, body)
+            if endpoint == 'onevoneGetTeacherInfo': value['data']['intro_video'] = 'https://example.com/teacher.mp4'
+            return value
+        self.client.call = bad_video
+        with self.assertRaises(auth.AuthError) as failure:
+            api.profile(self.client, '101')
+        self.assertEqual(failure.exception.code, 'VALIDATION_ERROR')
 
     def test_invalid_filters_and_repeated_source_pages_fail_clearly(self):
         for query in ({'date': 'yesterday'}, {'times': '99:99'}, {'labelIds': '99999'}, {'favoritesOnly': True}):
@@ -262,39 +289,16 @@ class ReadAdapterTests(unittest.TestCase):
         with self.assertRaises(auth.AuthError) as error: api.teacher_query(self.client, {})
         self.assertEqual(error.exception.code, 'UPSTREAM_SCHEMA_CHANGED')
 
-    def test_images_accept_only_fixed_origins_and_authorized_references(self):
-        for url in ('https://127.0.0.1/a.jpg', 'https://mp.mison.cn.evil.test/a.jpg', 'https://u:p@mp.mison.cn/a.jpg', 'file:///a'):
-            self.assertIsNone(images.reference(self.client, url))
-        ref = images.reference(self.client, 'https://mp.mison.cn/a.jpg')
-        other = FakeClient(); other.scope = ('child-b', 1, 'credential-a')
-        with self.assertRaises(auth.AuthError): images.load(other, ref.split(':')[1])
-        connection = Mock()
-        response = Mock(status=200)
-        response.read.return_value = b'\xff\xd8\xfffixture'
-        response.getheader.return_value = 'image/jpeg'
-        connection.getresponse.return_value = response
-        with patch.object(images, 'PinnedConnection', return_value=connection): result = images.load(self.client, ref.split(':')[1])
-        self.assertTrue(result['dataUrl'].startswith('data:image/jpeg;base64,'))
-        self.assertNotIn('Authorization', connection.request.call_args.kwargs.get('headers', {}))
-        connection.close.assert_called_once()
-
-    def test_large_avatars_are_chunked_and_do_not_exhaust_reference_cache(self):
-        raw = b'\x89PNG\r\n\x1a\n' + b'x' * 1523475
-        ref = images.reference(self.client, 'https://mp.mison.cn/large-avatar.png')
-        key = ref.split(':')[1]
-        response = Mock(status=200)
-        response.read.return_value = raw
-        response.getheader.return_value = 'image/png'
-        connection = Mock(); connection.getresponse.return_value = response
-        with patch.object(images, 'PinnedConnection', return_value=connection):
-            first = images.load(self.client, key)
-            parts = [first] + [images.load(self.client, key, str(i)) for i in range(1, first['totalChunks'])]
-        self.assertGreater(len(parts), 1)
-        self.assertTrue(all(len(json.dumps(p)) < 1024 * 1024 for p in parts))
-        self.assertEqual(base64.b64decode(''.join(p['chunk'] for p in parts)), raw)
-        self.assertIsNotNone(read_store.memo.get(('image-ref', *self.client.scope, key)))
-        connection.request.assert_called_once()
-        with self.assertRaises(auth.AuthError): images.load(self.client, key, '99')
+    def test_avatars_are_direct_allowlisted_cdn_urls(self):
+        for url in ('https://127.0.0.1/a.jpg', 'https://mp.mison.cn.evil.test/a.jpg', 'https://u:p@mp.mison.cn/a.jpg', 'file:///a', 'https://mp.mison.cn:444/a.jpg', 'mison-image:' + 'ab' * 32):
+            self.assertIsNone(images.public_url(url))
+        self.assertEqual(images.public_url('https://mp.mison.cn/a.jpg'), 'https://mp.mison.cn/a.jpg')
+        self.assertEqual(images.public_url('http://file.mison.cn/a.jpg?x=1#fragment'), 'https://file.mison.cn/a.jpg?x=1')
+        self.assertEqual(images.public_url('https://mp.mison.cn:443/a.jpg'), 'https://mp.mison.cn/a.jpg')
+        self.assertEqual(api.teacher(self.client, self.client.teacher(101))['avatarUrl'], 'https://mp.mison.cn/public/fixture.jpg')
+        unsafe = self.client.teacher(101)
+        unsafe['headerUrl'] = 'https://evil.example/a.jpg'
+        self.assertIsNone(api.teacher(self.client, unsafe)['avatarUrl'])
 
 class UpstreamReadTests(unittest.TestCase):
     def test_fixed_allowlist_no_login_or_mutation(self):

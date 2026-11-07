@@ -28,10 +28,8 @@
     "plugin.private-state",
     "plugin.credentials",
     "plugin.external-operations",
-    "plugin.resources",
     "plugin.jobs.schedule"
   ],
-  "resourceOrigins": ["https://file.mison.cn", "https://mp.mison.cn"],
   "tasks": [
     {
       "id": "sync-courses",

@@ -71,9 +71,7 @@ def handle(context, path, method, body):
         if match[2] == 'resources' and method == 'GET': return success(operations.resources(client, match[1]))
         if match[3] and method == 'POST': return success(operations.learning(client, match[1], match[3], body))
     if method == 'GET':
-        from . import read_api, images
-        from .auth import AuthError
-        from .upstream import Client
+        from . import read_api
         if path == 'teacher-filters':
             return success(read_api.filters(client))
         if path == 'teachers':
@@ -85,10 +83,6 @@ def handle(context, path, method, body):
         match = re.fullmatch(r'teachers/([1-9][0-9]{0,17})(/schedule)?', path)
         if match:
             return success(read_api.schedule(client, match[1], body) if match[2] else read_api.profile(client, match[1]))
-        match = re.fullmatch(r'resources/images/([a-f0-9]{64})', path)
-        if match:
-            if set(body) - {'chunk'}: raise AuthError('VALIDATION_ERROR', '头像参数不正确。')
-            return success(images.load(client, match[1], body.get('chunk', '0')))
     raise PluginError("ACTION_UNAVAILABLE", "此能力尚未完成上游核验，暂不可用。", "none")
 
 

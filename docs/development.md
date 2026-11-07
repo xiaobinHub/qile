@@ -54,7 +54,7 @@ data/testing/browser/   浏览器隔离测试配置、日志和对象目录
 
 ```json
 {
-  "parent_trusted_origins": ["http://chenxiaobin.cn:18787"],
+  "parent_trusted_origins": ["http://chenxiaobin.cn:18787", "http://chenxiaobin.com:18787"],
   "admin_trusted_origins": []
 }
 ```

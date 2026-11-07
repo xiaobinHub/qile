@@ -110,7 +110,7 @@ def teacher(client, row, favorites=None):
     ddate, dtime = row.get('ddate'), row.get('dtime')
     available = {'date': ddate, 'time': dtime} if isinstance(ddate, str) and re.fullmatch(r'\d{4}-\d{2}-\d{2}', ddate) and isinstance(dtime, str) and re.fullmatch(r'\d{2}:\d{2}', dtime) else None
     return {'id': tid, 'name': text(row.get('name') or row.get('nickname'), 100) or '老师',
-            'intro': text(row.get('intro')), 'avatarUrl': images.reference(client, row.get('headerUrl') or row.get('headerUrl2')),
+            'intro': text(row.get('intro')), 'avatarUrl': images.public_url(row.get('headerUrl') or row.get('headerUrl2')),
             'labels': labels(client, row.get('labels')), 'favorite': tid in favorites if favorites is not None else row.get('collect') in (1, '1'),
             'favoriteAvailable': True, 'recommended': row.get('is_smart_matching') in (1, '1'),
             'nextAvailable': available, 'lessonMinutes': lesson_minutes(row)}
@@ -208,11 +208,12 @@ def profile(client, tid):
     value = teacher(client, raw)
     video = None
     if raw.get('intro_video'):
-        from .auth import bridge
-        media = bridge(client.context, 'resource.issue', {'purpose': 'teacher-intro-video', 'url': raw['intro_video'],
-                       'credentialId': client.session['credentialId'], 'bindingRevision': client.session['bindingRevision']})
+        from .media import public_media_url
+        url = public_media_url(raw['intro_video'], 'video')
+        if not url:
+            invalid('视频地址不正确。')
         video = {'id': 'teacher-video-' + tid, 'title': '老师介绍视频', 'action': 'inline',
-                 'url': media['url'], 'mimeType': media['mimeType'], 'instructions': None, 'reason': None}
+                 'url': url, 'mimeType': 'video/mp4', 'instructions': None, 'reason': None}
     return {**value, 'introVideo': video}
 
 def booking(client, contract, status, row):
@@ -292,7 +293,7 @@ def bookings(client, query):
     state['offset'] += len(selected)
     next_cursor = continuation(state) if state['offset'] < len(state['items']) else None
     for item in selected:
-        item['teacher']['avatarUrl'] = images.reference(client, item['teacher']['avatarUrl'])
+        item['teacher']['avatarUrl'] = images.public_url(item['teacher']['avatarUrl'])
     return {'queryId': state['queryId'], 'state': 'ready', 'items': selected,
             'nextCursor': next_cursor,
             'total': len(state['items']), 'sourceComplete': True}
@@ -337,6 +338,6 @@ def booking_page(client, query):
         if value['key'] in seen: continue
         seen.add(value['key']); items.append(value)
     _ordered(status, items)
-    for item in items: item['teacher']['avatarUrl'] = images.reference(client, item['teacher']['avatarUrl'])
+    for item in items: item['teacher']['avatarUrl'] = images.public_url(item['teacher']['avatarUrl'])
     if not items and not complete: schema('美森课程分页信息不一致，请刷新列表。')
     return {'status': status, 'page': page, 'pageSize': 100, 'complete': complete, 'items': items}

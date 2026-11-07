@@ -32,8 +32,7 @@ class BookingApiTests(DatabaseFixture):
         key.write_text('test-v1:'+base64.urlsafe_b64encode(secrets.token_bytes(32)).decode());key.chmod(0o600)
         self.vault=CredentialVault(key);self.bridge=PluginBridge(self.service,self.vault)
         self.body={'operationId':str(uuid.uuid4()),'bindingRevision':0,'username':'fixture-user','password':'fixture-pass'}
-        self.data['capabilities'] += ['plugin.external-operations','plugin.resources']
-        self.data['resourceOrigins'] = ['https://file.mison.cn','https://mp.mison.cn']
+        self.data['capabilities'] += ['plugin.external-operations']
         self.sql('UPDATE lele.plugin_releases SET manifest=%s WHERE release_id=%s',(Jsonb(self.data),self.release_id))
         self.ctx={**self.context(),'actorId':self.user_id}
         self.fake=FakeClient();self.fake.userid=42
@@ -187,9 +186,8 @@ class BookingApiTests(DatabaseFixture):
             r=self.run_api('courseware/501/preview','POST',body)
             self.assertEqual(r['state'],'succeeded');self.assertNotIn('quota',r['result'])
             self.assertEqual(r['result']['resource']['mimeType'],'application/pdf')
-            self.assertTrue(r['result']['resource']['url'].startswith('/api/children/'))
-            stored=self.sql('SELECT upstream_url FROM lele.plugin_resource_tickets WHERE child_id=%s AND plugin_id=%s',(self.ctx['childId'],self.ctx['pluginId']))
-            self.assertEqual(stored,[('https://file.mison.cn/courseware/91/PU0%20U4%20At%20home%20L2%20%E8%AF%AD%E9%9F%B3%E7%BB%83%E4%B9%A01.pdf',)])
+            self.assertEqual(r['result']['resource']['url'],'https://file.mison.cn/courseware/91/PU0%20U4%20At%20home%20L2%20%E8%AF%AD%E9%9F%B3%E7%BB%83%E4%B9%A01.pdf')
+            self.assertEqual(self.sql('SELECT count(*) FROM lele.plugin_resource_tickets WHERE child_id=%s',(self.ctx['childId'],)),[(0,)])
             self.run_api('courseware/501/preview','POST',body)
             self.run_api('operations/'+body['operationId'])
             self.run_api('courseware/501/preview','POST',{**body,'operationId':str(uuid.uuid4())})
@@ -321,9 +319,16 @@ class BookingApiTests(DatabaseFixture):
     def test_student_materials_and_app_only_learning_entry(self):
         with self.connected():
             d=self.create_draft(['19:00']);self.run_api('bookings','POST',self.submit_body(d));b=self.run_api('bookings')['items'][0]
-            resource=self.run_api('bookings/'+b['key']+'/resources')['items'][0];self.assertEqual(resource['mimeType'],'application/pdf')
+            resource=self.run_api('bookings/'+b['key']+'/resources')['items'][0]
+            self.assertEqual(resource['url'],'https://file.mison.cn/student.pdf')
+            self.assertEqual(resource['mimeType'],'application/pdf')
             r=self.run_api('bookings/'+b['key']+'/actions/classroom','POST',{'operationId':str(uuid.uuid4())})
             self.assertEqual(r['result']['resource']['action'],'instructions');self.assertEqual(len(self.sent),1)
+
+    def test_host_no_longer_issues_media_tickets(self):
+        with self.connected(), self.assertRaises(ApiError) as failure:
+            self.bridge.handle(self.ctx,'resource.issue',{'purpose':'courseware-pdf','url':'https://file.mison.cn/student.pdf'})
+        self.assertEqual(failure.exception.kind,'plugin_bridge_action_unavailable')
 
     def test_partial_booking_and_worker_restart_reconciliation(self):
         with self.connected(),patch.object(operations,'reconcile_book',side_effect=auth.AuthError('UPSTREAM_UNAVAILABLE','读取失败')):

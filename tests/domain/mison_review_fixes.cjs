@@ -20,7 +20,6 @@ let handler = async () => {
 }
 
 const source = require(path.join(frontend, "booking-source.ts"))
-const avatars = require(path.join(frontend, "avatar-cache.ts"))
 
 function context() {
   const controller = new AbortController()
@@ -121,22 +120,7 @@ async function main() {
   )
   source.clearBookingSource()
 
-  const reference = `mison-image:${"ab".repeat(32)}`
-  const data = "data:image/png;base64,aaaa"
-  let notices = 0
-  const stop = avatars.subscribeAvatar(reference, () => {
-    notices += 1
-  })
-  assert.equal(await avatars.loadAvatar(reference, async () => data), data)
-  assert.equal(avatars.peekAvatar(reference), data)
-  assert.equal(notices, 1, "a successful avatar load notifies the previously failed component")
-  stop()
-  avatars.forgetAvatar(reference)
-  await avatars.loadAvatar(reference, async () => data)
-  assert.equal(notices, 1, "unmounted avatars no longer receive cache updates")
-  console.log(
-    JSON.stringify({ passed: true, checks: ["stale booking cache", "avatar subscription"] }),
-  )
+  console.log(JSON.stringify({ passed: true, checks: ["stale booking cache"] }))
 }
 
 main().catch((error) => {

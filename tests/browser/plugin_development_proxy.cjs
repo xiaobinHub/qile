@@ -396,7 +396,9 @@ async function main() {
   const documentResponse = await page.goto(origin)
   const csp = documentResponse.headers()["content-security-policy"]
   assert.match(csp, /script-src 'self';/)
-  assert.match(csp, /connect-src 'self';/)
+  assert.match(csp, /connect-src 'self' https:\/\/file\.mison\.cn;/)
+  assert.match(csp, /media-src 'self' https:\/\/mp\.mison\.cn https:\/\/file\.mison\.cn;/)
+  assert.ok(!csp.includes("*"))
   assert.ok(!csp.includes("unsafe-eval"))
   await page.locator('[data-view="plugin:mison-booking"]').click()
   await page.getByRole("heading", { name: "请登录美森网课账号", exact: true }).waitFor()

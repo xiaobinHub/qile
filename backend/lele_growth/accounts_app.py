@@ -12,8 +12,7 @@ from pathlib import Path
 from lele_growth.paths import WEB_ROOT
 
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse, FileResponse, Response, StreamingResponse
-from starlette.background import BackgroundTask
+from fastapi.responses import JSONResponse, FileResponse, Response
 from starlette.concurrency import run_in_threadpool
 from starlette.exceptions import HTTPException
 
@@ -63,8 +62,8 @@ def create_app(config_path, surface='parent'):
         response.headers['Cache-Control']='private, no-store' if '/assets/' in request.url.path else 'no-store'
         response.headers['X-Content-Type-Options']='nosniff'
         response.headers['Referrer-Policy']='same-origin'
-        response.headers['X-Frame-Options']='SAMEORIGIN' if response.headers.get('Content-Type','').startswith('application/pdf') and '/plugins/' in request.url.path and '/media/' in request.url.path else 'DENY'
-        if 'Content-Security-Policy' not in response.headers: response.headers['Content-Security-Policy']=f"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:{avatar_origin}; connect-src 'self'; frame-src 'self' blob:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
+        response.headers['X-Frame-Options']='DENY'
+        if 'Content-Security-Policy' not in response.headers: response.headers['Content-Security-Policy']=f"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://mp.mison.cn https://file.mison.cn{avatar_origin}; connect-src 'self' https://file.mison.cn; media-src 'self' https://mp.mison.cn https://file.mison.cn; frame-src 'self' blob:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
         if production: response.headers['Strict-Transport-Security']='max-age=31536000'
         return response
 
@@ -78,14 +77,6 @@ def create_app(config_path, surface='parent'):
         except (ApiError,StoreError):
             return JSONResponse({**status,'ok':False,'databaseReady':False,'error':'数据库暂时无法访问。'},status_code=503)
         return {**status,'ok':True,'databaseReady':True}
-
-    @app.api_route('/api/children/{child_id}/plugins/{plugin_id}/media/{ticket}', methods=['GET', 'HEAD'])
-    def plugin_video(child_id: str, plugin_id: str, ticket: str, request: Request):
-        from lele_growth.plugins.resources import open_video
-        stream = open_video(service, request.cookies.get(cookie_name), surface, child_id, plugin_id, ticket,
-                            request.method, request.headers.get('range'), request.query_params.get('filename'))
-        return StreamingResponse(stream.body(), status_code=stream.status, headers=stream.headers,
-                                 background=BackgroundTask(stream.close))
 
     @app.api_route('/api/{path:path}',methods=['GET','POST','PATCH','DELETE','PUT','OPTIONS'])
     async def api(path:str,request:Request):

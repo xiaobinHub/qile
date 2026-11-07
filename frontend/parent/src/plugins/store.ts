@@ -52,7 +52,7 @@ export function pluginStatus(plugin: Plugin) {
 export function pluginReason(plugin: Plugin) {
   if (plugin.publicationStatus !== "published") return "应用已下架，可查看配置或卸载。"
   if (plugin.operationState === "updating")
-    return "应用正在更新，完成后会自动刷新；期间可停用或卸载。"
+    return "应用正在更新，请稍后刷新状态；期间可停用或卸载。"
   if (plugin.operationState === "failed") return "应用暂时无法运行，请稍后刷新。"
   if (plugin.reason === "plugin_incompatible")
     return "当前服务与此应用协议不兼容，请重启服务后再试。"
@@ -135,18 +135,9 @@ class PluginStore {
       if (user && child) void this.refresh()
     }
     const unsubscribe = runtime.subscribe(sync)
-    const foreground = () => {
-      if (!document.hidden) void this.refresh()
-    }
     sync()
-    const timer = window.setInterval(foreground, 5000)
-    window.addEventListener("focus", foreground)
-    document.addEventListener("visibilitychange", foreground)
     return () => {
       unsubscribe()
-      clearInterval(timer)
-      window.removeEventListener("focus", foreground)
-      document.removeEventListener("visibilitychange", foreground)
       this.context.abort()
       this.read?.abort()
       this.read = null
@@ -225,8 +216,8 @@ class PluginStore {
     this.requireConfirmed(childId, epoch)
     if (this.state.pending.includes(pluginId)) throw new ApiError("请等待当前操作完成。", "busy")
     const context = this.context
-    // A read started before a mutation cannot overwrite its result. Poll/focus
-    // callers share that read; one fresh read follows after mutations finish.
+    // A read started before a mutation cannot overwrite its result. Entry and
+    // manual callers share that read; one fresh read follows after mutations finish.
     this.statusFence++
     this.patch({ pending: [...this.state.pending, pluginId] })
     try {

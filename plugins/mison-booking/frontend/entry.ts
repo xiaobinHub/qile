@@ -2,7 +2,7 @@ import { createElement } from "react"
 import { flushSync } from "react-dom"
 import { createRoot } from "react-dom/client"
 import { App } from "./app"
-import { ImageContext, PortalContext } from "./contexts"
+import { PortalContext } from "./contexts"
 import "./utilities.css"
 import "./style.css"
 
@@ -15,11 +15,7 @@ export function mount(container: HTMLElement, context: Parameters<typeof App>[0]
       createElement(
         PortalContext.Provider,
         { value: portal },
-        createElement(
-          ImageContext.Provider,
-          { value: context },
-          createElement("div", { className: "mison-ui" }, createElement(App, { context })),
-        ),
+        createElement("div", { className: "mison-ui" }, createElement(App, { context })),
       ),
     )
   })

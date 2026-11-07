@@ -560,7 +560,10 @@ async function run() {
     )
     getPlugin("a", "service-demo").configRevision++
     configFor("a", "service-demo").count = 4
-    await focus(page)
+    await page.evaluate(async () => {
+      const { pluginStore } = await import("/parent-assets/src/plugins/store.ts")
+      await pluginStore.refresh()
+    })
     await dialog
       .getByText("配置或版本已更新。请重新读取，核对最新配置后再保存。", { exact: true })
       .waitFor()
@@ -788,7 +791,8 @@ async function run() {
     await page.getByText("应用儿童：甲", { exact: true }).waitFor()
     getPlugin("a", "page-demo").operationState = "updating"
     getPlugin("a", "page-demo").effectiveEnabled = false
-    await focus(page)
+    await page.locator('[data-view="calendar"]').click()
+    await page.locator('[data-view="plugin:page-demo"]').click()
     await page.getByRole("heading", { name: "应用更新中", exact: true }).waitFor()
     assert.equal(await page.locator('[data-view="plugin:page-demo"]').count(), 1)
     assert.equal(await page.locator("[data-plugin-root]").count(), 0)
@@ -798,7 +802,8 @@ async function run() {
       version: "1.1.0",
       releaseId: "page-demo-r2",
     })
-    await focus(page)
+    await page.locator('[data-view="calendar"]').click()
+    await page.locator('[data-view="plugin:page-demo"]').click()
     await page.getByText("应用儿童：甲", { exact: true }).waitFor()
     assert.ok(state.assets.includes("/plugin-assets/page-demo/1.1.0/entry.js"))
     await page.locator("[data-plugin-api]").click()
@@ -814,7 +819,8 @@ async function run() {
     await page.locator('[data-plugin-more="page-demo"]').click()
     await page.locator('[data-plugin-disable="page-demo"]').click()
     await page.waitForFunction(() => !document.querySelector('[data-view="plugin:page-demo"]'))
-    await focus(memberPage)
+    assert.equal(await memberPage.locator('[data-view="plugin:page-demo"]').count(), 1)
+    await memberPage.locator('[data-view="plugin:page-demo"]').click()
     await memberPage.waitForFunction(
       () => !document.querySelector('[data-view="plugin:page-demo"]'),
     )
@@ -867,7 +873,7 @@ async function run() {
     assert.equal(await page.getByText("共享的新提醒", { exact: true }).count(), 0)
     await switchChild(page, "a")
     const slowStatus = gate("a:status")
-    await focus(page)
+    await page.locator('[data-view="plugin:page-demo"]').click()
     await slowStatus.captured
     await switchChild(page, "b")
     slowStatus.release()
@@ -888,11 +894,12 @@ async function run() {
     )
     await page.locator('[data-view="calendar"]').click()
     const before = state.statusCalls.length
+    await focus(page)
     await page.waitForFunction(() => document.visibilityState === "visible")
     await new Promise((resolve) => setTimeout(resolve, 5200))
-    assert.ok(state.statusCalls.length > before)
+    assert.equal(state.statusCalls.length, before)
     checks.push(
-      "plugin mount failures isolated, external entry rejected before any resources, foreground 5-second polling",
+      "plugin mount failures isolated, external entry rejected before any resources, no background status polling",
     )
 
     await settings(page)
@@ -914,20 +921,27 @@ async function run() {
     )
     checks.push("unchanged status polling does not cause catalog or config network loops")
 
-    // A response taking longer than the polling interval must complete once,
-    // even when another interval and a focus event arrive while it is pending.
+    // A status read still in flight must stay one request if focus or another refresh arrives.
     const slowRead = gate("a:status")
     const statusBefore = state.statusCalls.filter((call) => call.role === "owner").length
     getPlugin("a", "page-demo").description = "六秒慢响应已完成"
-    await focus(page)
+    const pending = page.evaluate(async () => {
+      const { pluginStore } = await import("/parent-assets/src/plugins/store.ts")
+      await pluginStore.refresh()
+    })
     await slowRead.captured
     await new Promise((resolve) => setTimeout(resolve, 6100))
     await focus(page)
+    await page.evaluate(async () => {
+      const { pluginStore } = await import("/parent-assets/src/plugins/store.ts")
+      void pluginStore.refresh()
+    })
     assert.equal(state.statusCalls.filter((call) => call.role === "owner").length, statusBefore + 1)
     slowRead.release()
+    await pending
     await page.getByText("六秒慢响应已完成", { exact: true }).waitFor()
     checks.push(
-      "6.1-second status response survives periodic/focus refresh with one coalesced request",
+      "slow status response stays one request across focus and a second refresh",
     )
 
     Object.assign(getPlugin("a", "page-demo"), {
@@ -935,7 +949,10 @@ async function run() {
       effectiveEnabled: false,
       requiresReenable: true,
     })
-    await focus(page)
+    await page.evaluate(async () => {
+      const { pluginStore } = await import("/parent-assets/src/plugins/store.ts")
+      await pluginStore.refresh()
+    })
     const reenable = page.locator('[data-plugin-enable="page-demo"]')
     await reenable.waitFor()
     assert.equal(await reenable.innerText(), "重新启用")
@@ -995,7 +1012,8 @@ async function run() {
     await page.locator('[data-view="plugin:page-demo"]').click()
     await page.getByText("应用儿童：甲", { exact: true }).waitFor()
     state.offlineStatus = true
-    await focus(page)
+    await page.locator('[data-view="calendar"]').click()
+    await page.locator('[data-view="plugin:page-demo"]').click()
     await page.getByRole("heading", { name: "应用状态未确认", exact: true }).waitFor()
     assert.equal(await page.locator("[data-plugin-root]").count(), 0)
     assert.equal(await page.locator('[data-view="plugin:page-demo"]').isDisabled(), true)
@@ -1050,7 +1068,10 @@ async function run() {
     await dialog.getByLabel("提醒内容", { exact: false }).fill("状态未确认时保留的草稿")
     const readsBeforeUnconfirmed = state.configCalls.filter((call) => call.role === "owner").length
     state.offlineStatus = true
-    await focus(page)
+    await page.evaluate(async () => {
+      const { pluginStore } = await import("/parent-assets/src/plugins/store.ts")
+      await pluginStore.refresh()
+    })
     await dialog
       .getByText("应用状态未确认，请刷新成功后再操作。配置草稿已保留。", { exact: true })
       .waitFor()
@@ -1114,7 +1135,7 @@ async function run() {
     future.version = "1.0.99"
     future.releaseId = "page-demo-future"
     future.frontendApi = { major: 1, minMinor: 2 }
-    await focus(page)
+    await page.locator('[data-view="calendar"]').click()
     await page.locator('[data-view="plugin:page-demo"]').click()
     await page.getByRole("heading", { name: "应用加载失败", exact: true }).waitFor()
     await page.getByText("此应用需要新版页面，请刷新整个页面后重试。", { exact: true }).waitFor()

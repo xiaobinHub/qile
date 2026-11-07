@@ -112,7 +112,7 @@ LELE_TEST_CONFIG=data/testing/backend/config.json PYTHONPATH=backend:packages/pl
 - `upstream.py`：固定读取与写入端点白名单，35秒总预算，单次请求最多10秒，3MiB响应上限，无自动重试/登录。
 - `read_api.py`：合约关联、筛选DTO、教师去重、北京时间日期与占用映射、课程排序分页。每次最多扫3个源页；历史同步未完返回building，前端继续游标查询。扫描上限5000条，超限明确报错，不伪装完整结果。
 - `read_store.py`：worker内有界TTL缓存与opaque游标（5分钟）；不持久化业务数据。绑定childId、bindingRevision、credentialId和查询条件，账号变化或worker重启后旧游标失效，需刷新列表。Token仍独立加密保存在数据库。
-- `images.py`：头像按需经插件JSON接口返回不超过128KiB的JPEG/PNG/WebP/GIF数据URI；只允许固定 `mp.mison.cn` / `file.mison.cn`，不带Bearer、不跟重定向、保持TLS证书与主机名校验。拒绝私网DNS；仅兼容本机Clash/TUN已观察到的基准测试虚拟地址段198.18/15和2001:2::/48。前端最多并行请求2张头像，避免占满worker。不改主应用CSP或页面。
+- `images.py`：头像只返回 `https://mp.mison.cn` 或 `https://file.mison.cn` 直链。浏览器直接加载并使用 HTTP 缓存，插件不再下载、转码或缓存图片字节。
 
 ```sh
 PYTHONPATH=backend:packages/plugin-sdk-python/src:plugins/mison-booking/backend .venv/bin/python -m unittest tests.backend.test_mison_reads
@@ -121,11 +121,7 @@ PYTHONPATH=backend:packages/plugin-sdk-python/src:plugins/mison-booking/backend 
 
 ## 教师介绍视频
 
-1.0.8开始由已登录的插件读取教师资料中的 `intro_video`，经私有Bridge `resource.issue` 生成20分钟有效的同源视频地址。播放器直接使用浏览器原生controls与playsInline，不自动播放。没有视频时显示暂无视频；加载失败提示重新打开档案。
-
-宿主只补充 `/api/children/{childId}/plugins/{pluginId}/media/{ticket}` GET/HEAD流接口，不改主应用页面或CSP。请求验证主应用会话、儿童权限、插件启用与release epoch、账号bindingRevision及凭据revision。固定HTTPS来源、不跟随重定向、不转发Bearer；支持单段Range，200MiB上限、64KiB流块，不整段加载进worker。票据失效后需重新打开档案，视频播放不消耗课件预览次数。
-
-2026-11-03真实CDN已核验206分段响应与MP4头；原宿主浏览器使用合成测试视频验证实际播放和拖动。后台使用隔离数据库测试会话/票据权限与流接口，不写真实课程数据。
+插件读取教师资料中的 `intro_video`，只接受 `https://file.mison.cn` 或 `https://mp.mison.cn` 且路径以 `.mp4` 结尾的地址，去掉用户信息、端口和片段后返回给浏览器。播放器使用原生 controls、playsInline，并设置 `referrerPolicy=no-referrer`，不自动播放。地址不受支持时档案请求失败；播放失败时提示重新打开档案。没有视频时显示暂无视频。宿主不再签发票据，也不再代理视频字节。
 
 
 ## 共享组件与独立打包
@@ -142,16 +138,16 @@ PYTHONPATH=backend:packages/plugin-sdk-python/src:plugins/mison-booking/backend 
 - `drafts.py`：私有草稿不设固定有效期，保留绑定校验与修订CAS；兼容旧草稿的30分钟过期标记。进入确认页及提交前重新检查真实档期，默认按开始时间逐项分配推荐课件。草稿修改不提交课程。
 - `courseware.py`：真实推荐/分类/分页列表、预览额度、待补学记录；无法证实的“学过”字段保持未知，不能由choosed随意推导。分类liveid来自当前有效合约，不写死样本ID。
 - `operations.py`：同账号操作先写持久日志，再发送一次上游请求。多课时按App的CSV课件编码一次提交；确认失败后允许用户显式新请求，超时只核对。跨儿童绑定同美森账号也共用数据库写入锁。
-- 选择/更换预约前课件只更新草稿，不消耗预览额度。预览直接打开课件列表中的学员 PDF（`student_file_url`），经同源票据加载，不调用 `onevonePreviewCourseware`，也不消耗每日预览次数。额度为 0 仍可选择课件、预览和预约。
+- 选择/更换预约前课件只更新草稿，不消耗预览额度。预览直接打开课件列表中的学员 PDF（`student_file_url`）。只接受 `https://file.mison.cn` 且路径以 `.pdf` 结尾的地址，由浏览器和 PDF.js 直接加载，不调用 `onevonePreviewCourseware`，也不消耗每日预览次数。额度为 0 仍可选择课件、预览和预约。
 - 源码开发版不再显示每日预览额度，草稿不再查询该额度。2026-11-04已核验一份真实学员PDF可在不带Token时返回206及PDF文件头；此证据仅对应该文件。文件缺失或来源不受支持时明确报错，不回退到扣次接口。教师文件不用于预览。
 - 刷新通过bootstrap恢复未决操作。部分成功逐课时显示，既不自动补约，也不自动取消；预览结果无法可靠确认时可先在App核实，再显式结束核对，至少等待60秒。此操作只结束跟踪，不修改真实课程。
 - 取消顺序为`cancelLesson`→核验status=1→`onevoneSaveCancelLesson(adjust_lessons=0)`。临近上课或出现额外扣额规则时转到App确认，不默认接受费用或顺延。第二步失败只核对，不重放第一步。
-- 已预约学生资料由`courseClassResource`取得文件ID，再按App协议`/v2/download/pdf`取得真实下载地址；只代理学生PDF。媒体票据沿用会话/儿童/发布版本/绑定权限，PDF最多50MiB、支持Range；仅该PDF响应允许同源iframe展示，主应用页面安全策略不变。
+- 已预约学生资料由`courseClassResource`取得文件ID，再按App协议`/v2/download/pdf`取得真实下载地址。只返回 `file.mison.cn` 上的学生 PDF 直链；下载由浏览器取回文件后按课件标题保存。宿主不再中转 PDF。
 
 真实验证继续复用数据库Token，登录0次、真实预约/取消/预览扣额0次；只读验证了推荐两份课件、真实分类列表、额度、已预约资料结构和下载地址。任何真实约课测试必须严格晚于当前48小时；本次未执行真实约课。
 
 ```sh
-LELE_TEST_CONFIG=data/testing/backend/config.json PYTHONPATH=backend:packages/plugin-sdk-python/src:plugins/mison-booking/backend .venv/bin/python -m unittest tests.backend.test_mison_booking tests.backend.test_mison_reads tests.backend.test_mison_login tests.backend.test_plugin_video
+LELE_TEST_CONFIG=data/testing/backend/config.json PYTHONPATH=backend:packages/plugin-sdk-python/src:plugins/mison-booking/backend .venv/bin/python -m unittest tests.backend.test_mison_booking tests.backend.test_mison_reads tests.backend.test_mison_login
 ```
 
 当前源码已接通 `teacherCollect` 收藏/取消收藏，采用明确目标状态和持久化操作回执。推荐教师按 App 同传 `user1v1_id`。写入结果未知时仅通过 `getTeacherCollect` 核对，不自动重发。卡片和教师档案同步收藏状态；构建验收不等于真实收藏写入验收或生产部署。

@@ -56,7 +56,7 @@ exports.createCalendarFixture = function () {
         title: `课程PDF-${key}`,
         action: "inline",
         mimeType: "application/pdf",
-        url: "/api/children/a/plugins/mison-booking/media/fixture-pdf",
+        url: "https://file.mison.cn/fixtures/touch-courseware.pdf",
         instructions: null,
         reason: null,
       }

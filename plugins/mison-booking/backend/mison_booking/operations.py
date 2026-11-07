@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 import re
 from .auth import AuthError, bridge
 from . import courseware, drafts, read_api
+from .media import public_media_url
 
 MESSAGES = {'prepared':'正在准备操作。','dispatching':'操作已发送，请核对结果。','succeeded':'操作成功。',
             'failed':'操作未完成。','uncertain':'结果待核对，请勿重复提交。','partially_succeeded':'部分课时已预约，请核对剩余课时。',
@@ -38,15 +39,15 @@ def advance(client,op,action,**changes):
 def finish(client,op,state,message=None,**result):
     return advance(client,op,'finish',state=state,result={'message':message or MESSAGES[state],**result})
 
-def pdf(client,url,title='课件预览'):
-    media=bridge(client.context,'resource.issue',{'purpose':'courseware-pdf','url':url,'credentialId':client.session['credentialId'],
-                 'bindingRevision':client.session['bindingRevision']})
-    return {'id':'courseware-pdf','title':title,'action':'inline','url':media['url'],'mimeType':media['mimeType'],'instructions':None,'reason':None}
+def pdf(url,title='课件预览'):
+    public=public_media_url(url,'pdf')
+    if not public: raise AuthError('COURSEWARE_UNAVAILABLE','该课件没有可直接预览的学员文件。')
+    return {'id':'courseware-pdf','title':title,'action':'inline','url':public,'mimeType':'application/pdf','instructions':None,'reason':None}
 
 def output(client,op):
     result=deepcopy(op.get('result') or {})
     if result.get('_pdfUrl'):
-        try: result['resource']=pdf(client,result['_pdfUrl'],result.get('_pdfTitle') or '课件预览')
+        try: result['resource']=pdf(result['_pdfUrl'],result.get('_pdfTitle') or '课件预览')
         except AuthError:
             result['message']='课件文件暂时无法打开，请稍后重试。本次不会消耗预览次数。' if op['canonicalRequest']['details'].get('source')=='student_file_url' else '历史预览文件暂时不可用；核对时只重新加载文件，不再次扣额。'
     result={k:v for k,v in result.items() if not k.startswith('_')}
@@ -170,9 +171,7 @@ def preview(client,course_id,body):
     if not lesson or not lesson['courseware'] or lesson['courseware']['id']!=course_id:read_api.invalid('预览课件不属于当前课时。')
     asset=draft.get('_assets',{}).get(course_id) or {}
     url=asset.get('student_file_url')
-    if not isinstance(url,str) or not url.startswith('https://') or len(url)>2048:
-        raise AuthError('COURSEWARE_UNAVAILABLE','该课件没有可直接预览的学员文件。')
-    pdf(client,url,asset.get('title') or '课件预览')
+    pdf(url,asset.get('title') or '课件预览')
     op=begin(client,'preview',body,{'draftId':draft['id'],'source':'student_file_url'})
     op=finish(client,op,'succeeded','已打开学员课件。',_pdfUrl=url,_pdfTitle=asset.get('title') or '课件预览')
     return output(client,op)
@@ -291,7 +290,7 @@ def resources(client,key):
                 data = client.call('downloadPdf', {'fid': int(read_api.identifier(item.get('id')))}).get('data')
                 url = data.get('file_url') if isinstance(data, dict) else None
             if isinstance(url, str) and url.startswith('https://') and urlsplit_path_pdf(url):
-                items.append(pdf(client,url,read_api.text(item.get('title') or item.get('filename') or item.get('name'),200) or '课程资料'))
+                items.append(pdf(url,read_api.text(item.get('title') or item.get('filename') or item.get('name'),200) or '课程资料'))
             if len(items) >= 10: break
     if not items:
         items=[{'id':'materials-app','title':'课程资料','action':'instructions','url':None,'mimeType':None,

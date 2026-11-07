@@ -22,7 +22,7 @@ export function createFixtureContext(): PluginContext {
     id: `demo-${i}`,
     name,
     intro: intros[i],
-    avatarUrl: i === 0 ? "mison-image:" + "a".repeat(64) : null,
+    avatarUrl: i === 0 ? "https://mp.mison.cn/avatars/jenyy.png" : null,
     labels: [
       { id: "kids", name: "少儿" },
       { id: i % 2 ? "reading" : "speaking", name: i % 2 ? "阅读引导" : "口语互动" },
@@ -204,12 +204,7 @@ export function createFixtureContext(): PluginContext {
           }
           syncReceipts.set(body.operationId, { hash, result: structuredClone(data) })
         }
-      } else if (path.startsWith("resources/images/"))
-        data = {
-          dataUrl:
-            "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=",
-        }
-      else if (path === "teacher-filters")
+      } else if (path === "teacher-filters")
         data = {
           labelGroups: [
             {
@@ -282,7 +277,7 @@ export function createFixtureContext(): PluginContext {
             id: "fixture-intro",
             title: "老师介绍视频",
             action: "inline",
-            url: "/api/children/a/plugins/mison-booking/media/fixture-video",
+            url: "https://file.mison.cn/fixtures/teacher-intro.mp4",
             mimeType: "video/mp4",
             instructions: null,
             reason: null,

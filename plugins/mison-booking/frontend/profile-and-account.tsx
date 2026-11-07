@@ -96,6 +96,7 @@ export function ProfileDrawer({
                 playsInline
                 onLoadedData={() => setVideoState("ready")}
                 onError={() => setVideoState("failed")}
+                ref={directMedia}
                 src={safeResourceUrl(video)}
                 aria-label="教师介绍视频"
               />
@@ -126,13 +127,30 @@ export function ProfileDrawer({
     </Overlay>
   )
 }
+const DIRECT_MEDIA: Record<string, { hosts: readonly string[]; extension: string }> = {
+  "video/mp4": { hosts: ["mp.mison.cn", "file.mison.cn"], extension: ".mp4" },
+  "application/pdf": { hosts: ["file.mison.cn"], extension: ".pdf" },
+}
+function directMedia(element: HTMLVideoElement | null) {
+  element?.setAttribute("referrerpolicy", "no-referrer")
+}
 export function safeResourceUrl(resource: Resource) {
-  if (!resource.url) return undefined
+  const rule = resource.mimeType ? DIRECT_MEDIA[resource.mimeType] : undefined
+  if (!resource.url || !rule) return undefined
   try {
-    const url = new URL(resource.url, location.origin)
-    return url.protocol === "https:" || (url.origin === location.origin && url.protocol === "http:")
-      ? url.href
-      : undefined
+    const url = new URL(resource.url)
+    const path = decodeURIComponent(url.pathname).toLowerCase()
+    if (
+      url.protocol !== "https:" ||
+      !rule.hosts.includes(url.hostname) ||
+      url.username ||
+      url.password ||
+      url.port ||
+      url.hash ||
+      !path.endsWith(rule.extension)
+    )
+      return undefined
+    return url.href
   } catch {
     return undefined
   }
@@ -145,22 +163,27 @@ function pdfFilename(title: string) {
       .trim() || "课件"
   return /\.pdf$/i.test(name) ? name : `${name}.pdf`
 }
-function downloadResource(url: string, title: string) {
+async function downloadResource(url: string, title: string) {
   const filename = pdfFilename(title)
-  const target = new URL(url, location.origin)
-  target.searchParams.set("filename", filename)
+  const response = await fetch(url, { credentials: "omit", referrerPolicy: "no-referrer" })
+  if (!response.ok) throw new Error("课件下载失败。")
+  const blob = await response.blob()
+  const objectUrl = URL.createObjectURL(blob)
   const link = document.createElement("a")
-  link.href = target.href
+  link.href = objectUrl
   link.download = filename
   document.body.append(link)
   link.click()
   link.remove()
+  window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000)
 }
 export function ResourceViewer({ resource, onClose }: { resource: Resource; onClose(): void }) {
   const url = safeResourceUrl(resource)
   const pdf = resource.action === "inline" && resource.mimeType === "application/pdf" && !!url
   const [pages, setPages] = useState<number | null>(null)
+  const [downloadError, setDownloadError] = useState("")
   useEffect(() => setPages(null), [url])
+  useEffect(() => setDownloadError(""), [url])
   return (
     <Overlay
       wide
@@ -170,7 +193,16 @@ export function ResourceViewer({ resource, onClose }: { resource: Resource; onCl
       titleMeta={pdf && pages ? `共 ${pages} 页` : undefined}
       actions={
         pdf && url ? (
-          <Button variant="outline" size="sm" onClick={() => downloadResource(url, resource.title)}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setDownloadError("")
+              void downloadResource(url, resource.title).catch(() =>
+                setDownloadError("课件下载失败，请稍后重试。"),
+              )
+            }}
+          >
             <Download data-icon="inline-start" />
             下载
           </Button>
@@ -180,7 +212,7 @@ export function ResourceViewer({ resource, onClose }: { resource: Resource; onCl
     >
       {resource.action === "inline" && url ? (
         resource.mimeType?.startsWith("video/") ? (
-          <video controls autoPlay={false} src={url} />
+          <video controls autoPlay={false} playsInline ref={directMedia} src={url} />
         ) : pdf ? (
           <Suspense fallback={<p role="status">正在打开 PDF…</p>}>
             <PdfPreview key={url} url={url} title={resource.title} onPages={setPages} />
@@ -197,6 +229,7 @@ export function ResourceViewer({ resource, onClose }: { resource: Resource; onCl
       ) : (
         <Notice>{resource.instructions ?? resource.reason ?? "该资源暂不可用。"}</Notice>
       )}
+      {downloadError ? <Notice error>{downloadError}</Notice> : null}
     </Overlay>
   )
 }

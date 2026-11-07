@@ -31,34 +31,6 @@ async function main() {
   const server = await createServer({
     configFile: path.join(root, "frontend/parent/vite.config.mts"),
     cacheDir: path.join(out, "vite-cache"),
-    plugins: [
-      {
-        name: "mison-test-media",
-        configureServer(server) {
-          // Chromium's native download bypasses Playwright request routing.
-          // Serve the synthetic PDF over HTTP, including its attachment headers.
-          server.middlewares.use((request, response, next) => {
-            const url = new URL(request.url, "http://fixture.local")
-            if (
-              !(touchAcceptance || calendarAcceptance) ||
-              url.pathname !== "/api/children/a/plugins/mison-booking/media/fixture-pdf"
-            )
-              return next()
-            assert.ok(["GET", "HEAD"].includes(request.method), "Fixture PDF is read-only")
-            const data = require("./ipad_touch_acceptance.cjs").pdfFixture()
-            const filename = url.searchParams.get("filename")
-            response.writeHead(200, {
-              "Content-Type": "application/pdf",
-              "Content-Length": String(data.length),
-              "Content-Disposition": filename
-                ? `attachment; filename="courseware.pdf"; filename*=UTF-8''${encodeURIComponent(filename)}`
-                : "inline; filename=courseware.pdf",
-            })
-            response.end(request.method === "HEAD" ? undefined : data)
-          })
-        },
-      },
-    ],
     server: {
       host: "127.0.0.1",
       port: development ? 18896 : 0,
@@ -106,7 +78,7 @@ async function main() {
     misonLoggedIn = false,
     loginCalls = 0
   let scheduleMode = "normal"
-  let avatarFailures = 2
+  let cdnAvatarRequests = 0
   let paginationProbe = false,
     paginationCalls = 0
   let lastBookingOperationId = null,
@@ -193,24 +165,6 @@ async function main() {
       const req = route.request(),
         url = new URL(req.url()),
         json = (value) => route.fulfill({ json: value })
-      if ((touchAcceptance || calendarAcceptance) && url.pathname.endsWith("/media/fixture-pdf")) {
-        return route.continue()
-      }
-      if (url.pathname.endsWith("/media/fixture-video")) {
-        const data = fs.readFileSync(path.join(root, "tests/fixtures/mison/teacher-intro.mp4"))
-        const range = req.headers().range?.match(/^bytes=(\d+)-(\d*)$/)
-        const start = range ? Number(range[1]) : 0
-        const end = range?.[2] ? Math.min(Number(range[2]), data.length - 1) : data.length - 1
-        return route.fulfill({
-          status: range ? 206 : 200,
-          contentType: "video/mp4",
-          headers: {
-            "Accept-Ranges": "bytes",
-            ...(range ? { "Content-Range": `bytes ${start}-${end}/${data.length}` } : {}),
-          },
-          body: data.subarray(start, end + 1),
-        })
-      }
       if (url.pathname === "/api/auth/me")
         return json({
           user: { id: "test-parent", nickname: "测试家长", loginName: "test-parent" },
@@ -396,7 +350,7 @@ async function main() {
                 id: "touch-pdf",
                 title: "触控课件",
                 action: "inline",
-                url: "/api/children/a/plugins/mison-booking/media/fixture-pdf",
+                url: "https://file.mison.cn/fixtures/touch-courseware.pdf",
                 mimeType: "application/pdf",
               },
             ]
@@ -422,29 +376,6 @@ async function main() {
           if (cursor) paginationProbe = false
         }
 
-        if (relative.startsWith("resources/images/")) {
-          if (avatarFailures > 0) {
-            avatarFailures--
-            return json({
-              ok: false,
-              error: { code: "RESOURCE_UNAVAILABLE", message: "模拟临时头像失败" },
-            })
-          }
-
-          const original = response.data.dataUrl.split(",")[1]
-          const encoded = Buffer.concat([
-            Buffer.from(original, "base64"),
-            Buffer.alloc(1500000),
-          ]).toString("base64")
-          const chunkIndex = Number(new URLSearchParams(relative.split("?")[1]).get("chunk") || "0")
-          const size = 384 * 1024
-          response.data = {
-            chunk: encoded.slice(chunkIndex * size, (chunkIndex + 1) * size),
-            chunkIndex,
-            totalChunks: Math.ceil(encoded.length / size),
-            mimeType: "image/png",
-          }
-        }
         if (relative === "bootstrap" && misonLoggedIn && restoredPending)
           response.data.unresolvedOperations = [
             {
@@ -494,6 +425,50 @@ async function main() {
       return json({ avatars: [], members: [], invitations: [] })
     }
     await browserContext.route("**/api/**", apiRoute)
+    const avatarPng = Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=",
+      "base64",
+    )
+    const mediaCors = {
+      "access-control-allow-origin": "*",
+      "access-control-allow-methods": "GET, HEAD, OPTIONS",
+      "access-control-allow-headers": "Range",
+      "access-control-expose-headers": "Accept-Ranges, Content-Range, Content-Length, Content-Type",
+    }
+    const rangedBody = (data, request) => {
+      const range = request.headers().range?.match(/^bytes=(\d+)-(\d*)$/)
+      const start = range ? Number(range[1]) : 0
+      const end = range?.[2] ? Math.min(Number(range[2]), data.length - 1) : data.length - 1
+      return {
+        status: range ? 206 : 200,
+        headers: {
+          ...mediaCors,
+          "accept-ranges": "bytes",
+          ...(range ? { "content-range": `bytes ${start}-${end}/${data.length}` } : {}),
+        },
+        body: request.method() === "HEAD" ? undefined : data.subarray(start, end + 1),
+      }
+    }
+    await browserContext.route(/^https:\/\/(?:mp|file)\.mison\.cn\//, async (route) => {
+      const request = route.request()
+      const url = new URL(request.url())
+      if (request.method() === "OPTIONS") return route.fulfill({ status: 204, headers: mediaCors })
+      if (url.pathname.endsWith(".mp4")) {
+        const data = fs.readFileSync(path.join(root, "tests/fixtures/mison/teacher-intro.mp4"))
+        return route.fulfill({ contentType: "video/mp4", ...rangedBody(data, request) })
+      }
+      if (url.pathname.endsWith(".pdf")) {
+        const data = require("./ipad_touch_acceptance.cjs").pdfFixture()
+        return route.fulfill({ contentType: "application/pdf", ...rangedBody(data, request) })
+      }
+      cdnAvatarRequests += 1
+      await route.fulfill({
+        status: 200,
+        contentType: "image/png",
+        body: avatarPng,
+        headers: { "cache-control": "public, max-age=31536000", ...mediaCors },
+      })
+    })
     await browserContext.route("**/plugin-assets/mison-booking/**", async (route) => {
       const name = new URL(route.request().url()).pathname.split("/frontend/")[1]
       assert.ok(name && !name.includes("..") && /\.(js|css)$/.test(name))
@@ -845,19 +820,20 @@ async function main() {
       return
     }
     assert.equal(await page.locator(".mison-header").count(), 1)
-    await page.waitForTimeout(500)
-    assert.equal(avatarFailures, 0, "read-only avatar uses one bounded retry")
-    assert.equal(await page.locator(".mison-teacher-card .mison-avatar img").count(), 0)
+    const cardAvatar = page.locator(".mison-teacher-card .mison-avatar img").first()
+    await cardAvatar.waitFor()
+    assert.match(await cardAvatar.getAttribute("src"), /^https:\/\/mp\.mison\.cn\//)
     await page
       .locator(".mison-teacher-card")
       .first()
       .getByRole("button", { name: /^查看.*档案$/ })
       .first()
       .click()
-    await page.getByRole("dialog", { name: "教师档案" }).locator(".mison-avatar img").waitFor()
-    await page.locator(".mison-teacher-card .mison-avatar img").first().waitFor()
+    const profileAvatar = page.getByRole("dialog", { name: "教师档案" }).locator(".mison-avatar img")
+    await profileAvatar.waitFor()
+    assert.match(await profileAvatar.getAttribute("src"), /^https:\/\/mp\.mison\.cn\//)
     await page.keyboard.press("Escape")
-    await page.locator(".mison-teacher-card .mison-avatar img").first().waitFor()
+    await cardAvatar.waitFor()
     assert.equal(
       await page.locator('.mison-teacher-card [data-slot="card-description"]').count(),
       0,
@@ -1614,10 +1590,14 @@ async function main() {
     await page.getByText("暂时无法连接美森约课", { exact: true }).waitFor()
     assert.equal(await page.locator(".mison-teacher-card").count(), 0)
     assert.equal(await page.locator(".plugin-page-heading").count(), 0)
+    assert.equal(cdnAvatarRequests > 0, true, "teacher avatars load from the Mison image hosts")
     assert.equal(
-      requests.some((url) => /mison\.cn/.test(url)),
+      requests.some((url) => {
+        const host = new URL(url).hostname
+        return host === "api.mison.cn" || (host.endsWith(".mison.cn") && host !== "mp.mison.cn" && host !== "file.mison.cn")
+      }),
       false,
-      "no real Mison traffic",
+      "no real Mison API traffic",
     )
     assert.deepEqual(errors, [])
     console.log(
@@ -1636,7 +1616,7 @@ async function main() {
             "inline login hides unbound header",
             "bad password reason and retained password",
             "password visibility toggle without submission",
-            "lazy avatar through authenticated plugin JSON API",
+            "direct Mison CDN avatar with browser cache",
             "login single submit and refresh without reauth",
             "uncertain login checks without resend",
             "login axe and mobile layout",

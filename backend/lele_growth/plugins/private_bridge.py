@@ -35,15 +35,12 @@ class PluginBridge:
                 self._job_access(cur, current, context, action)
             require(action in ('actor.info', 'private.get', 'private.put', 'private.delete',
                                'credential.get', 'session.get', 'session.begin', 'session.finish', 'session.fail', 'session.disconnect', 'session.invalidate', 'operation.begin', 'operation.mark-dispatch',
-                               'operation.stage', 'operation.finish', 'operation.get', 'operation.list', 'resource.issue',
+                               'operation.stage', 'operation.finish', 'operation.get', 'operation.list',
                                'courseSync.get', 'courseSync.check', 'courseSync.preview', 'courseSync.save', 'courseSync.run', 'courseSync.purge'),
                     400, '插件Bridge动作不存在。', 'plugin_bridge_action_unavailable')
             if action == 'actor.info':
                 cur.execute('SELECT owner_id FROM lele.children WHERE id=%s', (child_id,))
                 return {'ok': True, 'data': {'role': 'owner' if row_dict(cur)['owner_id'] == actor_id else 'member'}}
-            if action == 'resource.issue':
-                from .resources import issue
-                return {'ok': True, 'data': issue(cur, current, context, payload)}
             if action.startswith('courseSync.'):
                 require(plugin_id == 'mison-booking', 403, '此插件不能同步课程。', 'plugin_capability_denied')
                 self._capability(current, 'plugin.private-state')
