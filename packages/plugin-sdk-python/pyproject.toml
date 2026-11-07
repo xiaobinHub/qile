@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "lele-plugin-sdk"
-version = "1.1.1"
+version = "1.1.2"
 description = "Standard-library worker protocol for isolated Lele plugins"
 requires-python = ">=3.13"
 dependencies = []

@@ -19,6 +19,7 @@ from contextlib import nullcontext
 
 from lele_growth.child_service import ApiError, require
 from lele_growth.paths import PROJECT_ROOT
+from lele_growth.plugins.cpu_budget import CpuBudget
 
 MAX_BODY = 1024 * 1024
 MAX_DEV_LOG = 1024 * 1024
@@ -113,10 +114,11 @@ class Worker:
     stopping: bool = False
     log_thread: threading.Thread | None = None
     capacity: threading.BoundedSemaphore = field(default_factory=lambda: threading.BoundedSemaphore(4))
+    cgroup: Path | None = None
 
 
 class PluginSupervisor:
-    def __init__(self, root=None, *, start_timeout=8, call_timeout=10, drain_timeout=30):
+    def __init__(self, root=None, *, start_timeout=8, call_timeout=10, drain_timeout=30, cpu_budget=None):
         self.root = Path(root or plugin_root()).resolve()
         self.sockets = private_directory(socket_root(self.root))
         self.start_timeout, self.call_timeout, self.drain_timeout = start_timeout, call_timeout, drain_timeout
@@ -126,6 +128,8 @@ class PluginSupervisor:
         self.plugin_locks = {}
         self.development_registry = None
         self.invocation_guard = None
+        self.cpu_budget = CpuBudget() if cpu_budget is None else cpu_budget
+        self.cpu_budget.prepare()
 
     def _plugin_lock(self, plugin_id):
         with self.lock:
@@ -183,7 +187,8 @@ class PluginSupervisor:
                 if log:
                     log.close()
                 raise
-            worker = Worker(plugin_id, key[1], process, sock)
+            cgroup = self.cpu_budget.attach(plugin_id, process.pid)
+            worker = Worker(plugin_id, key[1], process, sock, cgroup=cgroup)
             if log:
                 worker.log_thread = threading.Thread(target=self._capture_log, args=(process.stdout, log), daemon=True,
                                                      name='plugin-dev-log')
@@ -223,21 +228,24 @@ class PluginSupervisor:
         except OSError:
             pass  # Never print log content or filesystem exception details.
 
-    @staticmethod
-    def _terminate(worker):
-        if worker.process.poll() is None:
-            try:
-                os.killpg(worker.process.pid, signal.SIGTERM)
-                worker.process.wait(timeout=2)
-            except (ProcessLookupError, subprocess.TimeoutExpired):
+    def _terminate(self, worker):
+        try:
+            if worker.process.poll() is None:
                 try:
-                    os.killpg(worker.process.pid, signal.SIGKILL)
-                except ProcessLookupError:
-                    pass
-                worker.process.wait(timeout=2)
-        worker.socket.unlink(missing_ok=True)
-        if worker.log_thread:
-            worker.log_thread.join(timeout=2)
+                    os.killpg(worker.process.pid, signal.SIGTERM)
+                    worker.process.wait(timeout=2)
+                except (ProcessLookupError, subprocess.TimeoutExpired):
+                    try:
+                        os.killpg(worker.process.pid, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+                    worker.process.wait(timeout=2)
+        finally:
+            worker.socket.unlink(missing_ok=True)
+            self.cpu_budget.release(worker.cgroup)
+            worker.cgroup = None
+            if worker.log_thread:
+                worker.log_thread.join(timeout=2)
 
     def call(self, context, action, payload, *, timeout=None, development=None):
         guard = self.invocation_guard(context, development) if self.invocation_guard else nullcontext(context)

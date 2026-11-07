@@ -32,7 +32,7 @@ class PackageValidationTests(unittest.TestCase):
         self.assertTrue(info['descriptor']['buildPlatform']['purePython'])
 
     def test_supported_sdk_patch_keeps_previous_sdk_versions_compatible(self):
-        for version in ('1.0.0', '1.1.0', '1.1.1'):
+        for version in ('1.0.0', '1.1.0', '1.1.1', '1.1.2'):
             with self.subTest(version=version):
                 package = make_package(self.temp.name, sdk_version=version)
                 self.assertTrue(inspect_package(package)['manifest']['backend'])

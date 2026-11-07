@@ -85,7 +85,7 @@ def inspect_package(package):
             build = descriptor.get('buildPlatform', {})
             require(build.get('purePython') is True, 400, '首期仅接受纯 Python 后端制品。', 'plugin_incompatible')
             wheels = {name: data for name, data in files.items() if name.startswith('wheels/')}
-            require(len(wheels) >= 2 and any(re.fullmatch(r'lele_plugin_sdk-1\.(?:0\.0|1\.[01])-py3-none-any\.whl', Path(name).name) for name in wheels), 400, '插件缺少固定版本 SDK wheel。')
+            require(len(wheels) >= 2 and any(re.fullmatch(r'lele_plugin_sdk-1\.(?:0\.0|1\.[0-2])-py3-none-any\.whl', Path(name).name) for name in wheels), 400, '插件缺少固定版本 SDK wheel。')
             module = manifest['backend']['entryModule'].replace('.', '/')
             require('backend/' + module + '.py' in files or 'backend/' + module + '/__init__.py' in files, 400, '插件后端入口缺失。')
             for name, data in wheels.items():

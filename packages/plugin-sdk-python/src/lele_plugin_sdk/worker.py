@@ -108,16 +108,16 @@ def main(argv=None):
         parser.error("invalid concurrency")
     os.umask(0o077)
     # Limits are installed here rather than preexec_fn, which is unsafe in a
-    # threaded parent. systemd adds aggregate CPU/memory/process budgets.
+    # threaded parent. Cumulative RLIMIT_CPU is intentionally unset: normal
+    # requests would eventually exhaust it and kill the cached worker.
+    # Production CPU rates come from the runtime service cgroup.
     import resource
     resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
     resource.setrlimit(resource.RLIMIT_NOFILE, (256, 256))
     # Darwin's RLIMIT_AS does not reliably describe resident memory. Enforce
-    # address-space limits on Linux, where production workers run. CPU seconds
-    # cap a runaway process independently of the runtime's aggregate cgroup.
+    # address-space limits on Linux, where production workers run.
     if sys.platform.startswith('linux'):
         resource.setrlimit(resource.RLIMIT_AS, (512 * 1024 * 1024, 512 * 1024 * 1024))
-    resource.setrlimit(resource.RLIMIT_CPU, (60, 61))
     resource.setrlimit(resource.RLIMIT_FSIZE, (8 * 1024 * 1024, 8 * 1024 * 1024))
     module = importlib.import_module(args.module)
     args.socket.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
