@@ -27,6 +27,12 @@ RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 TasksMax=96
 MemoryMax=512M
 CPUQuota=150%
+# CPUQuota caps this service and all workers together at 1.5 CPUs.
+# The supervisor creates one child cgroup per worker at 1 CPU.
+# DelegateSubgroup keeps the main process on a leaf so children can use the cpu controller.
+# Do not enable ProtectControlGroups; it would make this delegation read-only.
+Delegate=cpu
+DelegateSubgroup=supervisor
 LimitNOFILE=1024
 LimitCORE=0
 
