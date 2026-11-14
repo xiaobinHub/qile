@@ -31,8 +31,15 @@ class PluginBridge:
         def work(cur):
             current = active_context(cur, plugin_id, child_id)
             assert_fences(current, context)
+            task_id = None
             if job:
-                self._job_access(cur, current, context, action)
+                task_id = self._job_access(cur, current, context, action, payload)
+            if action.startswith('autoBooking.'):
+                require(plugin_id == 'mison-booking', 403, '此插件不能自动约课。', 'plugin_capability_denied')
+                for capability in ('plugin.private-state', 'plugin.credentials', 'plugin.jobs.schedule', 'plugin.external-operations'):
+                    self._capability(current, capability)
+                from . import auto_booking
+                return auto_booking.handle(cur, current, context, action, payload)
             require(action in ('actor.info', 'private.get', 'private.put', 'private.delete',
                                'credential.get', 'session.get', 'session.begin', 'session.finish', 'session.fail', 'session.disconnect', 'session.invalidate', 'operation.begin', 'operation.mark-dispatch',
                                'operation.stage', 'operation.finish', 'operation.get', 'operation.list',
@@ -54,6 +61,9 @@ class PluginBridge:
                 self._capability(current, 'plugin.credentials')
                 self._capability(current, 'plugin.private-state')
                 from . import login_sessions
+                if plugin_id == 'mison-booking' and action in ('session.disconnect', 'session.finish'):
+                    from .auto_booking import disconnect
+                    disconnect(cur, current)
                 before = private_store.get(cur, current, 'login-session', 'current') if action in ('session.disconnect', 'session.finish') and plugin_id == 'mison-booking' else None
                 result = login_sessions.handle(cur, current, context, action, payload, self.vault)
                 if plugin_id == 'mison-booking' and action == 'session.disconnect':
@@ -69,12 +79,14 @@ class PluginBridge:
                 return result
             if action == 'private.get':
                 self._capability(current, 'plugin.private-state')
+                require(payload.get('collection') not in ('auto-booking', 'auto-booking-log'), 403, '自动约课状态由宿主管理。', 'plugin_capability_denied')
                 include_expired = payload.get('includeExpired', False)
                 require(type(include_expired) is bool, 400, 'includeExpired必须为布尔值。', 'VALIDATION_ERROR')
                 return {'ok': True, 'data': {'record': private_store.get(cur, current, payload.get('collection'),
                                                                        payload.get('recordId'), include_expired=include_expired)}}
             if action == 'private.put':
                 self._capability(current, 'plugin.private-state')
+                require(payload.get('collection') not in ('auto-booking', 'auto-booking-log'), 403, '自动约课状态由宿主管理。', 'plugin_capability_denied')
                 expires_at = None
                 if payload.get('expiresAt') is not None:
                     try: expires_at = datetime.fromisoformat(payload['expiresAt'])
@@ -84,21 +96,25 @@ class PluginBridge:
                                                                                 payload.get('payload'), expected_revision=payload.get('expectedRevision'), expires_at=expires_at)}}
             if action == 'private.delete':
                 self._capability(current, 'plugin.private-state')
+                require(payload.get('collection') not in ('auto-booking', 'auto-booking-log'), 403, '自动约课状态由宿主管理。', 'plugin_capability_denied')
                 return {'ok': True, 'data': private_store.delete(cur, current, payload.get('collection'), payload.get('recordId'),
                                                                  expected_revision=payload.get('expectedRevision', 0))}
             if action == 'credential.get':
                 self._capability(current, 'plugin.credentials')
                 from . import credential_vault
                 return {'ok': True, 'data': {'token': credential_vault.token(cur, current, payload.get('credentialId'), self._vault_available(self.vault))}}
-            return self._operation(cur, current, context, action, payload)
+            operation_context = context
+            if task_id == 'auto-booking':
+                from .auto_booking import operation_context as admitted_context
+                operation_context = admitted_context(cur, current, context, action, payload)
+            return self._operation(cur, current, operation_context, action, payload)
         return self.service.transaction(work)
 
     @staticmethod
-    def _job_access(cur, current, context, action):
+    def _job_access(cur, current, context, action, payload=None):
         # Runtime signature and active invocation admission are checked before
         # this bridge. Recheck the live DB lease/attempt in the write transaction.
-        require(current['plugin_id'] == 'mison-booking' and action in (
-            'session.get', 'session.invalidate', 'courseSync.get', 'courseSync.run')
+        require(current['plugin_id'] == 'mison-booking'
             and {'plugin.jobs.schedule', 'plugin.credentials', 'plugin.private-state'} <= set(context.get('capabilities', [])),
             403, '后台任务不能执行此动作。', 'plugin_capability_denied')
         try:
@@ -107,12 +123,25 @@ class PluginBridge:
             require(False, 403, '后台任务身份不正确。', 'plugin_job_revoked')
         attempt = context.get('jobAttempt')
         require(type(attempt) is int and attempt > 0, 403, '后台任务身份不正确。', 'plugin_job_revoked')
-        cur.execute("""SELECT 1 FROM lele.plugin_jobs WHERE id=%s AND plugin_id=%s AND child_id=%s
-AND task_id='sync-courses' AND status='running' AND NOT cancel_requested AND lease_until>now()
+        cur.execute("""SELECT task_id FROM lele.plugin_jobs WHERE id=%s AND plugin_id=%s AND child_id=%s
+AND task_id IN ('sync-courses','auto-booking') AND status='running' AND NOT cancel_requested AND lease_until>now()
 AND attempt=%s AND generation=%s AND config_revision=%s AND release_epoch=%s AND release_id=%s FOR SHARE""",
             (job_id, current['plugin_id'], current['child_id'], attempt, current['generation'],
              current['configRevision'], current['releaseEpoch'], current['releaseId']))
-        require(cur.fetchone() is not None, 409, '后台任务租约或运行资格已失效。', 'plugin_job_revoked')
+        row = cur.fetchone()
+        require(row is not None, 409, '后台任务租约或运行资格已失效。', 'plugin_job_revoked')
+        task_id = row[0]
+        if task_id == 'sync-courses':
+            allowed = action in ('session.get', 'session.invalidate', 'courseSync.get', 'courseSync.run')
+        else:
+            allowed = (action in ('session.get', 'session.invalidate', 'autoBooking.get', 'autoBooking.begin',
+                                   'autoBooking.guard', 'autoBooking.prepare', 'autoBooking.checkpoint', 'autoBooking.finish',
+                                   'autoBooking.outcome', 'autoBooking.release', 'autoBooking.observe', 'operation.begin', 'operation.mark-dispatch',
+                                   'operation.finish', 'operation.get')
+                       or action in ('private.get', 'private.put') and (payload or {}).get('collection') == 'auto-booking-draft')
+            require('plugin.external-operations' in context.get('capabilities', []), 403, '任务未获得预约能力。', 'plugin_capability_denied')
+        require(allowed, 403, '后台任务不能执行此动作。', 'plugin_capability_denied')
+        return task_id
 
     @staticmethod
     def _capability(current, capability):

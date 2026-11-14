@@ -2,6 +2,39 @@
 
 final result: passed
 
+## 2026-11-13 美森自动约课：按两张确认稿还原
+
+final result: passed
+
+- 设置页视觉来源：`/var/folders/40/58fnhr6110n87z4ynzrjc57w0000gn/T/codex-clipboard-6d6b51e2-47b8-4547-bb6d-d84a5213e03e.png`，1448×1086。
+- 看板视觉来源：`/var/folders/40/58fnhr6110n87z4ynzrjc57w0000gn/T/codex-clipboard-5aa53424-9f39-4f93-86a6-7710a98147db.png`，1516×1037。
+- 最终实现截图：`/tmp/mison-auto-ui-qa/settings.png`、`/tmp/mison-auto-ui-qa/dashboard.png`。浏览器 CSS viewport 与各自来源像素尺寸一致，deviceScaleFactor=1。全景比较图等比缩放至每侧850px；局部比较按相同内容宽度等比缩放，无非等比拉伸。
+- 全景同图证据：`/tmp/mison-auto-ui-qa/settings-full.png`、`/tmp/mison-auto-ui-qa/dashboard-content.png`、`/tmp/mison-auto-ui-qa/dashboard-full.png`；局部同图证据：`/tmp/mison-auto-ui-qa/settings-calendar-weekdays.png`、`/tmp/mison-auto-ui-qa/settings-teachers-execution.png`、`/tmp/mison-auto-ui-qa/dashboard-teachers-slots.png`。已打开来源与实现合成后的同图，逐项比较。
+- 匹配状态：三位老师、八个目标日期、四个已约日期，统计12/138/4 of 8。日历与排班采用固定测试数据；模拟日期是11月2日，来源稿高亮11月12日。老师姓名、无头像时的字母fallback、实际排班数量均来自测试API，未在产品中硬编码概念稿数字或头像。
+
+### 发现、修复与复核
+
+1. 初版证据 `mison-frontend-HrLI8l/auto-failure-1.png`：休眠开关被网格拉成整列，保存按钮因看板通用规则错位，七天编辑区域过高。已固定开关的组件宽度，将页脚规则限定于看板，恢复设置页右侧成组按钮，并压缩星期行内部空隙。第一轮结果 blocked。
+2. 第二版证据 `mison-frontend-qnF9C4/auto-reference-settings-1448x1086.png`：设置网格高806px，底部卡片被固定页脚遮挡；老师与时段的字号层级偏弱。已把休眠时间与恢复提示放到同一行、收起冗余可视说明、调整标题/时段的语义字号。最终网格为717px，上排355px、下排348px，20px列间距；在1448×1086视口中四卡片、七天行及保存页脚全部可见。第二轮结果 blocked 后已修复。
+3. 第二版看板的日期范围浮层未关闭，且在较小视口与来源图比较时产生额外换行。已修正捕获状态，在1516×1037的相同来源尺寸复核，并调整时段胶囊水平内边距。最终前五日时段分别占1/2/0/2/2行，保持每位老师独立、日期纵排和时段横排，最多20个时段无需堆成多列小卡片。第三轮同图复核无遗留P0/P1/P2。
+
+### 五项还原检查
+
+- 字体：沿用项目Inter与中文fallback，卡片标题使用detail、排班标题使用number、时段使用section，避免另建字体体系。标题、日期、老师与状态数字的权重可区分，无不可读省略或标签相撞。
+- 间距与布局：设置页34/66双栏、四个边框卡片、整宽月历和七天展开行；看板单条统计、独立老师卡片、窄日期列及横向时段列表。实际宿主导航与插件标签保留当前项目结构，来源设置稿的旧品牌页头不复制进插件。
+- 色彩：使用项目黄色主色、浅灰表面和绿色成功token；本人已约使用局部蓝色token，已验证文字、边框和背景均呈蓝色。来源较亮的绿色按统一主题映射，属于预期样式约束。
+- 图像与图标：复用现有Avatar和Lucide组件。生产Avatar继续读取真实avatarUrl；隔离测试特意返回null时显示组件既有字母fallback，不用生成图片覆盖真实教师资料。
+- 文案：保留必要策略约束、休眠跨天说明、目标日/非目标日、可约/被占/本人已约。最近结果显示日期、时间与老师；未加载老师的可约数量显示破折号，不伪造来源稿数量。
+
+### 浏览器与本地部署验证
+
+- Browser plugin not available；使用仓库现有Playwright宿主应用及真实插件加载器，业务接口全部拦截为隔离fixture。
+- Chromium与WebKit分别通过8组流程：空策略、收藏分页及排序、多日期和时段保存、草稿保留、启停及结果核对、日志分页、排班失败续载与日期翻页、成员只读权限、1440/820/390响应式滚动。包含时段筛选实际过滤、蓝色本人已约、焦点返回和宿主样式隔离断言。
+- 部署后重跑两种浏览器，记录 `/tmp/mison-auto-ui-installed-chromium.json`、`/tmp/mison-auto-ui-installed-webkit.json`；两者findings和pageErrors均为空。页面身份、非空内容、框架错误遮罩、控制台、截图和主交互全部通过。
+- 代码检查：check:mison、plugin:build、check:typography、check:layout、Prettier与git diff --check通过。
+- 本地18787/18788开发服务和插件运行服务正常，插件1.1.1 ready。构建与已安装entry.js/style.css SHA256一致。账号凭据、安装开关、配置及更新前全部78条既有私有记录保持一致；运行期间新增的策略保存记录与课程同步识别记录单独确认，未回滚用户同期保存。真实自动约课enabled=false，累计检查及自动预约均为0。未进行生产发布或真实预约验收。
+- 剩余边界：物理iPad/PWA未实机验收。无待修复P0/P1/P2；可见姓名、日期、头像缺失与统计值随实际账号数据变化。
+
 ## 2026-10-30 待删除列表与数字角标（本轮）
 
 - 展开状态视觉来源：`/Users/xiaobin/.codex/generated_images/01a18163-c8cd-73b1-adfc-26c46d1dcd02/exec-c0a1c49c-47c6-41af-973c-1df7fdcf1ac9.png`，用户确认的简洁列表。

@@ -5,6 +5,8 @@ import { App } from "./app"
 import { PortalContext } from "./contexts"
 import "./utilities.css"
 import "./style.css"
+import "./auto-booking-dashboard.css"
+import "./auto-booking-settings.css"
 
 export function mount(container: HTMLElement, context: Parameters<typeof App>[0]["context"]) {
   const portal = context.overlay

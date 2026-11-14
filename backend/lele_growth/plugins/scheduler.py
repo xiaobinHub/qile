@@ -109,7 +109,14 @@ class PluginScheduler:
                 context = active_context(cur, pair['plugin_id'], pair['child_id'])
                 created = 0
                 for task in context['manifest'].get('tasks', []):
-                    key, due = occurrence(task, context['config'], now)
+                    if context['plugin_id'] == 'mison-booking' and task['id'] == 'auto-booking':
+                        from .auto_booking import due as auto_due
+                        pending = auto_due(cur, context, now)
+                        if pending is None:
+                            continue
+                        key, due = pending
+                    else:
+                        key, due = occurrence(task, context['config'], now)
                     self.enqueue_in_transaction(cur, context, task['id'], key, due, {'occurrenceKey': key})
                     created += 1
                 return created

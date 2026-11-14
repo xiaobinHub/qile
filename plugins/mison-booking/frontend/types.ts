@@ -176,3 +176,60 @@ export type PendingConnection = {
     reason: string | null
   }[]
 }
+
+export type AutoBookingWeekday = "1" | "2" | "3" | "4" | "5" | "6" | "7"
+export type AutoBookingTeacher = Pick<Teacher, "id" | "name" | "avatarUrl">
+export type AutoBookingConfig = {
+  revision: number
+  bindingRevision: number
+  canManage: boolean
+  teachers: AutoBookingTeacher[]
+  dates: string[]
+  weekdaySlots: Record<AutoBookingWeekday, string[]>
+  minNoticeHours: number
+  dailyLessons: number
+  rebookCancelled: boolean
+  sleep: { enabled: boolean; start: string; end: string }
+}
+export type AutoBookingSaveRequest = Omit<AutoBookingConfig, "revision" | "canManage"> & {
+  operationId: string
+  expectedRevision: number
+}
+export type AutoBookingEvent = {
+  id: string
+  at: string
+  kind: string
+  message: string
+  date?: string
+  teacherName?: string
+  time?: string
+}
+export type AutoBookingStatus = {
+  state: "running" | "stopped" | "sleeping"
+  phase: string
+  message: string
+  enabled: boolean
+  checks: number
+  totalBooked: number
+  nextCheckAt: string | null
+  lastCheckAt: string | null
+  fulfilledDates: string[]
+  targetDates: string[]
+  latestEvent: AutoBookingEvent | null
+  canManage: boolean
+}
+export type AutoBookingScheduleDay = {
+  date: string
+  state: "ready" | "unopened" | "error"
+  message?: string
+  slots: (TeacherSchedule["slots"][number] & { matches: boolean })[]
+  target: boolean
+  booked: boolean
+}
+export type AutoBookingSchedules = {
+  teacherId: string
+  days: AutoBookingScheduleDay[]
+  nextCursor: string | null
+  updatedAt: string
+}
+export type AutoBookingLogs = { items: AutoBookingEvent[]; nextCursor: string | null }

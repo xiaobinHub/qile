@@ -8,9 +8,10 @@ from datetime import datetime, timezone, timedelta
 from lele_plugin_sdk.bridge import BridgeClient, BridgeError
 
 class AuthError(Exception):
-    def __init__(self, code, message, operation_id=None):
+    def __init__(self, code, message, operation_id=None, *, retry_after=None):
         super().__init__(message)
         self.code, self.operation_id = code, operation_id
+        self.retry_after = retry_after
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, *args, **kwargs):

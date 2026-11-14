@@ -1,4 +1,15 @@
-import type { Bootstrap, BookingQuery, Draft, TeacherQuery, TeacherSchedule } from "./types"
+import type {
+  AutoBookingConfig,
+  AutoBookingLogs,
+  AutoBookingSaveRequest,
+  AutoBookingSchedules,
+  AutoBookingStatus,
+  Bootstrap,
+  BookingQuery,
+  Draft,
+  TeacherQuery,
+  TeacherSchedule,
+} from "./types"
 
 export class PluginApiError extends Error {
   constructor(
@@ -70,6 +81,37 @@ export const createDraft = (context: PluginContextLike, body: unknown) =>
   request<Draft>(context, "drafts", { method: "POST", body })
 export const getBookings = (context: PluginContextLike, status: string) =>
   request<BookingQuery>(context, `bookings?status=${status}`)
+
+export const getAutoBookingConfig = (context: PluginContextLike) =>
+  request<AutoBookingConfig>(context, "auto-booking/config")
+export const saveAutoBookingConfig = (context: PluginContextLike, body: AutoBookingSaveRequest) =>
+  request<AutoBookingConfig>(context, "auto-booking/config", { method: "PUT", body })
+export const getAutoBookingStatus = (context: PluginContextLike) =>
+  request<AutoBookingStatus>(context, "auto-booking/status")
+export const startAutoBooking = (
+  context: PluginContextLike,
+  body: { operationId: string; bindingRevision: number; expectedRevision: number },
+) => request<AutoBookingStatus>(context, "auto-booking/start", { method: "POST", body })
+export const stopAutoBooking = (
+  context: PluginContextLike,
+  body: { operationId: string; bindingRevision: number },
+) => request<AutoBookingStatus>(context, "auto-booking/stop", { method: "POST", body })
+export const getAutoBookingSchedules = (
+  context: PluginContextLike,
+  teacherId: string,
+  from: string,
+  to: string,
+  cursor?: string | null,
+) => {
+  const query = new URLSearchParams({ teacherId, from, to })
+  if (cursor) query.set("cursor", cursor)
+  return request<AutoBookingSchedules>(context, `auto-booking/schedules?${query}`)
+}
+export const getAutoBookingLogs = (context: PluginContextLike, cursor?: string | null) =>
+  request<AutoBookingLogs>(
+    context,
+    `auto-booking/logs${cursor ? `?${new URLSearchParams({ cursor })}` : ""}`,
+  )
 
 export type CourseSyncReview = {
   date: string | null

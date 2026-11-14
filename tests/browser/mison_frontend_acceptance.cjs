@@ -10,6 +10,10 @@ const out = fs.mkdtempSync(path.join(os.tmpdir(), "mison-frontend-"))
 async function main() {
   const touchAcceptance = process.env.IPAD_TOUCH_ACCEPTANCE === "1"
   const calendarAcceptance = process.env.CALENDAR_ACCEPTANCE === "1"
+  const autoBookingAcceptance = process.env.AUTO_BOOKING_ACCEPTANCE === "1"
+  const autoBookingFixture = autoBookingAcceptance
+    ? require("./mison_auto_booking_acceptance.cjs").createAutoBookingFixture()
+    : null
   const calendarFixture = calendarAcceptance
     ? require("./mison_calendar_acceptance.cjs").createCalendarFixture()
     : null
@@ -154,6 +158,13 @@ async function main() {
       locale: "zh-CN",
       ...(touchAcceptance ? { hasTouch: true, isMobile: engine.name() !== "webkit" } : {}),
     })
+    if (autoBookingAcceptance) {
+      await browserContext.route("**/*", async (route) => {
+        if (new URL(route.request().url()).origin === origin) return route.fallback()
+        autoBookingFixture.unexpected.push(route.request().url())
+        return route.abort("blockedbyclient")
+      })
+    }
     // HTTP custom domains do not expose randomUUID; exercise all plugin writes.
     await browserContext.addInitScript(() => {
       Object.defineProperty(Crypto.prototype, "randomUUID", {
@@ -217,6 +228,10 @@ async function main() {
             options.body.operationId,
             /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
           )
+        if (autoBookingFixture) {
+          const response = await autoBookingFixture.handle(relative, options)
+          if (response) return json(response)
+        }
         if (relative === "connection/login") {
           loginCalls++
           assert.equal(options.method, "POST")
@@ -649,6 +664,33 @@ async function main() {
     await loginForm.getByRole("button", { name: "登录", exact: true }).dblclick()
     await ready()
     assert.equal(loginCalls, 2, "double click sends one request")
+    if (autoBookingAcceptance) {
+      const result = await require("./mison_auto_booking_acceptance.cjs").exerciseAutoBooking({
+        page,
+        out,
+        fixture: autoBookingFixture,
+        child,
+        entryUrl,
+        hostStyle,
+        originalHostStyle,
+      })
+      assert.deepEqual(errors, [], "no browser exceptions or console errors")
+      assert.deepEqual(
+        autoBookingFixture.unexpected,
+        [],
+        "all business requests use known fixtures",
+      )
+      assert.equal(bookingCalls, 0, "automatic booking acceptance never submits a manual booking")
+      console.log(
+        JSON.stringify(
+          { ...result, engine: engine.name(), evidence: out, pageErrors: errors },
+          null,
+          2,
+        ),
+      )
+      assert.deepEqual(result.findings, [], "auto-booking acceptance findings")
+      return
+    }
     if (syncSettingsAcceptance) {
       await page.getByRole("button", { name: "账号设置", exact: true }).click()
       const dialog = page.getByRole("dialog", { name: "美森约课设置" })
@@ -829,7 +871,9 @@ async function main() {
       .getByRole("button", { name: /^查看.*档案$/ })
       .first()
       .click()
-    const profileAvatar = page.getByRole("dialog", { name: "教师档案" }).locator(".mison-avatar img")
+    const profileAvatar = page
+      .getByRole("dialog", { name: "教师档案" })
+      .locator(".mison-avatar img")
     await profileAvatar.waitFor()
     assert.match(await profileAvatar.getAttribute("src"), /^https:\/\/mp\.mison\.cn\//)
     await page.keyboard.press("Escape")
@@ -1594,7 +1638,10 @@ async function main() {
     assert.equal(
       requests.some((url) => {
         const host = new URL(url).hostname
-        return host === "api.mison.cn" || (host.endsWith(".mison.cn") && host !== "mp.mison.cn" && host !== "file.mison.cn")
+        return (
+          host === "api.mison.cn" ||
+          (host.endsWith(".mison.cn") && host !== "mp.mison.cn" && host !== "file.mison.cn")
+        )
       }),
       false,
       "no real Mison API traffic",

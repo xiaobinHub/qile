@@ -2,7 +2,7 @@
 import json
 import re
 from .auth import AuthError, bridge
-from .read_api import contracts, rows, schema
+from .read_api import contracts, rows, schema, _listed_complete
 
 TIME_RE = re.compile(r'(?:[01]\d|2[0-3]):[0-5]\d')
 RANGE_RE = re.compile(r'(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2})(?::\d{2})?(?:[-–](\d{2}:\d{2}))?')
@@ -52,10 +52,10 @@ def _page(client, contract, status, page):
                            {'classid': contract['classId'], 'page_size': 100, 'page_no': page, 'courseway': 0, 'blockid': 0,
                             **({'is_lesson_status': 1} if status == 'completed' else {})})
     data = response.get('data')
-    if not isinstance(data, dict) or type(data.get('allPage')) is not int:
+    if not isinstance(data, dict) or type(data.get('allPage')) is not int or data['allPage'] < 0:
         schema()
     source = rows(data.get('list'))
-    return source, data.get('lastPage') is True or page >= data['allPage']
+    return source, _listed_complete(data, page)
 
 
 def collect_lessons(client, *, max_pages=100, max_rows=5000):

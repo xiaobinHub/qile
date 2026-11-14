@@ -1,5 +1,6 @@
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@shared/components/ui/tabs"
 import { CourseCalendar } from "./course-calendar"
+import { AutoBooking } from "./auto-booking"
 import { clearBookingSource, reloadBookingSource } from "./booking-source"
 import { operationId as newOperationId } from "./operation-id"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
@@ -79,6 +80,7 @@ function StartupSkeleton() {
 export function App({ context }: { context: PluginContext }) {
   const [view, setView] = useState("teachers")
   const [calendarVisited, setCalendarVisited] = useState(false)
+  const [autoBookingVisited, setAutoBookingVisited] = useState(false)
   const [bootstrap, setBootstrap] = useState<Bootstrap | null>(null),
     [bootstrapError, setBootstrapError] = useState("")
   const [teachers, setTeachers] = useState<Teacher[]>([]),
@@ -699,6 +701,7 @@ export function App({ context }: { context: PluginContext }) {
     clearBookingSource()
     setView("teachers")
     setCalendarVisited(false)
+    setAutoBookingVisited(false)
     setBootstrap((old) => (old ? { ...old, connection } : old))
     setError("")
     setAccountOpen(false)
@@ -723,6 +726,7 @@ export function App({ context }: { context: PluginContext }) {
         onValueChange={(value) => {
           setView(value)
           if (value === "calendar") setCalendarVisited(true)
+          if (value === "auto-booking") setAutoBookingVisited(true)
         }}
       >
         <Card className="mison-booking gap-0 py-0" data-viewport-contained ref={root}>
@@ -735,6 +739,7 @@ export function App({ context }: { context: PluginContext }) {
                   <TabsList aria-label="美森约课功能" className="mison-page-tabs">
                     <TabsTrigger value="teachers">教师与约课</TabsTrigger>
                     <TabsTrigger value="calendar">课程日历</TabsTrigger>
+                    <TabsTrigger value="auto-booking">自动约课</TabsTrigger>
                   </TabsList>
                   <Button
                     variant="ghost"
@@ -922,6 +927,22 @@ export function App({ context }: { context: PluginContext }) {
                         upcomingCount={bootstrap.upcomingCount}
                         onBookings={() => setBookingsOpen(true)}
                         onResource={setResource}
+                      />
+                    ) : null}
+                  </TabsContent>
+                  <TabsContent
+                    value="auto-booking"
+                    forceMount
+                    hidden={view !== "auto-booking"}
+                    className="mison-auto-tab"
+                  >
+                    {autoBookingVisited ? (
+                      <AutoBooking
+                        key={`${context.child.id}:${bindingRevision}`}
+                        context={context}
+                        bindingRevision={bindingRevision}
+                        serverDate={bootstrap.serverDate}
+                        active={view === "auto-booking"}
                       />
                     ) : null}
                   </TabsContent>

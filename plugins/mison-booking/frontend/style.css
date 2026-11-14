@@ -94,7 +94,8 @@
   font-weight: 600;
 }
 .mison-booking > .mison-teachers-view,
-.mison-booking > .mison-calendar-tab {
+.mison-booking > .mison-calendar-tab,
+.mison-booking > .mison-auto-tab {
   display: flex;
   flex-direction: column;
   flex: 1;
@@ -1494,4 +1495,358 @@
   flex-direction: column;
   gap: 8px;
   min-width: 0;
+}
+
+.mison-auto-booking,
+.mison-auto-dashboard,
+.mison-auto-settings-panel,
+.mison-auto-settings,
+.mison-auto-teacher-tabs,
+.mison-auto-teacher-panel,
+.mison-auto-schedule {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  gap: 0;
+  margin: 0;
+  overflow: hidden;
+}
+.mison-auto-booking [role="tabpanel"][hidden] {
+  display: none !important;
+}
+.mison-auto-dashboard > .mison-empty {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+.mison-auto-toolbar,
+.mison-auto-summary,
+.mison-auto-footer,
+.mison-auto-schedule-toolbar,
+.mison-auto-range,
+.mison-auto-day-heading,
+.mison-auto-teacher-copy,
+.mison-auto-priority-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.mison-auto-toolbar,
+.mison-auto-summary,
+.mison-auto-footer,
+.mison-auto-schedule-toolbar {
+  flex: none;
+  flex-wrap: wrap;
+  padding: 12px 20px;
+}
+.mison-auto-toolbar > .mison-actions,
+.mison-auto-footer > .mison-button:first-of-type {
+  margin-left: auto;
+}
+.mison-auto-summary {
+  gap: 8px 20px;
+  padding-bottom: 8px;
+  font-size: var(--text-caption);
+  font-variant-numeric: tabular-nums;
+}
+.mison-auto-summary > span {
+  white-space: nowrap;
+}
+.mison-auto-running-copy {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: 4px;
+  padding: 0 20px 12px;
+  overflow-wrap: anywhere;
+}
+.mison-auto-running-copy p,
+.mison-auto-feedback {
+  font-size: var(--text-caption);
+  line-height: var(--text-caption--line-height);
+}
+.mison-auto-feedback {
+  flex: none;
+  padding: 8px 20px;
+}
+.mison-auto-teacher-navigation {
+  flex: none;
+  min-width: 0;
+  overflow-x: auto;
+  overscroll-behavior: contain;
+  padding: 0 20px 8px;
+}
+.mison-auto-teacher-navigation [role="tablist"] {
+  height: auto;
+  min-width: 100%;
+  justify-content: flex-start;
+}
+.mison-auto-teacher-navigation [role="tab"] {
+  flex: none;
+  min-height: 48px;
+  gap: 8px;
+  padding: 4px 12px;
+}
+.mison-auto-teacher-navigation .mison-avatar,
+.mison-auto-priorities .mison-avatar {
+  width: 32px;
+  height: 32px;
+  flex: none;
+}
+.mison-auto-range {
+  flex-wrap: wrap;
+}
+.mison-auto-range > .mison-date-picker,
+.mison-auto-range > [data-slot="popover-trigger"] {
+  width: auto;
+}
+.mison-auto-schedule-scroll,
+.mison-auto-settings-scroll {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-y pinch-zoom;
+  scrollbar-gutter: stable;
+}
+.mison-auto-schedule-scroll:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: -2px;
+}
+.mison-auto-day {
+  display: grid;
+  grid-template-columns: 180px minmax(0, 1fr);
+  align-items: start;
+  gap: 20px;
+  padding: 20px;
+  border-top: 1px solid var(--border);
+}
+.mison-auto-day-heading {
+  flex-direction: column;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  margin-bottom: 0;
+}
+.mison-auto-slots,
+.mison-auto-day-loading,
+.mison-auto-selected-dates {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.mison-auto-slot {
+  height: auto;
+  min-height: 32px;
+  max-width: 100%;
+  flex: none;
+  justify-content: flex-start;
+  gap: 4px 8px;
+  padding: 6px 12px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.mison-auto-slot time {
+  white-space: nowrap;
+}
+.mison-auto-slot[data-state="available"] {
+  border-color: color-mix(in srgb, var(--success) 35%, var(--border));
+  background: color-mix(in srgb, var(--success) 7%, var(--card));
+  color: var(--success);
+}
+.mison-auto-slot[data-state="mine"] {
+  background: var(--accent);
+  border-color: var(--primary);
+}
+.mison-auto-slot[data-state="occupied"],
+.mison-auto-slot[data-state="unscheduled"] {
+  background: var(--muted);
+  color: var(--muted-foreground);
+}
+.mison-auto-schedule-progress {
+  flex: none;
+  padding: 8px 20px;
+  font-size: var(--text-caption);
+  color: var(--muted-foreground);
+}
+.mison-auto-latest {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mison-auto-settings-scroll {
+  padding: 20px;
+}
+.mison-auto-settings-scroll > p,
+.mison-auto-settings-scroll > .mison-notice {
+  margin-bottom: 20px;
+}
+.mison-auto-priorities,
+.mison-auto-logs {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.mison-auto-priorities > li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.mison-auto-priority-actions {
+  flex: none;
+  margin-left: auto;
+  gap: 0;
+}
+.mison-auto-teacher-copy {
+  flex: 1;
+  overflow-wrap: anywhere;
+}
+.mison-auto-teacher-copy span {
+  min-width: 0;
+}
+.mison-auto-drag {
+  flex: none;
+  cursor: grab;
+}
+.mison-auto-drag:active {
+  cursor: grabbing;
+}
+.mison-auto-priorities.is-compact {
+  flex-direction: row;
+  flex-wrap: wrap;
+  font-variant-numeric: tabular-nums;
+}
+.mison-auto-priorities.is-compact > li {
+  padding: 4px;
+}
+.mison-auto-date-selection {
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 20px;
+}
+.mison-auto-date-selection > .shared-calendar {
+  flex: none;
+}
+.mison-auto-calendar-booked::after {
+  position: absolute;
+  bottom: 3px;
+  left: calc(50% - 2px);
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--foreground);
+  content: "";
+  pointer-events: none;
+}
+.mison-auto-selected-dates {
+  flex: 1 1 240px;
+}
+.mison-auto-weekdays > [role="tablist"] {
+  width: 100%;
+  height: auto;
+  flex-wrap: wrap;
+}
+.mison-auto-weekdays [role="tab"] {
+  min-height: 44px;
+}
+.mison-auto-weekday {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 12px;
+}
+.mison-auto-add-slot[data-slot="field"] {
+  flex-direction: row;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.mison-auto-add-slot[data-slot="field"] > * {
+  width: auto;
+}
+.mison-auto-add-slot > .relative {
+  flex: 0 1 180px;
+}
+.mison-auto-notice-hours {
+  max-width: 320px;
+}
+.mison-auto-sleep-fields[data-slot="field-group"] {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 180px));
+  gap: 12px;
+}
+.mison-auto-favorites {
+  gap: 12px;
+}
+.mison-auto-favorites [data-slot="field-label"] {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.mison-auto-logs > li {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding-block: 12px;
+  border-bottom: 1px solid var(--border);
+  overflow-wrap: anywhere;
+}
+.mison-auto-log-meta {
+  height: auto;
+  max-width: 100%;
+  white-space: normal;
+}
+@container mison (max-width: 600px) {
+  .mison-auto-day {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+  }
+  .mison-auto-day-heading {
+    flex-direction: row;
+    align-items: center;
+  }
+  .mison-auto-toolbar,
+  .mison-auto-summary,
+  .mison-auto-footer,
+  .mison-auto-schedule-toolbar,
+  .mison-auto-day {
+    padding-inline: 12px;
+  }
+  .mison-auto-running-copy,
+  .mison-auto-feedback,
+  .mison-auto-schedule-progress {
+    padding-inline: 12px;
+  }
+  .mison-auto-teacher-navigation {
+    padding-inline: 12px;
+  }
+  .mison-auto-settings-scroll {
+    padding: 16px 12px;
+  }
+  .mison-auto-footer > small {
+    flex-basis: 100%;
+  }
+  .mison-auto-priorities:not(.is-compact) > li {
+    flex-wrap: wrap;
+  }
+  .mison-auto-priorities:not(.is-compact) .mison-auto-priority-actions {
+    justify-content: flex-end;
+    flex-basis: 100%;
+  }
+  .mison-auto-date-selection .shared-calendar {
+    padding-inline: 0;
+  }
 }

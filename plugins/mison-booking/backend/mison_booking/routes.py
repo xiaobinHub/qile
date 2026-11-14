@@ -30,6 +30,19 @@ def handle(context, path, method, body):
     if path == "connection" and method == "DELETE":
         from .auth import bridge, public_connection
         return success(public_connection(bridge(context, 'session.disconnect', body)))
+    if path.startswith('auto-booking/'):
+        from . import auto_booking
+        if path in ('auto-booking/config', 'auto-booking/status') and method == 'GET':
+            return success(auto_booking.get(context)['config' if path.endswith('config') else 'status'])
+        if path == 'auto-booking/config' and method == 'PUT':
+            return success(auto_booking.save(context, body))
+        if path in ('auto-booking/start', 'auto-booking/stop') and method == 'POST':
+            return success(auto_booking.control(context, path.rsplit('/', 1)[1], body))
+        if path == 'auto-booking/schedules' and method == 'GET':
+            return success(auto_booking.schedules(context, body))
+        if path == 'auto-booking/logs' and method == 'GET':
+            return success(auto_booking.host(context, 'logs', body))
+        raise PluginError('ACTION_UNAVAILABLE', '自动约课操作不存在。')
     if path == "course-sync" and method == "GET":
         from .course_sync import get_settings
         return success(get_settings(context))

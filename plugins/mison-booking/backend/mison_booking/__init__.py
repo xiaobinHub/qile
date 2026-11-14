@@ -8,6 +8,9 @@ def health():
 
 
 def handle_job(context, task, payload):
+    if task == 'auto-booking':
+        from .auto_booking import run
+        return run(context)
     from .course_sync import handle_job as sync_job
     from .auth import AuthError
     try:

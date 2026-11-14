@@ -55,18 +55,19 @@ def output(client,op):
             'message':result.pop('message',None) or MESSAGES[op['state']],
             'canReconcile':op['state'] not in ('failed','cancelled'), 'canRepair':False,'result':result or None}
 
-def live_rows(client,status='upcoming'):
+def live_rows(client,status='upcoming', *, max_pages=5):
     contract=read_api.contracts(client); values=[];seen=set()
-    for page in range(1,6):
+    for page in range(1,max_pages + 1):
         data=client.call('getLiveList' if status=='upcoming' else 'getBackList',
              {'classid':contract['classId'],'page_size':100,'page_no':page,'courseway':0,'blockid':0,
               **({'is_lesson_status':1} if status=='completed' else {})}).get('data')
-        if not isinstance(data,dict) or type(data.get('allPage')) is not int: read_api.schema()
+        if not isinstance(data,dict) or type(data.get('allPage')) is not int or data['allPage'] < 0: read_api.schema()
+        complete=read_api._listed_complete(data,page)
         source=read_api.rows(data.get('list'))
         for row in source:
             cid=read_api.identifier(row.get('cid'))
             if cid not in seen:values.append(row);seen.add(cid)
-        if data.get('lastPage') is True or page>=data['allPage']:return values
+        if complete:return values
     raise AuthError('QUERY_TOO_LARGE','预约记录过多，本次未发送操作，请缩小范围后重试。')
 
 def validate_courses(client,draft):
@@ -102,6 +103,17 @@ def book(client,body):
         drafts.lock(client,record,op['operationId'])
         # Second availability read inside the account lock; no stale schedule write.
         drafts.slots(client,draft['teacher']['id'],draft['date'],[item['start'] for item in draft['lessons']])
+        if client.context.get('jobId'):
+            occupied_dates = set()
+            for status in ('upcoming', 'completed'):
+                for row in live_rows(client, status, max_pages=100):
+                    raw_date = row.get('datestart')
+                    if not isinstance(raw_date, str) or not re.match(r'^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}', raw_date):
+                        read_api.schema('已有课程日期不完整，未提交自动预约。')
+                    occupied_dates.add(read_api.date_arg(raw_date[:10]))
+            if draft['date'] in occupied_dates:
+                raise AuthError('SLOT_UNAVAILABLE', '当天已有课程，本次没有提交预约。')
+            bridge(client.context, 'autoBooking.guard', {})
     except AuthError as error:return output(client,finish(client,op,'failed',str(error)))
     op=advance(client,op,'mark-dispatch',stage='appointment_sent')
     payload={'tid':int(draft['teacher']['id']),'userid':client.userid,'ddate':draft['date'],
@@ -109,8 +121,8 @@ def book(client,body):
              'lesson_period':len(draft['lessons']),'courseware_id':','.join(item['courseware']['id'] for item in draft['lessons'])}
     try:client.mutate('onevoneAppointment',payload)
     except AuthError as error:
-        state='failed' if error.code in ('UPSTREAM_REJECTED','RECONNECT_REQUIRED') else 'uncertain'
-        op=finish(client,op,state,str(error))
+        state='failed' if error.code in ('UPSTREAM_REJECTED','RECONNECT_REQUIRED','UPSTREAM_RATE_LIMITED') else 'uncertain'
+        op=finish(client,op,state,str(error),errorCode=error.code,retryAfter=error.retry_after)
     else:op=finish(client,op,'succeeded','预约成功。',bookingKeys=[],pendingRecordSync=True)
     if op['state'] in ('succeeded','uncertain'):
         try:op=reconcile_book(client,op)
@@ -118,26 +130,40 @@ def book(client,body):
     return output(client,op)
 
 def reconcile_book(client,op):
-    rows=live_rows(client);details=op['canonicalRequest']['details'];baseline=set(op['baseline']['cids']);contract=read_api.contracts(client)
-    found=[];items=[]
+    details=op['canonicalRequest']['details'];baseline=set(op['baseline']['cids']);contract=read_api.contracts(client)
+    rows=[('upcoming',row) for row in live_rows(client)]
+    if details['date'] <= read_api.now().date().isoformat():
+        rows += [('completed',row) for row in live_rows(client,'completed',max_pages=100 if client.context.get('jobId') else 5)]
+    unique={}
+    for status,row in rows:
+        unique.setdefault(read_api.identifier(row.get('cid')),(status,row))
+    found=[];items=[];booking_evidence=[]
     for lesson in details['lessons']:
         expected=details['date']+'T'+lesson['start']
         candidates=[]
-        for raw in rows:
-            value=read_api.booking(client,contract,'upcoming',raw)
+        for status,raw in unique.values():
+            value=read_api.booking(client,contract,status,raw)
             if value['cid'] in baseline or not value['startsAt'].startswith(expected) or not value['courseware'] or value['courseware']['id']!=lesson['courseware']['id']:continue
             teacher=value['teacher']
             if (teacher['id']==details['teacher']['id'] if teacher['id'] else teacher['name'].strip().casefold()==details['teacher']['name'].strip().casefold()):candidates.append(value)
-        if len(candidates)==1:found.append(candidates[0]['key'])
+        if len(candidates)==1:
+            value=candidates[0]
+            from .course_sync import _lesson
+            source_status,source_row=unique[value['cid']]
+            source_evidence=_lesson(source_row,source_status)
+            found.append(value['key'])
+            booking_evidence.append({'cid':value['cid'],'date':details['date'],'startTime':lesson['start'],
+                'teacherId':value['teacher']['id'],'teacherName':value['teacher']['name'],
+                'coursewareId':lesson['courseware']['id'],'bookingId':source_evidence['bookingId'],'bid':source_evidence['bid']})
         items.append({'start':lesson['start'],'coursewareTitle':lesson['courseware']['title'],'state':'succeeded' if len(candidates)==1 else 'uncertain'})
     all_found=len(found)==len(details['lessons'])
     if op['state']=='succeeded':
         # A positive appointment acknowledgement is definitive; list lag isn't failure.
         if op.get('result',{}).get('pendingRecordSync'):
             # Terminal receipts stay immutable. Resource keys can be re-read by the client.
-            op={**op,'result':{**op['result'],'bookingKeys':found,'pendingRecordSync':not all_found,'lessons':items}}
+            op={**op,'result':{**op['result'],'bookingKeys':found,'bookingEvidence':booking_evidence,'pendingRecordSync':not all_found,'lessons':items}}
         return op
-    if all_found:return finish(client,op,'succeeded','已核对，预约成功。',bookingKeys=found,lessons=items)
+    if all_found:return finish(client,op,'succeeded','已核对，预约成功。',bookingKeys=found,bookingEvidence=booking_evidence,lessons=items)
     if found:return finish(client,op,'partially_succeeded',bookingKeys=found,lessons=items)
     return op
 

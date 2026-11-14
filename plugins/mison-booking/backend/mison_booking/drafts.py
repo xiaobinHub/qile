@@ -23,7 +23,7 @@ def find_record(client, draft_id):
     # Old drafts have a database TTL as well as a payload expiresAt. Read them
     # explicitly without TTL filtering; child/plugin and account fences still apply.
     record = bridge(client.context, 'private.get', {
-        'collection': COLLECTION, 'recordId': uid(draft_id), 'includeExpired': True})['record']
+        'collection': 'auto-booking-draft' if client.context.get('jobId') else COLLECTION, 'recordId': uid(draft_id), 'includeExpired': True})['record']
     if record:
         record['payload']['expiresAt'] = None
     return record
@@ -48,7 +48,7 @@ def expected(draft, revision):
 
 def put(client, draft, record_revision):
     draft['expiresAt'] = None
-    return bridge(client.context, 'private.put', {'collection': COLLECTION, 'recordId': draft['id'],
+    return bridge(client.context, 'private.put', {'collection': 'auto-booking-draft' if client.context.get('jobId') else COLLECTION, 'recordId': draft['id'],
                   'payload': draft, 'expectedRevision': record_revision, 'expiresAt': None})['record']
 
 def slots(client, tid, day, starts):

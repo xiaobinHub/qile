@@ -5,6 +5,8 @@ import re
 import time
 import urllib.error
 import urllib.request
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 from .auth import AuthError, NoRedirect, bridge, session
 from .read_store import scope
 
@@ -50,6 +52,14 @@ class Client:
                 response = urllib.request.build_opener(NoRedirect()).open(request, timeout=min(10, remaining))
             except urllib.error.HTTPError as error:
                 if error.code in (401, 403): self.expired()
+                if error.code == 429:
+                    value = error.headers.get('Retry-After', '')
+                    try:
+                        retry_after = int(value) if value.isdecimal() else int((parsedate_to_datetime(value) - datetime.now(timezone.utc)).total_seconds())
+                    except (TypeError, ValueError, OverflowError):
+                        retry_after = 600
+                    error.close()
+                    raise AuthError('UPSTREAM_RATE_LIMITED', '美森请求过于频繁，已延后下一次检查。', retry_after=max(60, min(86400, retry_after)))
                 http_status, response = error.code, error
             with response:
                 raw = bytearray()
