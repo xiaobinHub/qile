@@ -133,9 +133,10 @@ def claim(state, current, account_key, vault, record_event):
             continue
         claim_id = str(uuid.uuid4())
         item.update(state='sending', claimId=claim_id, recipientCount=len(recipients))
+        _, month, day = item['date'].split('-')
         return {'operationId': operation_id, 'claimId': claim_id, 'keys': recipients,
                 'title': '美森约课成功',
-                'body': f"{item['date']} {item['time']} · {item['teacherName']}老师\n已成功预约 {item['lessons']} 节课程。"}
+                'body': f"成功预约 {item['teacherName']} {int(month)}/{int(day)} {item['time']}"}
     return None
 
 

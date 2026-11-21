@@ -256,7 +256,7 @@ class BarkNameStorageTests(unittest.TestCase):
         payload = json.loads(opener.open.call_args.args[0].data)
         self.assertEqual(payload, {
             'device_keys': [KEY_B, KEY_A], 'title': '美森约课成功',
-            'body': '2099-11-20 19:30 · 测试老师\n已成功预约 2 节课程。', 'group': '美森自动约课', 'ttl': 600})
+            'body': '成功预约 测试 11/20 19:30', 'group': '美森自动约课', 'ttl': 600})
         notifications.finish(self.state, {**notice, 'state': outcome}, lambda *args: None)
         self.assertIsNone(notifications.claim(self.state, self.current, self.account_key, self.vault, lambda *args: None))
         opener.open.assert_called_once()
