@@ -132,7 +132,8 @@ AND attempt=%s AND generation=%s AND config_revision=%s AND release_epoch=%s AND
         require(row is not None, 409, '后台任务租约或运行资格已失效。', 'plugin_job_revoked')
         task_id = row[0]
         if task_id == 'sync-courses':
-            allowed = action in ('session.get', 'session.invalidate', 'courseSync.get', 'courseSync.run')
+            allowed = action in ('session.get', 'session.invalidate', 'courseSync.get', 'courseSync.run',
+                                  'autoBooking.cleanup-logs')
         else:
             allowed = (action in ('session.get', 'session.invalidate', 'autoBooking.get', 'autoBooking.begin', 'autoBooking.snapshot-save',
                                    'autoBooking.snapshot', 'autoBooking.snapshot-stage', 'autoBooking.snapshot-day',

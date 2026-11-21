@@ -50,6 +50,10 @@ def get(context):
     return host(context, 'get')
 
 
+def cleanup_logs(context):
+    return host(context, 'cleanup-logs')
+
+
 def save(context, body):
     fields = {'teachers', 'dates', 'weekdaySlots', 'minNoticeHours', 'dailyLessons', 'rebookCancelled', 'checkInterval', 'sleep', 'notifications'}
     body = {**body, 'checkInterval': body.get('checkInterval', {'minMinutes': 4, 'maxMinutes': 6})}

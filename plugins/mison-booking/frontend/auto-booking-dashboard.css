@@ -440,8 +440,8 @@
 .mison-auto-teacher-count {
   display: inline-grid;
   place-items: center;
-  min-width: 4ch;
-  margin-left: 4px;
+  min-width: 2ch;
+  margin-left: 0;
   color: var(--muted-foreground);
   font-size: var(--text-meta);
   font-variant-numeric: tabular-nums;

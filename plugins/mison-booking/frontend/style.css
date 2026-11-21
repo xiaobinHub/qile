@@ -1803,6 +1803,9 @@
   border-bottom: 1px solid var(--border);
   overflow-wrap: anywhere;
 }
+.mison-auto-log-sentinel {
+  height: 1px;
+}
 .mison-auto-log-filter {
   display: flex;
   gap: 4px;

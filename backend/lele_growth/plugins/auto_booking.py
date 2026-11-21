@@ -16,6 +16,7 @@ from .policy import row_dict
 COLLECTION = 'auto-booking'
 SNAPSHOTS = snapshots.COLLECTION
 TASK = 'auto-booking'
+LOG_RETENTION_DAYS = 30
 TZ = timezone(timedelta(hours=8))
 
 
@@ -168,11 +169,21 @@ def save(cur, current, key, record, state):
 
 
 def event(cur, current, key, state, kind, message, **details):
+    cleanup_logs(cur, current)
     item = {'id': str(uuid.uuid4()), 'at': stamp(), 'kind': kind, 'message': message, **details}
     state['latestEvent'] = item
     record_id = key + ':' + now().isoformat(timespec='microseconds') + ':' + item['id']
-    private_store.put(cur, current, 'auto-booking-log', record_id, item, expected_revision=0, expires_at=now() + timedelta(days=30))
+    private_store.put(cur, current, 'auto-booking-log', record_id, item, expected_revision=0,
+                      expires_at=now() + timedelta(days=LOG_RETENTION_DAYS))
     return item
+
+
+def cleanup_logs(cur, current):
+    cur.execute('''DELETE FROM lele.plugin_private_records
+WHERE child_id=%s AND plugin_id=%s AND collection='auto-booking-log'
+AND (expires_at IS NULL OR expires_at<=%s)''',
+                (current['child_id'], current['plugin_id'], now()))
+    return cur.rowcount
 
 
 def close_cancelled_operation(cur, current, key, record, state, operation):
@@ -399,8 +410,11 @@ def save_checkpoint(state, cursor, *, yield_after=True):
 
 
 def handle(cur, current, context, action, payload, *, vault=None):
-    key, record, state, binding = load(cur, current)
     job = context.get('actorId') is None and bool(context.get('jobId'))
+    if action == 'autoBooking.cleanup-logs':
+        require(job, 403, '此动作仅允许受限后台任务使用。', 'plugin_capability_denied')
+        return {'ok': True, 'data': {'deleted': cleanup_logs(cur, current)}}
+    key, record, state, binding = load(cur, current)
     can_manage = not job and owner(cur, current, context.get('actorId'))
     notification_owner_valid = (not state.get('notificationCredentials')
                                 or owner(cur, current, state.get('notificationOwnerId')))
@@ -409,6 +423,7 @@ def handle(cur, current, context, action, payload, *, vault=None):
             state['bindingRevision'] = binding.get('bindingRevision', 0)
         return {'ok': True, 'data': deepcopy(state) if job else {'config': public_config(state, can_manage, current, key, vault, notification_owner_valid), 'status': public_status(cur, current, state, can_manage)}}
     if action == 'autoBooking.logs':
+        cleanup_logs(cur, current)
         cursor = payload.get('cursor')
         require(cursor is None or cursor == '' or isinstance(cursor, str) and cursor.startswith(key + ':') and len(cursor) <= 160,
                 400, '日志游标不正确。', 'VALIDATION_ERROR')

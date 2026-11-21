@@ -101,7 +101,10 @@ class AutoBookingApiTests(booking_fixture.BookingApiTests):
         self.data.update(id=self.plugin_id, version='1.1.' + str(uuid.uuid4().int))
         self.data['platformApi']['minMinor'] = 3
         self.data['capabilities'].append('plugin.jobs.schedule')
-        self.data['tasks'] = [{'id': 'auto-booking', 'intervalSeconds': 300, 'timeoutSeconds': 60, 'misfirePolicy': 'latest'}]
+        self.data['tasks'] = [
+            {'id': 'auto-booking', 'intervalSeconds': 300, 'timeoutSeconds': 60, 'misfirePolicy': 'latest'},
+            {'id': 'sync-courses', 'intervalSeconds': 31536000, 'timeoutSeconds': 60, 'misfirePolicy': 'skip'},
+        ]
 
         def fixture(cur):
             release = register_release(cur, self.data, artifact_sha256=uuid.uuid4().hex * 2, source_commit='auto-fixture', config_schema=self.schema, activate=True)
@@ -912,6 +915,47 @@ WHERE child_id=%s AND plugin_id=%s AND collection='auto-booking'""",
             self.start_auto()
             self.assertEqual(self.state()['totalBooked'], 1)
             self.assertEqual(self.state()['checks'], 1)
+
+    def test_log_retention_purges_expired_and_keeps_active_logs(self):
+        with self.connected():
+            current = self.context_scope()
+            expired_id = 'cleanup-expired-' + uuid.uuid4().hex
+            active_id = 'cleanup-active-' + uuid.uuid4().hex
+            self.service.transaction(lambda cur: private_store.put(
+                cur, current, 'auto-booking-log', expired_id, {'id': expired_id},
+                expires_at=host.now() - timedelta(seconds=1)))
+            self.service.transaction(lambda cur: private_store.put(
+                cur, current, 'auto-booking-log', active_id, {'id': active_id},
+                expires_at=host.now() + timedelta(days=host.LOG_RETENTION_DAYS)))
+            deleted = self.service.transaction(lambda cur: host.cleanup_logs(cur, current))
+            self.assertEqual(deleted, 1)
+            self.assertIsNone(self.service.transaction(lambda cur: private_store.get(
+                cur, current, 'auto-booking-log', expired_id, include_expired=True)))
+            self.assertIsNotNone(self.service.transaction(lambda cur: private_store.get(
+                cur, current, 'auto-booking-log', active_id, include_expired=True)))
+
+    def test_daily_sync_task_cleans_expired_logs(self):
+        with self.connected(), patch('mison_booking.course_sync.handle_job', return_value={'state': 'waiting'}) as sync_job:
+            current = self.context_scope()
+            expired_id = 'daily-cleanup-' + uuid.uuid4().hex
+            self.service.transaction(lambda cur: private_store.put(
+                cur, current, 'auto-booking-log', expired_id, {'id': expired_id},
+                expires_at=host.now() - timedelta(seconds=1)))
+            self.scheduler.enqueue(self.plugin_id, self.child_id, 'sync-courses', 'cleanup-test',
+                                  datetime.now(host.TZ) - timedelta(seconds=1))
+            job = self.scheduler.claim(self.plugin_id)
+            self.assertIsNotNone(job)
+            result = handle_job(job['context'], 'sync-courses', {})
+            self.scheduler.complete(job, result)
+            sync_job.assert_called_once()
+            self.assertIsNone(self.service.transaction(lambda cur: private_store.get(
+                cur, current, 'auto-booking-log', expired_id, include_expired=True)))
+
+    def test_cleanup_logs_is_job_only(self):
+        with self.connected():
+            with self.assertRaises(ApiError):
+                self.service.transaction(lambda cur: host.handle(
+                    cur, self.context_scope(), self.ctx, 'autoBooking.cleanup-logs', {}))
 
     def test_unselected_dates_keep_manual_occupancy_evidence(self):
         with self.connected():

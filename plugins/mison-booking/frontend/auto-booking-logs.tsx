@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Badge } from "@shared/components/ui/badge"
 import { getAutoBookingLogs } from "./api"
 import { autoBookingTime } from "./auto-booking-schedule"
@@ -31,6 +31,7 @@ export function AutoBookingLogs({
   const pendingLoad = useRef(true)
   const cursor = useRef<string | null>(null)
   const seen = useRef(new Set<string>())
+  const loadMoreRef = useRef<HTMLDivElement | null>(null)
   useEffect(() => {
     let cancelled = false
     if (!active || context.signal.aborted) {
@@ -67,6 +68,25 @@ export function AutoBookingLogs({
     () => items.filter((item) => filter === "all" || attention.has(item.status || item.kind)),
     [filter, items],
   )
+  const requestNextPage = useCallback(() => {
+    if (!nextCursor || loading || error || !active || context.signal.aborted) return
+    cursor.current = nextCursor
+    pendingLoad.current = true
+    setPage((value) => value + 1)
+  }, [active, context.signal.aborted, error, loading, nextCursor])
+  useEffect(() => {
+    const sentinel = loadMoreRef.current
+    if (!sentinel || !nextCursor || loading || error) return
+    const root = sentinel.closest(".mison-overlay-scroll")
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) requestNextPage()
+      },
+      { root, rootMargin: "240px" },
+    )
+    observer.observe(sentinel)
+    return () => observer.disconnect()
+  }, [error, loading, nextCursor, requestNextPage])
   return (
     <Overlay
       drawer
@@ -85,8 +105,6 @@ export function AutoBookingLogs({
         <>
           {error ? (
             <Button variant="outline" disabled={loading} onClick={() => setPage((value) => value + 1)}>重试加载</Button>
-          ) : nextCursor ? (
-            <Button variant="outline" disabled={loading} onClick={() => { cursor.current = nextCursor; pendingLoad.current = true; setPage((value) => value + 1) }}>加载更多</Button>
           ) : null}
         </>
       }
@@ -103,6 +121,7 @@ export function AutoBookingLogs({
           </li>
         ))}
       </ol>
+      <div ref={loadMoreRef} className="mison-auto-log-sentinel" aria-hidden />
     </Overlay>
   )
 }

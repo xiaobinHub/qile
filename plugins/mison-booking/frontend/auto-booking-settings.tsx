@@ -139,7 +139,7 @@ function FavoriteTeachers({
           </Button>
         </Notice>
       ) : null}
-      <FieldSet>
+      <FieldSet className="mison-auto-favorites-fieldset">
         <FieldLegend className="sr-only">收藏老师</FieldLegend>
         <FieldGroup className="mison-auto-favorites">
           {visible.map((item) => {
