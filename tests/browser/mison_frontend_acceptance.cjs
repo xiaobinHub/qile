@@ -29,6 +29,7 @@ async function main() {
     ? await (
         await import("../../scripts/plugin_dev.mjs")
       ).createPluginDevServer("mison-booking", session, {
+        cacheDir: path.join(out, "plugin-vite-cache"),
         ws: { host: "127.0.0.1", clientPort: 18896 },
       })
     : null

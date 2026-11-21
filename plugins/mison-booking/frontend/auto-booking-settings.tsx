@@ -10,22 +10,17 @@ import {
   CardHeader,
   CardTitle,
 } from "@shared/components/ui/card"
-import {
-  Field,
-  FieldDescription,
-  FieldGroup,
-  FieldLabel,
-  FieldLegend,
-  FieldSet,
-} from "@shared/components/ui/field"
+import { Field, FieldGroup, FieldLabel, FieldLegend, FieldSet } from "@shared/components/ui/field"
 import { Separator } from "@shared/components/ui/separator"
-import { Switch } from "@shared/components/ui/switch"
-import { ChevronLeft, ChevronRight, Info, Plus, Star } from "lucide-react"
+import { ChevronLeft, ChevronRight, Info, Plus, Settings, Star } from "lucide-react"
 import { getTeachers } from "./api"
-import { AutoBookingTimePicker, PriorityList } from "./auto-booking-controls"
+import {
+  PriorityList,
+} from "./auto-booking-controls"
 import { dateStr, parseDate, shiftMonth } from "./calendar-date"
 import { PageActiveContext } from "./contexts"
-import { Avatar, Button, Empty, Input, Notice, NumberPicker, Overlay, teacherName } from "./ui"
+import { AutoBookingExecutionSettings } from "./auto-booking-execution-settings"
+import { Avatar, Button, Empty, Input, Notice, Overlay, teacherName } from "./ui"
 import type {
   AutoBookingConfig,
   AutoBookingTeacher,
@@ -111,9 +106,14 @@ function FavoriteTeachers({
   return (
     <Overlay
       drawer
-      title="从收藏添加老师"
+      title="添加老师"
       onClose={onClose}
-      footer={<Button onClick={onClose}>完成 · 已选 {selected.length} 位</Button>}
+      footer={
+        <>
+          <small>已选 {selected.length} 位</small>
+          <Button onClick={onClose}>完成</Button>
+        </>
+      }
     >
       <Input
         aria-label="搜索收藏老师"
@@ -122,7 +122,6 @@ function FavoriteTeachers({
         value={search}
         onChange={(event) => setSearch(event.target.value)}
       />
-      <p className="mison-caption">按添加顺序确定优先级，添加后可继续排序。</p>
       {loading ? (
         <p className="mison-caption" role="status">
           正在加载全部收藏老师，已读取 {items.length} 位…
@@ -146,7 +145,7 @@ function FavoriteTeachers({
           {visible.map((item) => {
             const checked = selected.some((teacher) => teacher.id === item.id)
             return (
-              <Field key={item.id} orientation="horizontal">
+              <Field key={item.id} orientation="horizontal" data-selected={checked}>
                 <Checkbox
                   id={`mison-auto-favorite-${item.id}`}
                   checked={checked}
@@ -161,7 +160,7 @@ function FavoriteTeachers({
                 />
                 <FieldLabel htmlFor={`mison-auto-favorite-${item.id}`}>
                   <Avatar name={item.name} url={item.avatarUrl} compact />
-                  {teacherName(item.name)}
+                  <span>{teacherName(item.name)}</span>
                 </FieldLabel>
               </Field>
             )
@@ -192,17 +191,26 @@ function WeekdaySlots({
 }) {
   const [open, setOpen] = useState(false)
   const [picked, setPicked] = useState<string[]>([])
-  const choices = Array.from({ length: 36 }, (_, index) => {
+  const trigger = useRef<HTMLButtonElement>(null)
+  useEffect(() => {
+    if (disabled) {
+      setOpen(false)
+      setPicked([])
+    }
+  }, [disabled])
+  const availableTimes = Array.from({ length: 36 }, (_, index) => {
     const minutes = 5 * 60 + index * 30
     return `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`
   })
+  const choices = Array.from(new Set([...availableTimes, ...slots])).sort()
   function close() {
     setOpen(false)
     setPicked([])
+    trigger.current?.focus({ preventScroll: true })
   }
   function confirm() {
-    if (disabled || !picked.length) return
-    onChange([...slots, ...picked.filter((time) => !slots.includes(time))])
+    if (disabled) return
+    onChange(picked)
     close()
   }
   return (
@@ -220,9 +228,10 @@ function WeekdaySlots({
           itemKey={(item) => item}
           itemLabel={(item) => `${day} ${item}`}
           render={(item) => <time>{item}</time>}
-          disabled={disabled}
+          disabled={disabled || open}
           onChange={onChange}
           compact
+          removable={false}
         />
         {!slots.length ? (
           <Badge variant="secondary" className="mison-auto-no-slots">
@@ -230,29 +239,26 @@ function WeekdaySlots({
           </Badge>
         ) : null}
         {!disabled ? (
-          <>
+          <div className="mison-auto-weekday-actions">
             <Button
-              variant="outline"
-              size="sm"
+              ref={trigger}
+              variant="ghost"
+              size="icon-sm"
               aria-expanded={open}
               aria-controls={`mison-auto-slot-picker-${weekday}`}
-              aria-label={`${day}添加时段`}
-              onClick={() => (open ? close() : setOpen(true))}
+              aria-label={`${day}设置时段`}
+              title={`${day}设置时段`}
+              onClick={() => {
+                if (open) close()
+                else {
+                  setPicked([...slots])
+                  setOpen(true)
+                }
+              }}
             >
-              <Plus data-icon="inline-start" />
-              添加时段
+              <Settings />
             </Button>
-            {slots.length ? (
-              <Button
-                variant="outline"
-                size="sm"
-                aria-label={`清空${day}`}
-                onClick={() => onChange([])}
-              >
-                清空
-              </Button>
-            ) : null}
-          </>
+          </div>
         ) : null}
       </div>
       {open && !disabled ? (
@@ -260,12 +266,18 @@ function WeekdaySlots({
           id={`mison-auto-slot-picker-${weekday}`}
           className="mison-auto-slot-picker"
           role="group"
-          aria-label={`${day}可添加时段`}
+          aria-label={`${day}时段设置`}
+          onKeyDown={(event) => {
+            if (event.key === "Escape") {
+              event.preventDefault()
+              event.stopPropagation()
+              close()
+            }
+          }}
         >
-          <p>点选要添加的时段（可多选，灰色表示已在列表）</p>
+          <h4>选择时段</h4>
           <div className="mison-auto-slot-choices">
             {choices.map((time) => {
-              const existing = slots.includes(time)
               const selected = picked.includes(time)
               return (
                 <Button
@@ -273,9 +285,7 @@ function WeekdaySlots({
                   type="button"
                   variant="outline"
                   size="sm"
-                  aria-pressed={existing || selected}
-                  disabled={existing}
-                  data-existing={existing ? "true" : "false"}
+                  aria-pressed={selected}
                   className={
                     selected ? "mison-auto-slot-choice is-selected" : "mison-auto-slot-choice"
                   }
@@ -293,8 +303,8 @@ function WeekdaySlots({
             })}
           </div>
           <div className="mison-auto-slot-picker-actions">
-            <Button disabled={!picked.length} onClick={confirm}>
-              确认添加{picked.length ? ` · ${picked.length}` : ""}
+            <Button onClick={confirm}>
+              保存
             </Button>
             <Button variant="outline" onClick={close}>
               取消
@@ -341,16 +351,12 @@ export function AutoBookingSettings({
     parseDate(value.dates.find((date) => date >= serverDate) || serverDate),
   )
   const prefix = useId()
+  const futureDates = value.dates.filter((date) => date >= serverDate)
+  const missingSlots = futureDates.filter(
+    (date) =>
+      !value.weekdaySlots[String(parseDate(date).getDay() || 7) as AutoBookingWeekday].length,
+  )
   const disabled = !canManage || busy || uncertain || !active || !pageActive
-  const banner = !canManage
-    ? `当前任务${running ? "运行中" : "已停止"}，仅儿童负责人可修改设置`
-    : uncertain
-      ? "保存结果待核对，请核对原保存后继续修改"
-      : running
-        ? "当前任务运行中，修改后点击保存生效"
-        : dirty
-          ? "当前任务已停止，修改后点击保存生效"
-          : "当前任务已停止，保存设置后可开启任务"
   function moveMonth(amount: number) {
     setMonth(parseDate(`${shiftMonth(dateStr(month), amount)}-01`))
   }
@@ -364,17 +370,13 @@ export function AutoBookingSettings({
       aria-label="自动约课设置"
     >
       <div className="mison-auto-settings-scroll">
-        <Notice className="mison-auto-settings-notice">
-          <Info aria-hidden />
-          {banner}
-        </Notice>
         <div className="mison-auto-settings-grid">
           <Card className="mison-auto-settings-card mison-auto-teachers-card">
             <CardHeader>
               <CardTitle>
                 <h2 id={`${prefix}-teachers`}>目标老师</h2>
               </CardTitle>
-              <CardDescription>从收藏中选择，越靠上越优先</CardDescription>
+              <CardDescription>按顺序优先预约</CardDescription>
               {canManage ? (
                 <CardAction>
                   <Button
@@ -399,132 +401,17 @@ export function AutoBookingSettings({
                   render={(teacher) => (
                     <div className="mison-auto-teacher-copy">
                       <Avatar name={teacher.name} url={teacher.avatarUrl} compact />
-                      <span>{teacherName(teacher.name)}</span>
+                      <span title={teacher.name}>{teacher.name.replace(/\s*老师$/, "")}</span>
                     </div>
                   )}
                   disabled={disabled}
                   onChange={(teachers) => onChange({ ...value, teachers })}
                 />
-                {!value.teachers.length ? <p className="mison-caption">尚未选择老师。</p> : null}
-              </FieldSet>
-              <Notice className="mison-auto-priority-hint">
-                <Info aria-hidden />
-                选择顺序：先老师，再时段
-              </Notice>
-              <p className="sr-only">之后取消收藏不会移除本策略中的老师。</p>
-            </CardContent>
-          </Card>
-          <Card className="mison-auto-settings-card mison-auto-execution-card">
-            <CardHeader>
-              <CardTitle>
-                <h2 id={`${prefix}-execution`}>执行设置</h2>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <FieldGroup
-                aria-labelledby={`${prefix}-execution`}
-                className="mison-auto-execution-fields"
-              >
-                <Field orientation="horizontal" className="mison-auto-execution-row">
-                  <FieldLabel>检查间隔</FieldLabel>
-                  <span className="mison-caption">4–6 分钟随机</span>
-                </Field>
-                <Separator />
-                <FieldGroup className="mison-auto-execution-sleep">
-                  <Field orientation="horizontal" className="mison-auto-execution-row">
-                    <FieldLabel htmlFor={`${prefix}-sleep`}>启用休眠</FieldLabel>
-                    <Switch
-                      id={`${prefix}-sleep`}
-                      checked={value.sleep.enabled}
-                      disabled={disabled}
-                      onCheckedChange={(enabled) =>
-                        onChange({ ...value, sleep: { ...value.sleep, enabled } })
-                      }
-                    />
-                  </Field>
-                  <div className="mison-auto-sleep-range">
-                    <Field>
-                      <FieldLabel htmlFor={`${prefix}-sleep-start`} className="sr-only">
-                        休眠开始
-                      </FieldLabel>
-                      <AutoBookingTimePicker
-                        id={`${prefix}-sleep-start`}
-                        label="休眠开始"
-                        value={value.sleep.start}
-                        disabled={disabled || !value.sleep.enabled}
-                        onChange={(start) =>
-                          onChange({ ...value, sleep: { ...value.sleep, start } })
-                        }
-                      />
-                    </Field>
-                    <span aria-hidden>–</span>
-                    <Field>
-                      <FieldLabel htmlFor={`${prefix}-sleep-end`} className="sr-only">
-                        休眠结束
-                      </FieldLabel>
-                      <AutoBookingTimePicker
-                        id={`${prefix}-sleep-end`}
-                        label="休眠结束"
-                        value={value.sleep.end}
-                        disabled={disabled || !value.sleep.enabled}
-                        onChange={(end) => onChange({ ...value, sleep: { ...value.sleep, end } })}
-                      />
-                    </Field>
-                  </div>
-                  <FieldDescription>
-                    {value.sleep.start > value.sleep.end ? "次日恢复" : "当天恢复"} · 北京时间
-                  </FieldDescription>
-                </FieldGroup>
-                <Separator />
-                <Field
-                  orientation="horizontal"
-                  className="mison-auto-execution-row mison-auto-advance-field"
-                >
-                  <FieldLabel htmlFor={`${prefix}-notice`}>最少提前预约</FieldLabel>
-                  <NumberPicker
-                    id={`${prefix}-notice`}
-                    label="最少提前小时数"
-                    value={value.minNoticeHours}
-                    min={0}
-                    step={1}
-                    disabled={disabled}
-                    onChange={(minNoticeHours) => onChange({ ...value, minNoticeHours })}
-                  />
-                  <span>小时</span>
-                </Field>
-                <Separator />
-              </FieldGroup>
-              <FieldSet className="mison-auto-booking-rules" aria-label="预约规则">
-                <Field
-                  orientation="horizontal"
-                  className="mison-auto-execution-row mison-auto-advance-field"
-                >
-                  <FieldLabel htmlFor={`${prefix}-daily`}>每天最多预约</FieldLabel>
-                  <NumberPicker
-                    id={`${prefix}-daily`}
-                    label="每天最多预约节数"
-                    value={value.dailyLessons}
-                    min={1}
-                    max={4}
-                    step={1}
-                    disabled={disabled}
-                    onChange={(dailyLessons) => onChange({ ...value, dailyLessons })}
-                  />
-                  <span>节</span>
-                </Field>
-                <FieldDescription>两节及以上只预约同一老师的连续时段。</FieldDescription>
-                <Field orientation="horizontal" className="mison-auto-rule-option">
-                  <Checkbox
-                    id={`${prefix}-rebook`}
-                    checked={value.rebookCancelled}
-                    disabled={disabled}
-                    onCheckedChange={(checked) =>
-                      onChange({ ...value, rebookCancelled: checked === true })
-                    }
-                  />
-                  <FieldLabel htmlFor={`${prefix}-rebook`}>取消课程后自动补约</FieldLabel>
-                </Field>
-                <FieldDescription>未勾选时，自动预约被取消后当天不再补约。</FieldDescription>
+                {!value.teachers.length ? (
+                  <p className="mison-auto-teacher-empty">
+                    还没有目标老师，点击“添加老师”从收藏中选择。
+                  </p>
+                ) : null}
               </FieldSet>
             </CardContent>
           </Card>
@@ -557,14 +444,6 @@ export function AutoBookingSettings({
                     <ChevronRight />
                   </Button>
                 </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={disabled || !value.dates.length}
-                  onClick={() => onChange({ ...value, dates: [] })}
-                >
-                  清空选择
-                </Button>
               </CardAction>
             </CardHeader>
             <CardContent>
@@ -578,7 +457,7 @@ export function AutoBookingSettings({
                 modifiers={{ booked: bookedDates.map(parseDate) }}
                 modifiersClassNames={{ booked: "mison-auto-calendar-booked" }}
                 hideNavigation
-                showOutsideDays={false}
+                showOutsideDays
                 classNames={{
                   months: "mison-auto-calendar-months",
                   month: "mison-auto-calendar-month",
@@ -591,6 +470,7 @@ export function AutoBookingSettings({
                   day_button: "mison-auto-calendar-day-button",
                   selected: "mison-auto-calendar-selected",
                   today: "mison-auto-calendar-today",
+                  outside: "mison-auto-calendar-outside",
                   hidden: "mison-auto-calendar-hidden",
                 }}
                 disabled={(date) =>
@@ -602,15 +482,16 @@ export function AutoBookingSettings({
               />
               <div className="mison-auto-calendar-legend">
                 <span>
-                  <i className="mison-auto-selected-swatch" aria-hidden />
-                  黄色为选中日期
-                </span>
-                <span>
                   <i className="mison-auto-booked-swatch" aria-hidden />
-                  蓝点表示已有课程
+                  已有课程
                 </span>
-                <small>仅预约选中日期；已约日期会自动跳过</small>
               </div>
+              {missingSlots.length ? (
+                <p className="mison-auto-date-warning" role="status">
+                  <Info aria-hidden />
+                  {missingSlots.length} 个目标日期未配置每周时段，暂不会预约。
+                </p>
+              ) : null}
             </CardContent>
           </Card>
           <Card className="mison-auto-settings-card mison-auto-weekly-card">
@@ -618,7 +499,6 @@ export function AutoBookingSettings({
               <CardTitle>
                 <h2 id={`${prefix}-weekdays`}>每周时段</h2>
               </CardTitle>
-              <CardDescription>拖动时段调整优先级，左侧优先；未设置的星期不约</CardDescription>
             </CardHeader>
             <CardContent>
               <FieldSet aria-labelledby={`${prefix}-weekdays`} className="mison-auto-weekday-rows">
@@ -637,27 +517,38 @@ export function AutoBookingSettings({
               </FieldSet>
             </CardContent>
           </Card>
+          <AutoBookingExecutionSettings
+            context={context}
+            value={value}
+            canManage={canManage}
+            busy={busy || uncertain}
+            active={active && pageActive}
+            onChange={onChange}
+          />
         </div>
       </div>
       <Separator />
       <footer className="mison-auto-footer mison-auto-settings-footer">
-        <small role="status">
-          {value.dates.length} 个目标日期 · {value.teachers.length} 位老师 · 每天最多{" "}
-          {value.dailyLessons} 节
-          {uncertain ? " · 请核对原保存结果" : dirty ? " · 有未保存的修改" : ""}
-        </small>
-        {canManage ? (
+        {dirty || uncertain ? (
+          <small role="status">{uncertain ? "保存结果待确认" : "有未保存的修改"}</small>
+        ) : null}
+        {canManage && dirty ? (
           <Button
             variant="outline"
-            disabled={busy || uncertain || !active || !pageActive || !dirty}
+            disabled={busy || uncertain || !active || !pageActive}
             onClick={onReload}
           >
             放弃修改
           </Button>
         ) : null}
         {canManage ? (
-          <Button type="submit" disabled={busy || !active || !pageActive}>
-            {busy ? "正在保存…" : uncertain ? "核对并重试原保存" : "保存设置"}
+          <Button
+            type="submit"
+            disabled={
+              busy || !active || !pageActive || (!dirty && value.revision > 0 && !uncertain)
+            }
+          >
+            {busy ? "处理中…" : uncertain ? "重试保存" : "保存设置"}
           </Button>
         ) : null}
       </footer>

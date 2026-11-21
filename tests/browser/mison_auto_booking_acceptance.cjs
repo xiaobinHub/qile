@@ -33,6 +33,8 @@ exports.createAutoBookingFixture = function () {
   let canManage = true
   let pendingReceipt = false
   let visualMode = false
+  const snapshots = new Map()
+  const snapshotGates = new Map()
   const scheduleDays = new Map()
   const envelope = (data) => ({
     ok: true,
@@ -41,12 +43,24 @@ exports.createAutoBookingFixture = function () {
     serverTime: `${today}T08:00:00+08:00`,
   })
   const failure = (code, message) => ({ ok: false, error: { code, message } })
-  function reset({ empty = false, member = false, failSchedule = false, visual = false } = {}) {
+  function reset({
+    empty = false,
+    member = false,
+    failSchedule = false,
+    visual = false,
+    scheduleSwitch = false,
+    legacy = false,
+    minNoticeHours = 25,
+    sleep = { enabled: true, start: "23:00", end: "08:00" },
+    notifications = { enabled: false, barkKeys: [], events: ["booked"] },
+  } = {}) {
     canManage = !member
     scheduleError = failSchedule
     dayError = false
     pendingReceipt = false
     visualMode = visual
+    snapshots.clear()
+    snapshotGates.clear()
     scheduleDays.clear()
     receipts.clear()
     config = {
@@ -56,11 +70,14 @@ exports.createAutoBookingFixture = function () {
       teachers: empty ? [] : [teacherDTO(teachers[0]), teacherDTO(teachers[3])],
       dates: empty ? [] : ["2026-11-04", "2026-11-05"],
       weekdaySlots: { ...weekdays(), ...(empty ? {} : { 3: ["09:30", "10:00"], 4: ["18:00"] }) },
-      minNoticeHours: 25,
+      minNoticeHours,
       dailyLessons: 1,
       rebookCancelled: true,
-      sleep: { enabled: true, start: "23:00", end: "08:00" },
+      checkInterval: { minMinutes: 4, maxMinutes: 6 },
+      notifications: structuredClone(notifications),
+      sleep: structuredClone(sleep),
     }
+    if (legacy) delete config.notifications
     status = {
       state: "stopped",
       phase: "stopped",
@@ -68,6 +85,7 @@ exports.createAutoBookingFixture = function () {
       enabled: false,
       checks: 42,
       totalBooked: 3,
+      completedLessons: empty ? 0 : 1,
       nextCheckAt: null,
       lastCheckAt: `${today}T07:00:00+08:00`,
       fulfilledDates: empty ? [] : ["2026-11-04"],
@@ -97,6 +115,7 @@ exports.createAutoBookingFixture = function () {
         message: "等待下一轮检查。",
         checks: 138,
         totalBooked: 12,
+        completedLessons: 4,
         targetDates: [...config.dates],
         fulfilledDates: config.dates.slice(0, 4),
         nextCheckAt: `${today}T08:42:00+08:00`,
@@ -111,6 +130,37 @@ exports.createAutoBookingFixture = function () {
           time: "19:30",
         },
       })
+    }
+    if (scheduleSwitch) {
+      config.teachers = [teachers[0], teachers[3], teachers[5]].map(teacherDTO)
+      config.dates = Array.from({ length: 16 }, (_, index) => addDays(today, index))
+      status.targetDates = [...config.dates]
+      const metadata = {
+        id: "schedule-switch",
+        checkedAt: status.lastCheckAt,
+        configRevision: config.revision,
+      }
+      status.snapshot = { ...metadata, teachers: [] }
+      for (const [index, teacher] of config.teachers.entries()) {
+        const days = Array.from({ length: [16, 2, 17][index] }, (_, day) => ({
+          date: addDays(today, day),
+          state: index === 0 ? "ready" : "unopened",
+          slots: index === 0
+            ? Array.from({ length: 18 }, (_, hour) => ({
+                start: `${String(hour + 5).padStart(2, "0")}:00`,
+                end: `${String(hour + 5).padStart(2, "0")}:25`,
+                state: "available",
+              }))
+            : [],
+        }))
+        snapshots.set(teacher.id, {
+          snapshotId: metadata.id,
+          checkedAt: metadata.checkedAt,
+          configRevision: metadata.configRevision,
+          teacher: { ...teacher, baseDate: today, days, bookingUnavailable: index === 2 },
+        })
+        status.snapshot.teachers.push({ ...teacher, baseDate: today, days: days.length })
+      }
     }
   }
   reset({ empty: true })
@@ -136,6 +186,17 @@ exports.createAutoBookingFixture = function () {
     },
     setDayError(value) {
       dayError = value
+    },
+    holdSnapshot(teacherId) {
+      let release
+      const blocked = new Promise((resolve) => {
+        release = resolve
+      })
+      snapshotGates.set(teacherId, blocked)
+      return () => {
+        snapshotGates.delete(teacherId)
+        release()
+      }
     },
     reconcile(enabled) {
       pendingReceipt = true
@@ -178,8 +239,22 @@ exports.createAutoBookingFixture = function () {
         query: Object.fromEntries(url.searchParams),
         body: body ? structuredClone(body) : null,
       })
-      if (name === "auto-booking/config" && method === "GET") return envelope(config)
+      if (name === "auto-booking/config" && method === "GET") {
+        const result = structuredClone(config)
+        if (!canManage && result.notifications) {
+          result.notifications.barkKeys = result.notifications.barkKeys.map(() => "已配置")
+          delete result.notifications.barkKeyNames
+        }
+        return envelope(result)
+      }
       if (name === "auto-booking/status" && method === "GET") return envelope(status)
+      if (name === "auto-booking/snapshot" && method === "GET") {
+        const teacherId = url.searchParams.get("teacherId")
+        const result = snapshots.get(teacherId)
+        assert.ok(result)
+        await snapshotGates.get(teacherId)
+        return envelope(result)
+      }
       if (name === "auto-booking/schedules" && method === "GET") {
         const from = url.searchParams.get("from")
         const to = url.searchParams.get("to")
@@ -302,11 +377,10 @@ exports.createAutoBookingFixture = function () {
           items: Array.from({ length: 3 }, (_, i) => ({
             id: `event-${offset + i}`,
             at: `${today}T08:${String(offset + i).padStart(2, "0")}:00+08:00`,
-            kind: "checked",
+            kind: "run",
+            status: i === 0 ? "rejected" : "checked",
             message: `自动约课记录 ${offset + i + 1}`,
-            date: "2026-11-05",
-            teacherName: "Jenyy",
-            time: "18:00",
+            details: [{ date: "2026-11-05", teacherName: "Jenyy", time: "18:00", message: "该时段已被占用。" }],
           })),
           nextCursor: value ? null : cursor,
         })
@@ -336,9 +410,18 @@ exports.createAutoBookingFixture = function () {
                 "minNoticeHours",
                 "dailyLessons",
                 "rebookCancelled",
+                "checkInterval",
+                "notifications",
                 "sleep",
               ].sort(),
             )
+            assert.deepEqual(Object.keys(body.notifications).sort(), [
+              "barkKeyNames",
+              "barkKeys",
+              "enabled",
+              "events",
+            ])
+            assert.equal(body.notifications.barkKeyNames.length, body.notifications.barkKeys.length)
             const { operationId, expectedRevision, ...editable } = body
             config = { ...structuredClone(editable), revision: config.revision + 1, canManage }
             status.targetDates = [...config.dates]
@@ -490,7 +573,8 @@ exports.exerciseAutoBooking = async function ({
       )
   }
   async function settingsLayout(viewport) {
-    assert.equal(await editor.locator(".mison-auto-settings-card").count(), 4)
+    for (const name of ["执行节奏", "预约规则", "消息提醒"])
+      assert.equal(await editor.getByRole("heading", { name, exact: true }).count(), 1)
     assert.equal(
       await editor.getByRole("tablist").count(),
       0,
@@ -517,7 +601,10 @@ exports.exerciseAutoBooking = async function ({
       return {
         grid: rect(".mison-auto-settings-grid"),
         teachers: rect(".mison-auto-teachers-card"),
-        execution: rect(".mison-auto-execution-card"),
+        execution: rect(".mison-auto-execution-groups"),
+        rhythm: rect(".mison-auto-rhythm-card"),
+        rules: rect(".mison-auto-rules-card"),
+        notifications: rect(".mison-auto-notifications-card"),
         dates: rect(".mison-auto-dates-card"),
         weekly: rect(".mison-auto-weekly-card"),
         calendar: rect(".mison-auto-calendar-grid"),
@@ -532,40 +619,23 @@ exports.exerciseAutoBooking = async function ({
       layout.calendar.width >= layout.dates.width - 54,
       "month calendar spans the date card content width",
     )
-    if (viewport.width >= 1400) {
-      const ratio = layout.teachers.width / layout.grid.width
-      assert.ok(
-        ratio >= 0.3 && ratio <= 0.36,
-        `desktop left column follows the 34/66 reference: ${ratio}`,
-      )
-      assert.ok(
-        layout.dates.width > layout.teachers.width * 1.7,
-        "calendar column is distinctly wider",
-      )
-      assert.ok(Math.abs(layout.teachers.y - layout.dates.y) <= 3, "top cards align")
-      assert.ok(
-        Math.abs(layout.teachers.x - layout.execution.x) <= 2 &&
-          Math.abs(layout.dates.x - layout.weekly.x) <= 2,
-        "teacher/execution and calendar/weekdays form stable columns",
-      )
-      assert.ok(
-        layout.execution.y >= layout.teachers.bottom && layout.weekly.y >= layout.dates.bottom,
-        "execution and weekdays sit below their top cards",
-      )
-      assert.ok(
-        Math.abs(layout.dates.x - layout.teachers.right - 20) <= 3,
-        "desktop columns keep the reference 20px gap",
-      )
-      assert.ok(
-        layout.calendar.width >= 500,
-        "calendar uses a wide month grid, not a compact date picker",
-      )
+    assert.ok(Math.abs(layout.teachers.width - layout.grid.width) <= 2)
+    assert.ok(Math.abs(layout.execution.width - layout.grid.width) <= 2)
+    if (viewport.width >= 820) {
+      assert.ok(Math.abs(layout.dates.y - layout.weekly.y) <= 2)
+      assert.ok(Math.abs(layout.dates.width - layout.weekly.width) <= 2)
+      assert.ok(Math.abs(layout.dates.x - layout.rhythm.x) <= 2)
+      assert.ok(Math.abs(layout.weekly.x - layout.rules.x) <= 2)
+      assert.ok(Math.abs(layout.dates.width - layout.rhythm.width) <= 2)
+      assert.ok(Math.abs(layout.notifications.width - layout.rhythm.width) <= 2)
+      assert.ok(Math.abs(layout.notifications.x - layout.rhythm.x) <= 2)
+      assert.ok(Math.abs(layout.rhythm.width - layout.rules.width) <= 2)
+      assert.ok(Math.abs(layout.rhythm.y - layout.rules.y) <= 2)
+      assert.ok(layout.notifications.y >= layout.rhythm.bottom + 15)
     } else if (viewport.width <= 400) {
-      assert.ok(
-        Math.abs(layout.teachers.x - layout.dates.x) <= 2 &&
-          Math.abs(layout.teachers.width - layout.dates.width) <= 2,
-        "narrow settings cards stack at equal width",
-      )
+      assert.ok(Math.abs(layout.teachers.width - layout.dates.width) <= 2)
+      assert.ok(layout.rules.y >= layout.rhythm.bottom + 15)
+      assert.ok(layout.notifications.y >= layout.rules.bottom + 15)
     }
     await noOverflow()
     return layout
@@ -575,10 +645,13 @@ exports.exerciseAutoBooking = async function ({
     assert.equal(fixture.config.teachers.length, 3)
     assert.equal(fixture.config.dates.length, 8)
     await auto.getByText("运行中", { exact: true }).waitFor()
-    assert.deepEqual(await auto.locator(".mison-auto-metric > strong").allTextContents(), [
-      "12",
-      "138",
-      "4 / 8",
+    assert.deepEqual(await auto.locator(".mison-auto-metrics strong").allTextContents(), [
+      "8 节",
+      "4 节",
+      "12 节",
+      "138 次",
+      "08:37:00",
+      "08:42:00",
     ])
     const before = fixture.calls.filter(
       (call) => call.method !== "GET" && call.name.startsWith("auto-booking/"),
@@ -687,7 +760,7 @@ exports.exerciseAutoBooking = async function ({
   async function load(options = {}) {
     fixture.reset(options)
     child.role = options.member ? "member" : "owner"
-    await page.setViewportSize({ width: 1440, height: 1000 })
+    await page.setViewportSize(options.viewport ?? { width: 1440, height: 1000 })
     await page.goto(entryUrl)
     await page.locator('[data-view="plugin:mison-booking"]').click()
     await page.getByRole("heading", { name: "可约老师 · 6", exact: true }).waitFor()
@@ -698,12 +771,14 @@ exports.exerciseAutoBooking = async function ({
     ])
     await tabs.getByRole("tab", { name: "自动约课", exact: true }).click()
     await auto.waitFor()
+    if (options.settings) await internalTab("预约设置").click()
+    if (options.scheduleSwitch) return
     await (
-      options.empty
-        ? editor.getByRole("button", { name: "保存设置", exact: true })
+      options.empty || options.settings
+        ? editor.getByRole("slider", { name: "检查开始", exact: true })
         : auto.getByRole("button", { name: "刷新排班", exact: true })
     ).waitFor()
-    if (!options.empty && !options.failSchedule) await ready()
+    if (!options.empty && !options.settings && !options.failSchedule) await ready()
   }
   async function run(name, fn) {
     try {
@@ -718,32 +793,30 @@ exports.exerciseAutoBooking = async function ({
       )
     }
   }
-  async function time(label, hour, minute, { opened = false, confirm = "完成" } = {}) {
-    if (!opened) await editor.getByRole("combobox", { name: label, exact: true }).click()
-    const popup = page.locator('[data-slot="popover-content"][data-state="open"]').filter({
-      has: page.getByRole("spinbutton", { name: `${label}小时`, exact: true }),
-    })
-    const hours = popup.getByRole("spinbutton", { name: `${label}小时`, exact: true })
-    await hours.press(hour <= 12 ? "Home" : "End")
-    for (let i = 0; i < (hour <= 12 ? hour : 23 - hour); i++)
-      await hours.press(hour <= 12 ? "ArrowDown" : "ArrowUp")
-    const minutes = popup.getByRole("spinbutton", { name: `${label}分钟`, exact: true })
-    await minutes.press(minute ? "End" : "Home")
-    await popup.getByRole("button", { name: confirm, exact: true }).click()
+  async function checkTime(label, hour, minute) {
+    const slider = editor.getByRole("slider", { name: label, exact: true })
+    const target = (hour * 60 + minute + 720) % 1440 || (label === "检查结束" ? 1440 : 0)
+    for (let attempts = 0; attempts < 200; attempts++) {
+      const current = Number(await slider.getAttribute("aria-valuenow"))
+      if (current === target) return
+      const key = target > current ? "ArrowRight" : "ArrowLeft"
+      await slider.press(Math.abs(target - current) >= 10 ? `Shift+${key}` : key)
+    }
+    assert.fail("time slider did not reach requested time")
   }
   async function addSlot(day, hour, minute = 0) {
     await addSlots(day, [[hour, minute]])
   }
   async function addSlots(day, times) {
     const panel = weekdayRow(day)
-    await panel.getByRole("button", { name: `${day}添加时段`, exact: true }).click()
-    const picker = page.getByRole("group", { name: `${day}可添加时段`, exact: true })
+    await panel.getByRole("button", { name: `${day}设置时段`, exact: true }).click()
+    const picker = page.getByRole("group", { name: `${day}时段设置`, exact: true })
     await picker.waitFor()
     for (const [hour, minute = 0] of times) {
       const label = `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`
       await picker.getByRole("button", { name: label, exact: true }).click()
     }
-    await picker.getByRole("button", { name: new RegExp(`^确认添加 · ${times.length}$`) }).click()
+    await picker.getByRole("button", { name: "保存", exact: true }).click()
     await picker.waitFor({ state: "hidden" })
   }
   async function noOverflow() {
@@ -780,6 +853,141 @@ exports.exerciseAutoBooking = async function ({
     await noOverflow()
   }
 
+  if (process.env.AUTO_BOOKING_SCROLL_ACCEPTANCE === "1") {
+    const dashboard = auto.getByRole("tabpanel", { name: "运行看板", exact: true })
+    const navigation = dashboard.getByRole("tablist", { name: "切换排班老师", exact: true })
+    const boardPosition = () => dashboard.evaluate((element) => {
+      const layout = Object.fromEntries(
+        ["dashboard-status", "running-copy", "schedule-area", "schedule-toolbar", "teacher-navigation", "schedule-scroll"].map((name) => {
+          const rect = element.querySelector(`.mison-auto-${name}`)?.getBoundingClientRect()
+          return [name, rect && [rect.top, rect.height, rect.width]]
+        }),
+      )
+      return {
+        scroll: element.scrollTop,
+        height: element.scrollHeight,
+        viewportHeight: element.clientHeight,
+        reserved: element.querySelector(".mison-auto-schedule-scroll").style.minHeight,
+        tabs: layout["teacher-navigation"][0],
+        layout,
+      }
+    })
+    const tab = (name) => navigation.getByRole("tab", { name: new RegExp(name) })
+    const schedule = (name) => dashboard.getByRole("region", { name: `${name}的排班`, exact: true })
+    const waitForRows = (name, count) => page.waitForFunction(({ name, count }) => {
+      const section = document.querySelector(`.mison-auto-schedule[aria-label="${name}的排班"]`)
+      return section?.getAttribute("aria-busy") === "false" &&
+        section.querySelectorAll(".mison-auto-day[data-date]").length === count
+    }, { name, count })
+    const clickTab = async (name) => {
+      await tab(name).evaluate((element) => {
+        const tablist = element.closest('[role="tablist"]')
+        const bounds = tablist.getBoundingClientRect()
+        const rect = element.getBoundingClientRect()
+        if (rect.right > bounds.right) tablist.scrollLeft += rect.right - bounds.right
+        if (rect.left < bounds.left) tablist.scrollLeft -= bounds.left - rect.left
+      })
+      const rect = await tab(name).boundingBox()
+      assert.ok(rect)
+      await page.mouse.click(rect.x + rect.width / 2, rect.y + rect.height / 2)
+      assert.equal(await tab(name).getAttribute("aria-selected"), "true")
+    }
+    const assertStable = (before, ...positions) => {
+      for (const position of positions) {
+        assert.ok(
+          Math.abs(position.scroll - before.scroll) <= 1 &&
+            Math.abs(position.tabs - before.tabs) <= 1,
+          JSON.stringify({ before, position }),
+        )
+      }
+    }
+    for (const viewport of [{ width: 1106, height: 953 }, { width: 390, height: 844 }]) {
+      await run(`teacher switch preserves dashboard position at ${viewport.width}px`, async () => {
+        await load({ scheduleSwitch: true, viewport })
+        await waitForRows("Jenyy", 16)
+        await page.evaluate(() => document.fonts.ready.then(() => {}))
+        const release = fixture.holdSnapshot("demo-3")
+        await dashboard.evaluate((element) => {
+          const nav = element.querySelector(".mison-auto-teacher-navigation")
+          element.scrollTop += nav.getBoundingClientRect().top - element.getBoundingClientRect().top - 56
+        })
+        await frames()
+        const before = await boardPosition()
+        assert.ok(before.scroll > 200, JSON.stringify(before))
+        assert.ok(
+          before.layout["schedule-scroll"][2] < before.layout["schedule-area"][2],
+          "long schedules fit inside their card",
+        )
+        let pending
+        try {
+          await clickTab("Sarah")
+          await schedule("Sarah").locator(".mison-auto-day-skeleton").first().waitFor()
+          await frames()
+          pending = await boardPosition()
+        } finally {
+          release()
+        }
+        await waitForRows("Sarah", 2)
+        const loaded = await boardPosition()
+        assert.ok(
+          [pending, loaded].every(({ scroll, tabs }) =>
+            Math.abs(scroll - before.scroll) <= 1 && Math.abs(tabs - before.tabs) <= 1,
+          ),
+          JSON.stringify({ before, pending, loaded }),
+        )
+        await schedule("Sarah").getByText("未开放", { exact: true }).first().waitFor()
+        const reads = callCount("auto-booking/snapshot", "GET")
+        await clickTab("Jenyy")
+        await waitForRows("Jenyy", 16)
+        assertStable(before, await boardPosition())
+        await clickTab("Sarah")
+        await waitForRows("Sarah", 2)
+        assertStable(before, await boardPosition())
+        assert.equal(callCount("auto-booking/snapshot", "GET"), reads, "same-round snapshots are reused")
+
+        const releaseEmpty = fixture.holdSnapshot("demo-5")
+        const isEmptySnapshot = (request) =>
+          request.url().includes("auto-booking/snapshot?teacherId=demo-5")
+        let lateResponse
+        try {
+          await Promise.all([page.waitForRequest(isEmptySnapshot), clickTab("Emma")])
+          await page.keyboard.press("ArrowLeft")
+          await tab("Sarah").and(page.locator('[aria-selected="true"]')).waitFor()
+          lateResponse = page.waitForResponse((response) => isEmptySnapshot(response.request()))
+        } finally {
+          releaseEmpty()
+        }
+        await lateResponse
+        await frames()
+        await waitForRows("Sarah", 2)
+        assertStable(before, await boardPosition())
+
+        await clickTab("Emma")
+        await waitForRows("Emma", 0)
+        const unavailable = schedule("Emma").getByText("暂时无法预约", { exact: true })
+        await unavailable.waitFor()
+        const empty = await boardPosition()
+        assertStable(before, empty)
+        await schedule("Emma").getByRole("switch", { name: "仅看目标日期" }).click()
+        await unavailable.waitFor()
+        await waitForRows("Emma", 0)
+        await noOverflow()
+        await screenshot(`teacher-switch-${viewport.width}`)
+
+        await dashboard.evaluate((element) => {
+          element.scrollTop = 0
+        })
+        await frames()
+        assert.ok((await boardPosition()).height < empty.height, "space is released when scrolling up")
+      })
+    }
+    assert.ok(
+      fixture.calls.every(({ name, method }) => !name.startsWith("auto-booking/") || method === "GET"),
+      "switching teachers only reads snapshots",
+    )
+    return { passed: findings.length === 0, checks, findings, screenshots }
+  }
+
   if (process.env.AUTO_BOOKING_VISUAL_ONLY === "1") {
     await captureVisuals()
     return {
@@ -792,15 +1000,32 @@ exports.exerciseAutoBooking = async function ({
     }
   }
 
+  await require("./mison_settings_groups_acceptance.cjs").exerciseGroupedSettings({
+    page, fixture, editor: page.locator(".mison-auto-settings"), auto, tabs,
+    internalTab, load, run, screenshot, frames, callCount, noOverflow, entryUrl,
+  })
+
+  if (process.env.BARK_NOTIFICATIONS_ACCEPTANCE === "1")
+    return {
+      passed: findings.length === 0,
+      checks,
+      findings,
+      screenshots,
+      url: page.url(),
+      viewports: ["1440x1000", "1034x889", "820x1180", "390x844"],
+      browserPath: "Browser plugin not available; existing Playwright host harness",
+      businessFixtureOnly: fixture.unexpected.length === 0,
+    }
+
   await run("first empty config, defaults, empty save and disabled start", async () => {
     await load({ empty: true })
     assert.equal(await internalTab("预约设置").getAttribute("aria-selected"), "true")
-    assert.equal(await editor.getByLabel("最少提前预约", { exact: true }).inputValue(), "25")
-    assert.equal(await editor.getByLabel("休眠开始", { exact: true }).inputValue(), "23:00")
-    assert.equal(await editor.getByLabel("休眠结束", { exact: true }).inputValue(), "08:00")
+    assert.equal(await editor.getByRole("slider", { name: "最少提前预约", exact: true }).getAttribute("aria-valuenow"), "25")
+    assert.equal(await editor.getByRole("slider", { name: "检查开始", exact: true }).getAttribute("aria-valuetext"), "08:00")
+    assert.equal(await editor.getByRole("slider", { name: "检查结束", exact: true }).getAttribute("aria-valuetext"), "23:00")
     assert.equal(
-      await editor.getByRole("switch", { name: "启用休眠", exact: true }).isChecked(),
-      true,
+      await editor.getByRole("switch", { name: "启用休眠", exact: true }).count(),
+      0,
     )
     assert.equal(await editor.locator(".mison-auto-priorities li").count(), 0)
     assert.equal(
@@ -808,7 +1033,7 @@ exports.exerciseAutoBooking = async function ({
       true,
     )
     await editor.getByRole("button", { name: "保存设置", exact: true }).click()
-    await auto.getByText("设置已保存。", { exact: true }).waitFor()
+    await page.getByText("设置已保存。", { exact: true }).waitFor()
     assert.equal(await internalTab("运行看板").getAttribute("aria-selected"), "true")
     assert.equal(fixture.config.revision, 1)
     assert.equal(
@@ -829,8 +1054,10 @@ exports.exerciseAutoBooking = async function ({
       for (const name of ["Jenyy", "Sarah", "Lewis"])
         await chooser.getByRole("checkbox", { name: `${name} 老师`, exact: true }).check()
       await chooser.getByRole("button", { name: "完成 · 已选 3 位", exact: true }).click()
-      await editor.getByRole("button", { name: "前移Lewis", exact: true }).focus()
-      await page.keyboard.press("Enter")
+      await editor
+        .getByRole("listitem", { name: "拖动或按上下方向键调整Lewis优先级", exact: true })
+        .focus()
+      await page.keyboard.press("ArrowUp")
       await editor.getByRole("status").filter({ hasText: "Lewis已移到第2优先" }).waitFor()
       assert.deepEqual(
         await editor
@@ -839,7 +1066,9 @@ exports.exerciseAutoBooking = async function ({
         ["Jenyy 老师", "Lewis 老师", "Sarah 老师"],
       )
       assert.equal(
-        await editor.getByRole("button", { name: /拖动调整Lewis/ }).getAttribute("draggable"),
+        await editor
+          .getByRole("listitem", { name: "拖动或按上下方向键调整Lewis优先级", exact: true })
+          .getAttribute("draggable"),
         "true",
       )
       for (const date of ["2026-11-04", "2026-11-05"])
@@ -849,19 +1078,24 @@ exports.exerciseAutoBooking = async function ({
         [10, 0],
         [9, 30],
       ])
-      await editor.getByRole("button", { name: "前移周三 09:30", exact: true }).focus()
-      await page.keyboard.press("Enter")
+      await weekdayRow("周三")
+        .getByRole("listitem", {
+          name: "拖动或按上下方向键调整周三 09:30优先级",
+          exact: true,
+        })
+        .focus()
+      await page.keyboard.press("ArrowUp")
       assert.deepEqual(
         await weekdayRow("周三").locator(".mison-auto-priorities time").allTextContents(),
         ["09:30", "10:00"],
       )
       const wednesday = weekdayRow("周三")
-      await wednesday.getByRole("button", { name: "周三添加时段", exact: true }).click()
-      const picker = page.getByRole("group", { name: "周三可添加时段", exact: true })
+      await wednesday.getByRole("button", { name: "周三设置时段", exact: true }).click()
+      const picker = page.getByRole("group", { name: "周三时段设置", exact: true })
       assert.equal(
-        await picker.getByRole("button", { name: "10:00", exact: true }).isDisabled(),
-        true,
-        "slots already in the list stay disabled",
+        await picker.getByRole("button", { name: "10:00", exact: true }).getAttribute("aria-pressed"),
+        "true",
+        "existing slots start selected and may be deselected",
       )
       await picker.getByRole("button", { name: "10:30", exact: true }).click()
       await picker.getByRole("button", { name: "取消", exact: true }).click()
@@ -871,34 +1105,18 @@ exports.exerciseAutoBooking = async function ({
         ["09:30", "10:00"],
         "cancelling the picker adds nothing",
       )
-      await wednesday.getByRole("button", { name: "清空周三", exact: true }).click()
-      assert.equal(await wednesday.locator(".mison-auto-priorities time").count(), 0)
-      await addSlots("周三", [
-        [9, 30],
-        [10, 0],
-      ])
       await addSlot("周四", 18)
-      const daily = editor.getByLabel("每天最多预约", { exact: true })
+      const daily = editor.getByRole("slider", { name: "每天最多预约", exact: true })
       await daily.evaluate((el) => el.scrollIntoView({ block: "center" }))
-      await daily.click()
-      await page
-        .getByRole("spinbutton", { name: "每天最多预约节数", exact: true })
-        .press("ArrowDown")
-      await page.getByRole("spinbutton", { name: "每天最多预约节数", exact: true }).press("Enter")
-      assert.equal(await daily.inputValue(), "2")
-      const rebook = editor.getByRole("checkbox", { name: "取消课程后自动补约", exact: true })
+      await daily.press("ArrowRight")
+      assert.equal(await daily.getAttribute("aria-valuenow"), "2")
+      const rebook = editor.getByRole("switch", { name: "取消课程后自动补约", exact: true })
       await rebook.click()
       assert.equal(await rebook.isChecked(), false)
-      await editor.getByLabel("最少提前预约", { exact: true }).click()
-      await page.getByRole("spinbutton", { name: "最少提前小时数", exact: true }).press("ArrowDown")
-      await page.getByRole("spinbutton", { name: "最少提前小时数", exact: true }).press("Enter")
-      assert.equal(await editor.getByLabel("最少提前预约", { exact: true }).inputValue(), "26")
-      const sleep = editor.getByRole("switch", { name: "启用休眠", exact: true })
-      await sleep.click()
-      assert.equal(await editor.getByLabel("休眠开始", { exact: true }).isDisabled(), true)
-      await sleep.click()
-      await time("休眠开始", 22, 0)
-      await time("休眠结束", 7, 0)
+      await editor.getByRole("slider", { name: "最少提前预约", exact: true }).press("ArrowRight")
+      assert.equal(await editor.getByRole("slider", { name: "最少提前预约", exact: true }).getAttribute("aria-valuenow"), "26")
+      await checkTime("检查开始", 7, 0)
+      await checkTime("检查结束", 22, 0)
       await screenshot("auto-settings-configured-1440")
       assert.deepEqual(
         fixture.config.teachers,
@@ -924,11 +1142,11 @@ exports.exerciseAutoBooking = async function ({
           .allTextContents(),
         ["Jenyy 老师", "Lewis 老师", "Sarah 老师"],
       )
-      assert.equal(await editor.getByLabel("最少提前预约", { exact: true }).inputValue(), "26")
+      assert.equal(await editor.getByRole("slider", { name: "最少提前预约", exact: true }).getAttribute("aria-valuenow"), "26")
       await selectedDates(["2026-11-04", "2026-11-05"])
       await editor.getByRole("status").filter({ hasText: "有未保存的修改" }).waitFor()
       await editor.getByRole("button", { name: "保存设置", exact: true }).click()
-      await auto.getByText("设置已保存。", { exact: true }).waitFor()
+      await page.getByText("设置已保存。", { exact: true }).waitFor()
       assert.deepEqual(
         fixture.config.teachers.map((teacher) => teacher.id),
         ["demo-0", "demo-1", "demo-3"],
@@ -1087,17 +1305,20 @@ exports.exerciseAutoBooking = async function ({
       await auto.getByRole("button", { name: "运行记录", exact: true }).click()
       const logs = page.getByRole("dialog", { name: "自动约课记录", exact: true })
       await logs.getByText("自动约课记录 3", { exact: true }).waitFor()
-      assert.equal(await logs.locator(".mison-auto-logs li").count(), 3)
+      assert.equal(await logs.locator(".mison-auto-logs > li").count(), 3)
+      await logs.getByRole("button", { name: "需关注", exact: true }).click()
+      assert.equal(await logs.locator(".mison-auto-logs > li").count(), 1)
+      await logs.getByRole("button", { name: "全部", exact: true }).click()
       await logs.getByRole("button", { name: "加载更多", exact: true }).click()
       await logs.getByText("自动约课记录 6", { exact: true }).waitFor()
-      assert.equal(await logs.locator(".mison-auto-logs li").count(), 6)
+      assert.equal(await logs.locator(".mison-auto-logs > li").count(), 6)
       assert.equal(await logs.getByRole("button", { name: "加载更多", exact: true }).count(), 0)
       await page.evaluate(() => document.querySelector('[data-view="settings"]').click())
       await page.locator(".plugin-overlay[hidden]").waitFor({ state: "attached" })
       await page.locator('[data-view="plugin:mison-booking"]').click()
       await logs.waitFor()
       await frames()
-      assert.equal(await logs.locator(".mison-auto-logs li").count(), 6)
+      assert.equal(await logs.locator(".mison-auto-logs > li").count(), 6)
       assert.equal(
         callCount("auto-booking/logs") - before,
         2,
@@ -1186,15 +1407,17 @@ exports.exerciseAutoBooking = async function ({
     )
     assert.equal(
       await editor
-        .getByRole("button", { name: /保存设置|添加收藏老师|前移|后移|添加时段/ })
+        .getByRole("button", { name: /保存设置|添加收藏老师|前移|后移|设置时段/ })
         .count(),
       0,
     )
-    for (const label of ["最少提前预约", "休眠开始", "休眠结束"])
-      assert.equal(await editor.getByLabel(label, { exact: true }).isDisabled(), true)
+    for (const name of ["最少提前预约", "每天最多预约"])
+      assert.equal(await editor.getByRole("slider", { name, exact: true }).getAttribute("aria-disabled"), "true")
+    for (const name of ["检查开始", "检查结束"])
+      assert.equal(await editor.getByRole("slider", { name, exact: true }).getAttribute("aria-disabled"), "true")
     assert.equal(
-      await editor.getByRole("switch", { name: "启用休眠", exact: true }).isDisabled(),
-      true,
+      await editor.getByRole("slider", { name: "检查开始", exact: true }).getAttribute("aria-disabled"),
+      "true",
     )
     await selectedDates(fixture.config.dates, { disabled: true })
     assert.equal(

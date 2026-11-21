@@ -1,26 +1,36 @@
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react"
-import { Badge } from "@shared/components/ui/badge"
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react"
 import { Popover, PopoverTrigger } from "@shared/components/ui/popover"
 import { Skeleton } from "@shared/components/ui/skeleton"
-import { CalendarDays, ChevronLeft, ChevronRight, RefreshCw } from "lucide-react"
-import { getAutoBookingSchedules } from "./api"
-import { addDays, parseDate, rangeDates } from "./calendar-date"
-import { Button, DatePicker, Notice, PopoverContent, dateLabel, teacherName } from "./ui"
-import type { AutoBookingScheduleDay, AutoBookingTeacher, PluginContext } from "./types"
+import { Switch } from "@shared/components/ui/switch"
+import { Tabs, TabsList, TabsTrigger } from "@shared/components/ui/tabs"
+import { RefreshCw } from "lucide-react"
+import { getAutoBookingSnapshot } from "./api"
+import { parseDate } from "./calendar-date"
+import unavailableIllustration from "./schedule-unavailable.svg?inline"
+import { Avatar, Button, Empty, Notice, PopoverContent, dateLabel, teacherName } from "./ui"
+import type {
+  AutoBookingSnapshot,
+  AutoBookingStatus,
+  AutoBookingTeacher,
+  PluginContext,
+} from "./types"
 
-type SchedulePage = {
-  days: AutoBookingScheduleDay[]
-  cursor: string | null
-  complete: boolean
-  seen: Set<string>
-  updatedAt: string | null
-  refreshToken: string
+const slotLabels = { available: "可约", mine: "本人已约", occupied: "被占", unscheduled: "未排班" }
+
+type ScheduleEntry = { snapshotId: string } & (
+  | { snapshot: AutoBookingSnapshot; count: number; error?: never }
+  | { snapshot?: never; count?: never; error: string }
+)
+type ScheduleCache = {
+  context: PluginContext
+  configRevision: number
+  entries: Record<string, ScheduleEntry>
 }
-const slotLabels = {
-  available: "可约",
-  mine: "本人已约",
-  occupied: "被占",
-  unscheduled: "未排班",
+
+function visibleListHeight(list: HTMLElement, dashboard: HTMLElement) {
+  const viewportBottom =
+    dashboard.getBoundingClientRect().top + dashboard.clientTop + dashboard.clientHeight
+  return Math.max(0, Math.ceil(viewportBottom - list.getBoundingClientRect().top))
 }
 
 export function autoBookingTime(at: string | null, timeOnly = false) {
@@ -33,310 +43,285 @@ export function autoBookingTime(at: string | null, timeOnly = false) {
         ...(timeOnly ? {} : { month: "numeric", day: "numeric" }),
         hour: "2-digit",
         minute: "2-digit",
+        second: "2-digit",
         hour12: false,
       }).format(date)
 }
 
 export function AutoBookingSchedule({
   context,
-  teacher,
-  serverDate,
-  revision,
+  teachers,
+  snapshot,
   active,
-  refreshToken,
-  teacherNavigation,
-  onAvailability,
+  focusDate,
+  targetDates,
+  priorityTimes,
 }: {
   context: PluginContext
-  teacher: AutoBookingTeacher
-  serverDate: string
-  revision: number
+  teachers: AutoBookingTeacher[]
+  snapshot: AutoBookingStatus["snapshot"]
   active: boolean
-  refreshToken: string
-  teacherNavigation: ReactNode
-  onAvailability: (id: string, count: number | null) => void
+  focusDate?: { date: string; sequence: number } | null
+  targetDates: string[]
+  priorityTimes(date: string): string[]
 }) {
-  const [from, setFrom] = useState(serverDate)
-  const to = addDays(from, 13)
-  const key = `${teacher.id}:${from}:${to}:${revision}`
-  const cache = useRef(new Map<string, SchedulePage>())
-  const [snapshot, setSnapshot] = useState<{ key: string; page: SchedulePage | null }>({
-    key,
-    page: null,
-  })
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState("")
-  const [retry, setRetry] = useState(0)
-  const [manualRefresh, setManualRefresh] = useState(0)
-  const [filter, setFilter] = useState("all")
-  const scroll = useRef<HTMLDivElement>(null)
-  const positions = useRef(new Map<string, number>())
-  const token = `${refreshToken}:${manualRefresh}`
-  useLayoutEffect(() => {
-    if (scroll.current) scroll.current.scrollTop = positions.current.get(key) ?? 0
-  }, [key])
+  const [targetsOnly, setTargetsOnly] = useState(targetDates.length > 0)
+  const [teacherId, setTeacherId] = useState(teachers[0].id)
+  const [cache, setCache] = useState<ScheduleCache | null>(null)
+  const panelId = useId()
+  const listRef = useRef<HTMLDivElement>(null)
+  const consumedFocus = useRef(0)
+  const teacher = teachers.find((item) => item.id === teacherId) ?? teachers[0]
+  const snapshotId = snapshot?.id
+  const configRevision = snapshot?.configRevision
+  const entries =
+    cache?.context === context && cache.configRevision === configRevision
+      ? cache.entries
+      : undefined
+  const entry = entries?.[teacher.id]
+  const current = entry?.snapshotId === snapshotId ? entry?.snapshot : undefined
+  const error = entry?.snapshotId === snapshotId ? entry?.error : undefined
+  const loading = !!snapshotId && !current && !error
+  const displayed = current ?? (loading ? entry?.snapshot : undefined)
+  const bookingUnavailable = displayed?.teacher.bookingUnavailable === true
+  const days = (bookingUnavailable ? [] : (displayed?.teacher.days ?? [])).filter(
+    (day) => !targetsOnly || targetDates.includes(day.date),
+  )
+
+  const reserveVisibleList = useCallback(() => {
+    const list = listRef.current
+    const dashboard = list?.closest<HTMLElement>(".mison-auto-dashboard")
+    if (!list || !dashboard) return
+    const height = `${visibleListHeight(list, dashboard)}px`
+    if (list.style.minHeight === height) return
+    list.style.minHeight = height
+    void dashboard.scrollHeight
+  }, [])
   useEffect(() => {
+    const list = listRef.current
+    const dashboard = list?.closest<HTMLElement>(".mison-auto-dashboard")
+    if (!active || !list || !dashboard) return
+    const releaseSpace = () => {
+      const reserved = Number.parseFloat(list.style.minHeight)
+      if (reserved > 0) {
+        const height = visibleListHeight(list, dashboard)
+        if (height < reserved) list.style.minHeight = height ? `${height}px` : ""
+      }
+    }
+    dashboard.addEventListener("scroll", releaseSpace, { passive: true })
+    return () => dashboard.removeEventListener("scroll", releaseSpace)
+  }, [active])
+
+  useEffect(() => {
+    if (
+      !active ||
+      !loading ||
+      !snapshotId ||
+      configRevision === undefined ||
+      context.signal.aborted
+    )
+      return
     let cancelled = false
-    if (!active || context.signal.aborted) {
-      setLoading(false)
-      return
+    const accept = (result: ScheduleEntry) => {
+      if (cancelled || context.signal.aborted) return
+      reserveVisibleList()
+      setCache((previous) => ({
+        context,
+        configRevision,
+        entries: {
+          ...(previous?.context === context && previous.configRevision === configRevision
+            ? previous.entries
+            : {}),
+          [teacher.id]: result,
+        },
+      }))
     }
-    const current = () => !cancelled && !context.signal.aborted
-    let page = cache.current.get(key)
-    if (!page || page.refreshToken !== token) {
-      page = {
-        days: page?.days ?? [],
-        cursor: null,
-        complete: false,
-        seen: new Set(),
-        updatedAt: page?.updatedAt ?? null,
-        refreshToken: token,
-      }
-      cache.current.set(key, page)
-    }
-    setSnapshot({ key, page })
-    setError("")
-    if (page.complete) {
-      setLoading(false)
-      return
-    }
-    setLoading(true)
-    const initial = page
-    async function load() {
-      let progress = initial
-      try {
-        do {
-          const result = await getAutoBookingSchedules(
-            context,
-            teacher.id,
-            from,
-            to,
-            progress.cursor,
-          )
-          if (!current()) return
-          if (result.teacherId !== teacher.id) throw new Error("排班老师不匹配，请刷新重试。")
-          const days = new Map(progress.days.map((day) => [day.date, day]))
-          result.days.forEach((day) => {
-            if (day.date >= from && day.date <= to) days.set(day.date, day)
-          })
-          const repeated = !!result.nextCursor && progress.seen.has(result.nextCursor)
-          const seen = new Set(progress.seen)
-          if (result.nextCursor) seen.add(result.nextCursor)
-          progress = {
-            ...progress,
-            days: [...days.values()].sort((a, b) => a.date.localeCompare(b.date)),
-            cursor: repeated ? progress.cursor : result.nextCursor,
-            complete: !result.nextCursor,
-            seen,
-            updatedAt: result.updatedAt,
-          }
-          cache.current.set(key, progress)
-          setSnapshot({ key, page: progress })
-          if (repeated) throw new Error("排班分页重复，请使用刷新重新读取。")
-        } while (!progress.complete && current())
-      } catch (reason) {
-        if (current()) setError((reason as Error).message)
-      } finally {
-        if (current()) setLoading(false)
-      }
-    }
-    void load()
-    if (cache.current.size > 24) {
-      const oldest = cache.current.keys().next().value
-      if (oldest && oldest !== key) {
-        cache.current.delete(oldest)
-        positions.current.delete(oldest)
-      }
-    }
+    getAutoBookingSnapshot(context, teacher.id)
+      .then((result) => {
+        if (
+          result.snapshotId !== snapshotId ||
+          result.configRevision !== configRevision ||
+          result.teacher.id !== teacher.id
+        )
+          throw new Error("排班快照已更新，请重试。")
+        const count = result.teacher.days.reduce(
+          (total, day) => total + day.slots.filter((slot) => slot.state === "available").length,
+          0,
+        )
+        accept({ snapshotId, snapshot: result, count })
+      })
+      .catch((reason) => {
+        accept({ snapshotId, error: (reason as Error).message })
+      })
     return () => {
       cancelled = true
     }
-  }, [context, key, teacher.id, from, to, token, active, retry])
-  const page = snapshot.key === key ? snapshot.page : null
-  const days = new Map(page?.days.map((day) => [day.date, day]))
-  useEffect(() => {
-    onAvailability(
-      teacher.id,
-      page?.complete
-        ? page.days.reduce(
-            (count, day) => count + day.slots.filter((slot) => slot.state === "available").length,
-            0,
-          )
-        : null,
-    )
-  }, [teacher.id, page, onAvailability])
+  }, [context, teacher.id, snapshotId, configRevision, active, loading, reserveVisibleList])
+  useLayoutEffect(() => {
+    if (!active || !focusDate || consumedFocus.current === focusDate.sequence || !current) return
+    const row = listRef.current?.querySelector<HTMLElement>(`[data-date="${focusDate.date}"]`)
+    row?.scrollIntoView({ block: "nearest", inline: "nearest" })
+    consumedFocus.current = focusDate.sequence
+  }, [focusDate, active, current])
+  const checkedAt = displayed?.checkedAt ?? snapshot?.checkedAt
   return (
     <section
       className="mison-auto-schedule"
       aria-label={`${teacher.name}的排班`}
       aria-busy={loading}
+      data-complete={!loading}
     >
       <div className="mison-auto-schedule-toolbar">
-        <h2>目标老师排班</h2>
-        <div className="mison-auto-schedule-actions">
-          <small>{autoBookingTime(page?.updatedAt ?? null, true)} 更新</small>
-          <Popover>
-            <PopoverTrigger asChild>
+        <div className="mison-auto-schedule-title">
+          <h2>排班详情</h2>
+          <span>
+            {displayed && !bookingUnavailable
+              ? `今天起 ${displayed.teacher.days.length} 天`
+              : snapshotId
+                ? "排班快照"
+                : "等待检查"}
+          </span>
+          <label className="mison-auto-date-scope">
+            <Switch
+              aria-label="仅看目标日期"
+              checked={targetsOnly}
+              onCheckedChange={setTargetsOnly}
+            />
+            仅看目标日
+          </label>
+        </div>
+        <time className="mison-caption">
+          {checkedAt ? `检查于 ${autoBookingTime(checkedAt)}` : ""}
+        </time>
+      </div>
+      <Tabs
+        className="mison-auto-teacher-switch"
+        value={teacher.id}
+        onValueChange={(id) => {
+          if (id === teacher.id) return
+          reserveVisibleList()
+          consumedFocus.current = focusDate?.sequence ?? 0
+          setTeacherId(id)
+        }}
+      >
+        <div className="mison-auto-teacher-navigation">
+          <TabsList aria-label="切换排班老师">
+            {teachers.map((item, index) => {
+              const entry = entries?.[item.id]
+              const count = entry?.snapshotId === snapshotId ? entry?.count : undefined
+              return (
+                <TabsTrigger
+                  key={item.id}
+                  value={item.id}
+                  id={`${panelId}-${item.id}`}
+                  aria-controls={panelId}
+                  aria-label={`${index + 1}. ${teacherName(item.name)}`}
+                >
+                  <Avatar name={item.name} url={item.avatarUrl} compact />
+                  <span>{item.name.replace(/\s*老师$/, "")}</span>
+                  <span className="mison-auto-teacher-count">{count ?? "—"}</span>
+                  {loading && item.id === teacher.id ? (
+                    <RefreshCw className="mison-auto-teacher-loading animate-spin" aria-hidden />
+                  ) : null}
+                </TabsTrigger>
+              )
+            })}
+          </TabsList>
+        </div>
+        <div
+          className="mison-auto-schedule-scroll"
+          ref={listRef}
+          id={panelId}
+          role="tabpanel"
+          tabIndex={0}
+          aria-labelledby={`${panelId}-${teacher.id}`}
+          data-unavailable={bookingUnavailable || undefined}
+        >
+          {error ? (
+            <Notice error>
+              {error}
               <Button
                 variant="outline"
-                size="icon"
-                aria-label="选择排班日期范围"
-                title={`${from} 至 ${to}`}
+                onClick={() => {
+                  reserveVisibleList()
+                  setCache((previous) => {
+                    if (!previous) return previous
+                    const entries = { ...previous.entries }
+                    delete entries[teacher.id]
+                    return { ...previous, entries }
+                  })
+                }}
               >
-                <CalendarDays />
+                重试读取
               </Button>
-            </PopoverTrigger>
-            <PopoverContent className="mison-auto-range-popover" aria-label="排班日期范围">
-              <div className="mison-auto-range">
-                <Button
-                  variant="outline"
-                  size="icon"
-                  aria-label="前14天"
-                  onClick={() => setFrom(addDays(from, -14))}
-                >
-                  <ChevronLeft />
-                </Button>
-                <DatePicker
-                  aria-label="排班起始日期"
-                  value={from}
-                  onChange={(date) => {
-                    if (date) setFrom(date)
-                  }}
-                />
-                <Button
-                  variant="outline"
-                  size="icon"
-                  aria-label="后14天"
-                  onClick={() => setFrom(addDays(from, 14))}
-                >
-                  <ChevronRight />
-                </Button>
-              </div>
-              <div className="mison-auto-range-caption">
-                <small>至 {dateLabel(to)} · 北京时间</small>
-                <Button variant="ghost" onClick={() => setFrom(serverDate)}>
-                  今天
-                </Button>
-              </div>
-            </PopoverContent>
-          </Popover>
-          <select
-            className="mison-auto-filter"
-            aria-label="排班时段筛选"
-            value={filter}
-            onChange={(event) => setFilter(event.target.value)}
-          >
-            <option value="all">全部时段</option>
-            <option value="available">仅看可约</option>
-            <option value="matches">符合预约条件</option>
-          </select>
-          <Button
-            variant="outline"
-            aria-label="刷新排班"
-            disabled={loading}
-            onClick={() => setManualRefresh((value) => value + 1)}
-          >
-            <RefreshCw data-icon="inline-start" />
-            刷新排班
-          </Button>
-        </div>
-      </div>
-      <div className="mison-auto-teacher-navigation">
-        {teacherNavigation}
-        <div className="mison-auto-legend" aria-label="排班状态图例">
-          <span data-state="available">可约</span>
-          <span data-state="occupied">被占</span>
-          <span data-state="mine">本人已约</span>
-        </div>
-      </div>
-      {error ? (
-        <Notice error>
-          {error} 已读取的日期仍保留。
-          <Button
-            variant="outline"
-            disabled={loading}
-            onClick={() => setRetry((value) => value + 1)}
-          >
-            继续加载
-          </Button>
-        </Notice>
-      ) : null}
-      <div
-        className="mison-auto-schedule-scroll"
-        ref={scroll}
-        onScroll={(event) => positions.current.set(key, event.currentTarget.scrollTop)}
-        tabIndex={0}
-        aria-label="按日期查看排班"
-      >
-        {rangeDates(from, to).map((date) => {
-          const day = days.get(date)
-          return (
-            <section key={date} className="mison-auto-day" aria-label={dateLabel(date)}>
-              <div className="mison-auto-day-heading">
-                <h3>
-                  <time dateTime={date}>
-                    {new Intl.DateTimeFormat("zh-CN", { month: "long", day: "numeric" }).format(
-                      parseDate(date),
-                    )}
-                  </time>
-                  <span>
-                    {
-                      ["周日", "周一", "周二", "周三", "周四", "周五", "周六"][
-                        parseDate(date).getDay()
-                      ]
-                    }
-                  </span>
-                </h3>
-                <Badge
-                  variant="secondary"
-                  className="mison-auto-target"
-                  data-target={!!day?.target}
-                >
-                  {day?.target ? "目标日" : "非目标日"}
-                </Badge>
-                {day?.booked ? <Badge variant="secondary">当天已有课程</Badge> : null}
-              </div>
-              {!day ? (
-                page?.complete ? (
-                  <p className="mison-caption">暂未返回该日排班，请刷新重试。</p>
-                ) : (
-                  <div className="mison-auto-day-loading">
-                    <Skeleton className="h-8 w-28" />
-                    <span className="mison-caption">等待加载排班…</span>
+            </Notice>
+          ) : null}
+          {loading && !displayed
+            ? Array.from({ length: 4 }, (_, index) => (
+                <section key={index} className="mison-auto-day mison-auto-day-skeleton" aria-hidden>
+                  <div className="mison-auto-day-heading">
+                    <Skeleton className="h-6 w-28" />
                   </div>
-                )
-              ) : day.state === "unopened" ? (
-                <p className="mison-caption">{day.message || "尚未开放排班"}</p>
-              ) : day.state === "error" ? (
-                <Notice error>
-                  {day.message || "该日排班读取失败"}
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={loading}
-                    onClick={() => setManualRefresh((value) => value + 1)}
-                  >
-                    重试排班
-                  </Button>
-                </Notice>
-              ) : day.slots.length ? (
-                <div className="mison-auto-slots">
-                  {day.slots
-                    .filter(
-                      (slot) =>
-                        filter === "all" ||
-                        (filter === "available" ? slot.state === "available" : slot.matches),
-                    )
-                    .map((slot) => (
-                      <Popover key={`${slot.start}:${slot.end}`}>
+                  <div className="mison-auto-slots">
+                    <Skeleton className="h-8 w-24 rounded-full" />
+                    <Skeleton className="h-8 w-24 rounded-full" />
+                    <Skeleton className="h-8 w-24 rounded-full" />
+                  </div>
+                </section>
+              ))
+            : null}
+          {days.map((day) => {
+            const visibleSlots = day.slots.filter((slot) => slot.state !== "unscheduled")
+            const priorities = new Set(priorityTimes(day.date))
+            const weekday = parseDate(day.date).getDay()
+            const weekdayName = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"][weekday]
+            const target = targetDates.includes(day.date)
+            return (
+              <section
+                key={day.date}
+                className="mison-auto-day"
+                data-date={day.date}
+                data-focused={focusDate?.date === day.date}
+                data-target={target}
+                aria-label={dateLabel(day.date)}
+              >
+                <div className="mison-auto-day-heading">
+                  <h3>
+                    <time dateTime={day.date}>
+                      {new Intl.DateTimeFormat("sv-SE", {
+                        timeZone: "Asia/Shanghai",
+                        year: "numeric",
+                        month: "2-digit",
+                        day: "2-digit",
+                      }).format(parseDate(day.date))}
+                    </time>
+                  </h3>
+                  <div className="mison-auto-day-meta">
+                    <span
+                      className="mison-auto-weekday"
+                      data-weekend={weekday === 0 || weekday === 6 || undefined}
+                    >
+                      {weekdayName}
+                    </span>
+                    {!targetsOnly ? (
+                      <span className="mison-auto-target">{target ? "目标日" : "非目标日"}</span>
+                    ) : null}
+                  </div>
+                </div>
+                {day.state === "unopened" || !visibleSlots.length ? (
+                  <p className="mison-caption">{day.state === "unopened" ? "未开放" : "无排班"}</p>
+                ) : (
+                  <div className="mison-auto-slots">
+                    {visibleSlots.map((slot) => (
+                      <Popover key={`${teacher.id}:${slot.start}`}>
                         <PopoverTrigger asChild>
                           <Button
                             variant="outline"
                             size="sm"
                             className="mison-auto-slot"
                             data-state={slot.state}
-                            data-matches={slot.matches}
-                            aria-label={`${dateLabel(date)} ${slot.start} ${slotLabels[slot.state]}`}
+                            data-matches={slot.state === "available" && priorities.has(slot.start)}
+                            aria-label={`${dateLabel(day.date)} ${slot.start} ${slotLabels[slot.state]}`}
                           >
                             <time>{slot.start}</time>
                             <span>{slotLabels[slot.state]}</span>
@@ -344,44 +329,33 @@ export function AutoBookingSchedule({
                         </PopoverTrigger>
                         <PopoverContent className="w-64" aria-label={`${slot.start}时段详情`}>
                           <p>
-                            {teacherName(teacher.name)} · {dateLabel(date)}
+                            {teacherName(teacher.name)} · {dateLabel(day.date)}
                           </p>
                           <p>
                             {slot.start}–{slot.end} · {slotLabels[slot.state]}
                           </p>
-                          <p className="mison-caption">
-                            {slot.reason || "符合已保存的自动约课条件。"}
-                          </p>
                         </PopoverContent>
                       </Popover>
                     ))}
-                  {!day.slots.some(
-                    (slot) =>
-                      filter === "all" ||
-                      (filter === "available" ? slot.state === "available" : slot.matches),
-                  ) ? (
-                    <p className="mison-caption">暂无符合筛选的时段</p>
-                  ) : null}
-                </div>
-              ) : (
-                <p className="mison-caption">未排班</p>
-              )}
-            </section>
-          )
-        })}
-      </div>
-      <div className="mison-auto-schedule-progress" role="status">
-        {loading
-          ? `正在逐页加载，已读取 ${days.size}/14 天…`
-          : error
-            ? `已读取 ${days.size}/14 天，部分排班尚未加载。`
-            : page?.complete
-              ? `已读取 ${days.size}/14 天`
-              : "等待加载排班"}
-        {page?.updatedAt ? (
-          <span> · 更新于 {autoBookingTime(page.updatedAt)}（北京时间）</span>
-        ) : null}
-      </div>
+                  </div>
+                )}
+              </section>
+            )
+          })}
+          {bookingUnavailable ? (
+            <Empty title="暂时无法预约" icon={<img src={unavailableIllustration} alt="" />} />
+          ) : displayed && !days.length ? (
+            <p className="mison-auto-no-targets">
+              {targetsOnly ? "当前快照没有目标日期。" : "当前快照没有排班日期。"}
+            </p>
+          ) : null}
+          {!loading && !error && !current ? (
+            <p className="mison-auto-no-targets">
+              还没有排班快照。下一次检查完成后，这里会显示每位老师的排班。
+            </p>
+          ) : null}
+        </div>
+      </Tabs>
     </section>
   )
 }

@@ -56,6 +56,7 @@ export type PluginDevelopment = {
   revision: number
   base: string
   backend: boolean
+  compiledEntry?: string
 }
 export type PluginEntry = {
   entry: string

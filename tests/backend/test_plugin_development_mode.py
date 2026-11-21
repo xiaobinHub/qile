@@ -2,6 +2,7 @@
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager, redirect_stderr
 import copy
+import gzip
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import io
@@ -20,7 +21,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from fastapi.responses import JSONResponse
 from lele_growth.child_service import ApiError
-from lele_growth.plugins.dev_mode import DevRegistry, authorize_resource, mount_proxy, proxy_target, invocation
+from lele_growth.plugins.dev_mode import DevRegistry, authorize_resource, mount_proxy, proxy_target, invocation, encode_development_resource
 from lele_growth.plugins.supervisor import PluginSupervisor, Worker
 from tests.backend.test_plugin_runtime import scope
 from lele_growth.plugins.gateway import ContextSigner
@@ -622,6 +623,38 @@ class HostTests(Fixture):
                 service.origin_trusted.return_value = False
                 with self.assertRaises(WebSocketDisconnect):
                     with client.websocket_connect(path, subprotocols=['vite-hmr']): pass
+
+
+class DevelopmentResourceEncodingTests(unittest.TestCase):
+    def test_large_scripts_and_styles_are_compressed_losslessly(self):
+        body = b'export const value = "a repeated development module";\n' * 2000
+        for content_type in ('text/javascript; charset=utf-8', 'application/javascript', 'text/css'):
+            with self.subTest(content_type=content_type):
+                encoded, headers = encode_development_resource(body, content_type, 'br, gzip;q=0.8')
+                self.assertEqual(headers['Content-Encoding'], 'gzip')
+                self.assertEqual(headers['Vary'], 'Accept-Encoding')
+                self.assertEqual(headers['Content-Type'], content_type)
+                self.assertLess(len(encoded), len(body) / 10)
+                self.assertEqual(gzip.decompress(encoded), body)
+
+    def test_encoding_negotiation_respects_disabled_and_invalid_gzip(self):
+        body = b'export const value = 1;\n' * 2000
+        for encoding in ('', 'br', 'gzip;q=0', 'gzip;q=0, *;q=1', 'gzip;q=invalid', 'gzip;q=2'):
+            with self.subTest(encoding=encoding):
+                encoded, headers = encode_development_resource(body, 'text/javascript', encoding)
+                self.assertEqual(encoded, body)
+                self.assertNotIn('Content-Encoding', headers)
+        encoded, headers = encode_development_resource(body, 'text/javascript', '*;q=0.5')
+        self.assertEqual(headers['Content-Encoding'], 'gzip')
+        self.assertEqual(gzip.decompress(encoded), body)
+
+    def test_small_and_non_script_resources_remain_unchanged(self):
+        for body, content_type in ((b'export {}', 'text/javascript'), (b'a' * 5000, 'image/png'),
+                                   (b'a' * 5000, 'application/json')):
+            with self.subTest(content_type=content_type):
+                encoded, headers = encode_development_resource(body, content_type, 'gzip')
+                self.assertEqual(encoded, body)
+                self.assertNotIn('Content-Encoding', headers)
 
 
 if __name__ == '__main__':

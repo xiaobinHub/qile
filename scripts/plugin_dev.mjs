@@ -1,5 +1,5 @@
 /** Local plugin development orchestrator. No packaging or business API calls. */
-import { createServer } from "vite"
+import { build, createServer } from "vite"
 import { spawn } from "node:child_process"
 import { readFileSync, mkdirSync, chmodSync } from "node:fs"
 import { resolve } from "node:path"
@@ -7,13 +7,46 @@ import { fileURLToPath } from "node:url"
 import { randomUUID } from "node:crypto"
 import { pluginViteConfig } from "./plugin_vite_config.mjs"
 const root = resolve(fileURLToPath(new URL("..", import.meta.url)))
+
+function compiledPreview(id) {
+  return build({
+    ...pluginViteConfig(root, id),
+    base: "./",
+    mode: "production",
+    define: { "process.env.NODE_ENV": JSON.stringify("production") },
+    oxc: { jsx: { development: false } },
+    logLevel: "warn",
+    build: {
+      write: false,
+      lib: {
+        entry: resolve(root, "plugins", id, "frontend/entry.ts"),
+        formats: ["es"],
+        fileName: () => "entry.js",
+      },
+      cssCodeSplit: false,
+      rollupOptions: { output: { codeSplitting: false, assetFileNames: "[name]-[hash][extname]" } },
+    },
+  }).then((result) => {
+    const output = (Array.isArray(result) ? result : [result]).flatMap((build) => build.output)
+    const assets = new Map()
+    const styles = []
+    for (const file of output) {
+      if (file.type === "asset" && file.fileName.endsWith(".css")) styles.push(String(file.source))
+      else assets.set(file.fileName, file.type === "chunk" ? file.code : file.source)
+    }
+    const entry = assets.get("entry.js")
+    if (typeof entry !== "string") throw Error("编译预览缺少应用入口。")
+    assets.set("entry.js", `${entry}\nexport const developmentStyles = ${JSON.stringify(styles.join("\n"))};`)
+    return assets
+  })
+}
+
 export function developmentEntry(base, id) {
-  return `import RefreshRuntime from ${JSON.stringify("/@react-refresh")};
-RefreshRuntime.injectIntoGlobalHook(window);
-window.$RefreshReg$ = () => {};
-window.$RefreshSig$ = () => type => type;
-window.__vite_plugin_react_preamble_installed__ = true;
-let implementation = await import(${JSON.stringify("/frontend/entry.ts")});
+  // Fetch the plugin and React Refresh in one static graph so the HMR socket
+  // starts after the initial module downloads. Evaluate the preamble first.
+  return `import "@vitejs/plugin-react/preamble";
+import * as initialImplementation from "/frontend/entry.ts";
+let implementation = initialImplementation;
 const mounts = new Set();
 const ownedStyles = new Map();
 const sourcePrefix = ${JSON.stringify(resolve(root, "plugins", "__PLUGIN__").replace("__PLUGIN__", ""))} + ${JSON.stringify(id)} + "/";
@@ -50,7 +83,7 @@ export function mount(container, context) {
   return () => { mounts.delete(item); try { item.dispose(); } finally { collectStyles(); } };
 }
 if (import.meta.hot) {
-  import.meta.hot.accept(${JSON.stringify("/frontend/entry.ts")}, module => {
+  import.meta.hot.accept("/frontend/entry.ts", module => {
     if (!module) return;
     implementation = module;
     for (const item of mounts) {
@@ -66,19 +99,46 @@ export async function createPluginDevServer(id, session, options = {}) {
     throw Error("无效的插件开发标识。")
   const base = `/__plugin-dev/${id}/${session}/`
   const common = pluginViteConfig(root, id)
+  const cacheDir = options.cacheDir ?? resolve(root, "node_modules/.vite-plugin-dev", id)
+  const compiledBase = base + "__compiled/"
+  let pendingPreview
+  let compiledAssets = new Map()
   const server = await createServer({
     ...common,
     base,
     appType: "custom",
     optimizeDeps: { entries: [resolve(root, "plugins", id, "frontend/entry.ts")] },
-    cacheDir: resolve(root, "node_modules/.vite-plugin-dev", id),
+    cacheDir,
     plugins: [
       ...common.plugins,
       {
         name: "plugin-development-entry",
         configureServer(server) {
           server.middlewares.use(async (req, res, next) => {
-            if (req.url?.split("?")[0] === base + "@plugin-entry") {
+            const pathname = req.url?.split("?")[0]
+            if (pathname?.startsWith(compiledBase)) {
+              const file = pathname.slice(compiledBase.length)
+              try {
+                if (file === "entry.js") {
+                  pendingPreview ??= compiledPreview(id).finally(() => { pendingPreview = undefined })
+                  compiledAssets = await pendingPreview
+                }
+                const asset = compiledAssets.get(file)
+                if (asset === undefined) {
+                  res.statusCode = 404
+                  res.end()
+                } else {
+                  res.setHeader("Content-Type", file.endsWith(".js") ? "text/javascript" : "application/octet-stream")
+                  res.end(req.method === "HEAD" ? undefined : asset)
+                }
+              } catch (error) {
+                server.config.logger.error(String(error))
+                res.statusCode = 503
+                res.end("应用编译预览暂时不可用。")
+              }
+              return
+            }
+            if (pathname === base + "@plugin-entry") {
               try {
                 const result = await server.transformRequest("/@plugin-entry.js")
                 res.setHeader("Content-Type", "application/javascript")
@@ -115,6 +175,7 @@ export async function createPluginDevServer(id, session, options = {}) {
           resolve(root, "frontend/shared/src"),
           resolve(root, "packages/plugin-sdk/src"),
           resolve(root, "node_modules"),
+          cacheDir,
         ],
         deny: ["**/.env*", "**/.git/**", "**/data/**", "**/*.{key,pem}"],
       },

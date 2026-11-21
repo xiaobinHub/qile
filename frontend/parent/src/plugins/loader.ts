@@ -21,6 +21,7 @@ export function pluginAssetUrl(value: string, pluginId: string, version: string)
     rawPath.split("/").some((part) => part === "." || part === "..")
   )
     throw new Error("应用资源地址不受支持，请联系管理员。")
+  if (url.pathname.endsWith(".js")) url.searchParams.set("v", version)
   return url.href
 }
 
@@ -35,6 +36,25 @@ function developmentUrl(value: string, pluginId: string, dev: PluginDevelopment)
   )
     throw new Error("开发资源地址不正确。")
   return new URL(value, location.origin).href
+}
+
+function compiledDevelopmentUrl(value: unknown, base: string) {
+  if (typeof value === "string" && value.startsWith(base)) {
+    const url = new URL(value, location.origin)
+    // Match the proxy pathname without embedding a static asset reference in the bundle.
+    if (
+      url.origin === location.origin &&
+      url.pathname === value &&
+      /^__compiled\/entry\.js$/.test(url.pathname.slice(base.length))
+    )
+      return url.href
+  }
+  throw new Error("开发资源地址不正确。")
+}
+
+function moduleLoadInterrupted(error: unknown) {
+  return error instanceof TypeError &&
+    /failed to fetch dynamically imported module|importing a module script failed|error loading dynamically imported module|failed to load module script/i.test(error.message)
 }
 
 function businessPath(path: string) {
@@ -96,6 +116,7 @@ export async function mountPlugin(options: {
   let disposed = false
   let monitor: number | undefined
   let developmentStatus: HTMLElement | undefined
+  let compiledStyles: HTMLStyleElement | undefined
   let pageActive = true
   const listeners = new Set<(active: boolean) => void>()
   const overlay = document.createElement("div")
@@ -125,6 +146,7 @@ export async function mountPlugin(options: {
     disposed = true
     window.clearTimeout(monitor)
     developmentStatus?.remove()
+    compiledStyles?.remove()
     signal.removeEventListener("abort", dispose)
     listeners.clear()
     try {
@@ -174,7 +196,40 @@ export async function mountPlugin(options: {
     const styles = entry.styles.map((value) => pluginAssetUrl(value, plugin.id, entry.version))
     await Promise.all(styles.map((href) => stylesheet(href, signal, links)))
     assertActive()
-    const module = (await import(/* @vite-ignore */ entryUrl)) as PluginModule
+    let module: PluginModule
+    let compiled = false
+    try {
+      try {
+        module = (await import(/* @vite-ignore */ entryUrl)) as PluginModule
+      } catch (error) {
+        if (dev?.compiledEntry === undefined || !moduleLoadInterrupted(error)) throw error
+        assertActive()
+        const compiledUrl = compiledDevelopmentUrl(dev.compiledEntry, dev.base)
+        const preview = (await import(/* @vite-ignore */ compiledUrl)) as PluginModule & {
+          developmentStyles?: string
+        }
+        assertActive()
+        if (typeof preview.developmentStyles !== "string") throw Error("应用预览资源格式不正确。")
+        if (preview.developmentStyles) {
+          compiledStyles = document.createElement("style")
+          compiledStyles.textContent = preview.developmentStyles
+          document.head.append(compiledStyles)
+        }
+        module = preview
+        compiled = true
+      }
+    } catch (error) {
+      // A fresh document can retry URLs in the browser's failed module graph.
+      if (moduleLoadInterrupted(error)) {
+        throw new ApiError(
+          "应用资源加载中断，请刷新页面后重试。",
+          "connection",
+          0,
+          "plugin_module_load_failed",
+        )
+      }
+      throw error
+    }
     assertActive()
     if (typeof module.mount !== "function") throw new Error("应用入口缺少挂载方法，请联系管理员。")
     document.body.append(overlay)
@@ -229,7 +284,7 @@ export async function mountPlugin(options: {
     if (dev) {
       developmentStatus = document.createElement("p")
       developmentStatus.setAttribute("role", "status")
-      developmentStatus.textContent = `开发模式 · 前端源码热更新 · 后端${dev.backend ? "源码运行" : "已安装版本"}`
+      developmentStatus.textContent = `开发模式 · ${compiled ? "前端编译预览，刷新获取改动" : "前端源码热更新"} · 后端${dev.backend ? "源码运行" : "已安装版本"}`
       host.append(developmentStatus)
     }
     host.append(root)

@@ -250,7 +250,23 @@ class PluginRuntimeService:
                     self.pending[plugin_id] = self.pool.submit(self.scheduler.run_one, plugin_id)
             self.stopped.wait(1)
 
+    def restore_development_workers(self):
+        # The registry survives a host reload; source subprocesses do not.
+        if not self.development.enabled:
+            return
+        for path in sorted(self.development.root.glob('*.json')):
+            try:
+                session = self.development.read(path.stem)
+                if not session or not session['backend'] or session['state'] != 'ready':
+                    continue
+                self.development.live(session)
+                self.control_development('dev-reload', {'pluginId': session['pluginId'],
+                                                       'sessionId': session['sessionId']})
+            except ApiError:
+                logging.getLogger(__name__).warning('Plugin development restoration rejected: %s', path.stem)
+
     def start(self):
+        self.restore_development_workers()
         self.thread = threading.Thread(target=self._loop, name='plugin-scheduler', daemon=True)
         self.thread.start()
 

@@ -345,6 +345,28 @@ class BookingApiTests(DatabaseFixture):
             self.assertEqual(self.run_api('operations/'+body['operationId'])['state'],'succeeded')
             self.assertEqual(len(self.sent),1)
 
+    def test_staggered_partial_booking_reads_keep_confirmed_lessons_and_receipt_time(self):
+        with self.connected():
+            draft = self.create_draft(['19:00', '19:30', '20:00'])
+            body = self.submit_body(draft)
+            self.drop = 'onevoneAppointment'
+            missing = auth.AuthError('UPSTREAM_UNAVAILABLE', '回执尚未同步。')
+            with patch.object(operations, 'reconcile_book', side_effect=missing):
+                self.run_api('bookings', 'POST', body)
+            third = self.live.pop()
+            path = 'operations/' + body['operationId']
+            partial = self.run_api(path)
+            self.assertEqual(partial['state'], 'partially_succeeded')
+            self.assertEqual([item['startTime'] for item in partial['result']['bookingEvidence']], ['19:00', '19:30'])
+            self.live.pop()
+            self.assertEqual(self.run_api(path), partial)
+            self.live[:] = [third]
+            reconciled = self.run_api(path)
+            self.assertEqual(reconciled['state'], 'succeeded')
+            self.assertEqual([item['startTime'] for item in reconciled['result']['bookingEvidence']],
+                             ['19:00', '19:30', '20:00'])
+            self.assertEqual(len(self.sent), 1)
+
     def test_manual_acknowledgement_only_after_lease_and_without_resend(self):
         with self.connected():
             draft=self.create_draft(['19:00']);body=self.submit_body(draft)

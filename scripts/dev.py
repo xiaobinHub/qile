@@ -335,6 +335,158 @@ def _lan_ip():
     return candidates[0]
 
 
+def plugin_frontend_dev_status(plugin_id):
+    """Report the detached Vite session without printing source paths or credentials."""
+    from lele_growth.child_service import load_config
+    from lele_growth.plugins.dev_mode import DevRegistry
+    registry = DevRegistry(load_config(CONFIG))
+    registry.guard()
+    registry.path(plugin_id)
+    data = registry.read(plugin_id)
+    if data is None:
+        return {'pluginId': plugin_id, 'running': False}
+    try:
+        os.kill(data['pid'], 0)
+        alive = True
+    except OSError:
+        alive = False
+    return {'pluginId': plugin_id, 'running': alive and data.get('state') == 'ready',
+            'sessionId': data['sessionId'], 'revision': data['revision'],
+            'backend': data['backend'], 'state': data['state'], 'pidAlive': alive}
+
+
+def start_plugin_frontend_dev(plugin_id):
+    """Keep Vite alive independently of the terminal that requested it."""
+    from lele_growth.child_service import load_config
+    from lele_growth.plugins.dev_mode import DevRegistry
+    registry = DevRegistry(load_config(CONFIG))
+    registry.guard()
+    registry.path(plugin_id)
+    current = registry.read(plugin_id)
+    if current is not None:
+        try:
+            os.kill(current['pid'], 0)
+            if current.get('state') == 'ready':
+                print(json.dumps({'ok': True, 'reused': True, **plugin_frontend_dev_status(plugin_id)}, ensure_ascii=False))
+                return
+        except OSError:
+            pass
+        raise RuntimeError('已有失效的插件开发会话，请先执行 plugins-dev-stop。')
+    log_path = RUNTIME / 'plugin-dev' / (plugin_id + '.terminal.log')
+    log_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    log_path.parent.chmod(0o700)
+    with log_path.open('ab', buffering=0) as log:
+        process = subprocess.Popen(['npm', 'run', 'plugin:dev', '--', plugin_id], cwd=ROOT,
+                                   stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT,
+                                   start_new_session=True)
+    for _ in range(100):
+        if process.poll() is not None:
+            raise RuntimeError('插件前端开发服务启动失败，请查看 data/development/plugin-dev/' + plugin_id + '.terminal.log。')
+        data = registry.read(plugin_id)
+        if data is not None and data.get('state') == 'ready':
+            print(json.dumps({'ok': True, 'reused': False, **plugin_frontend_dev_status(plugin_id)}, ensure_ascii=False))
+            return
+        time.sleep(.1)
+    raise RuntimeError('插件前端开发服务尚未就绪，请查看 data/development/plugin-dev/' + plugin_id + '.terminal.log。')
+
+
+def stop_plugin_frontend_dev(plugin_id):
+    from lele_growth.child_service import load_config
+    from lele_growth.plugins.dev_mode import DevRegistry
+    registry = DevRegistry(load_config(CONFIG))
+    registry.guard()
+    registry.path(plugin_id)
+    data = registry.read(plugin_id)
+    if data is not None:
+        try:
+            os.kill(data['pid'], signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+        for _ in range(100):
+            if registry.read(plugin_id) is None:
+                break
+            time.sleep(.1)
+        else:
+            raise RuntimeError('插件开发服务尚未退出，请稍后重试。')
+    print(json.dumps({'ok': True, 'development': None}, ensure_ascii=False))
+
+
+def plugin_frontend_dev_status(plugin_id):
+    """Report the detached Vite session without printing source paths or credentials."""
+    from lele_growth.child_service import load_config
+    from lele_growth.plugins.dev_mode import DevRegistry
+    registry = DevRegistry(load_config(CONFIG))
+    registry.guard()
+    registry.path(plugin_id)
+    data = registry.read(plugin_id)
+    if data is None:
+        return {'pluginId': plugin_id, 'running': False}
+    try:
+        os.kill(data['pid'], 0)
+        alive = True
+    except OSError:
+        alive = False
+    return {'pluginId': plugin_id, 'running': alive and data.get('state') == 'ready',
+            'sessionId': data['sessionId'], 'revision': data['revision'],
+            'backend': data['backend'], 'state': data['state'], 'pidAlive': alive}
+
+
+def start_plugin_frontend_dev(plugin_id):
+    """Keep Vite alive independently of the terminal that requested it."""
+    from lele_growth.child_service import load_config
+    from lele_growth.plugins.dev_mode import DevRegistry
+    registry = DevRegistry(load_config(CONFIG))
+    registry.guard()
+    registry.path(plugin_id)
+    current = registry.read(plugin_id)
+    if current is not None:
+        try:
+            os.kill(current['pid'], 0)
+            if current.get('state') == 'ready':
+                print(json.dumps({'ok': True, 'reused': True, **plugin_frontend_dev_status(plugin_id)}, ensure_ascii=False))
+                return
+        except OSError:
+            pass
+        raise RuntimeError('已有失效的插件开发会话，请先执行 plugins-dev-stop。')
+    log_path = RUNTIME / 'plugin-dev' / (plugin_id + '.terminal.log')
+    log_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    log_path.parent.chmod(0o700)
+    with log_path.open('ab', buffering=0) as log:
+        process = subprocess.Popen(['npm', 'run', 'plugin:dev', '--', plugin_id], cwd=ROOT,
+                                   stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT,
+                                   start_new_session=True)
+    for _ in range(100):
+        if process.poll() is not None:
+            raise RuntimeError('插件前端开发服务启动失败，请查看 data/development/plugin-dev/' + plugin_id + '.terminal.log。')
+        data = registry.read(plugin_id)
+        if data is not None and data.get('state') == 'ready':
+            print(json.dumps({'ok': True, 'reused': False, **plugin_frontend_dev_status(plugin_id)}, ensure_ascii=False))
+            return
+        time.sleep(.1)
+    raise RuntimeError('插件前端开发服务尚未就绪，请查看 data/development/plugin-dev/' + plugin_id + '.terminal.log。')
+
+
+def stop_plugin_frontend_dev(plugin_id):
+    from lele_growth.child_service import load_config
+    from lele_growth.plugins.dev_mode import DevRegistry
+    registry = DevRegistry(load_config(CONFIG))
+    registry.guard()
+    registry.path(plugin_id)
+    data = registry.read(plugin_id)
+    if data is not None:
+        try:
+            os.kill(data['pid'], signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+        for _ in range(100):
+            if registry.read(plugin_id) is None:
+                break
+            time.sleep(.1)
+        else:
+            raise RuntimeError('插件开发服务尚未退出，请稍后重试。')
+    print(json.dumps({'ok': True, 'development': None}, ensure_ascii=False))
+
+
 def stop():
     for surface in ('parent', 'admin'):
         file = RUNTIME / (surface + '.pid')
@@ -472,6 +624,9 @@ def main():
     sub.add_parser('reset-admin').add_argument('--login-name', default='admin')
     for name in ('start', 'stop', 'restart', 'plugins-setup', 'plugins-runtime-start', 'status', 'test'):
         sub.add_parser(name)
+    for name in ('plugins-dev-start', 'plugins-dev-stop', 'plugins-dev-status'):
+        item = sub.add_parser(name)
+        item.add_argument('plugin')
     sub.add_parser('plugins-deploy').add_argument('package')
     sub.add_parser('plugins-preview').add_argument('package')
     inspect_parser = sub.add_parser('plugins-inspect')
@@ -507,6 +662,12 @@ def main():
         elif args.command == 'plugins-runtime-start':
             ensure_plugin_runtime()
             print('本机插件运行服务已就绪。')
+        elif args.command == 'plugins-dev-start':
+            start_plugin_frontend_dev(args.plugin)
+        elif args.command == 'plugins-dev-stop':
+            stop_plugin_frontend_dev(args.plugin)
+        elif args.command == 'plugins-dev-status':
+            print(json.dumps(plugin_frontend_dev_status(args.plugin), ensure_ascii=False))
         elif args.command == 'reset-admin': reset_admin(args.login_name)
         elif args.command == 'status':
             print(json.dumps({**{surface: health('http://127.0.0.1:' + str(port)) for surface, port in [('parent',18787),('admin',18788)]},

@@ -1,6 +1,7 @@
 """Automatic booking against isolated PostgreSQL and synthetic upstream data."""
 from copy import deepcopy
 from datetime import datetime, timedelta
+import json
 import unittest
 import uuid
 from urllib.parse import quote
@@ -11,13 +12,47 @@ from tests.backend import test_mison_booking as booking_fixture
 from lele_growth.child_service import ApiError
 from lele_growth.plugins import auto_booking as host
 from lele_growth.plugins.catalog import register_release
+from lele_growth.plugins import external_operations, private_store
 from lele_growth.plugins.scheduler import PluginScheduler
 from mison_booking import auto_booking, handle_job, handle_request, read_api
-from mison_booking import auth, operations
+from mison_booking import auth, bark, operations
 from mison_booking.upstream import Client
 
 
 class AutoBookingRulesTests(unittest.TestCase):
+    def test_notification_settings_default_off_and_validate_recipients_and_scenes(self):
+        config = host.defaults()
+        config.pop('notifications')
+        self.assertEqual(host.validate_config(config)['notifications'], {'enabled': False, 'barkKeys': [], 'events': ['booked']})
+        for changes in ({'enabled': True}, {'enabled': True, 'barkKeys': ['fixture_key_123'], 'events': []},
+                        {'barkKeys': ['fixture_key_123'] * 2}, {'barkKeys': ['https://api.day.app/key']},
+                        {'barkKeys': [None]}, {'events': ['failed']}, {'enabled': 1},
+                        {'barkKeys': [f'fixture_key_{i}' for i in range(11)]}):
+            with self.subTest(changes=changes), self.assertRaises(ApiError):
+                host.validate_config({**host.defaults(), 'notifications': {**host.defaults()['notifications'], **changes}})
+
+    def test_check_interval_legacy_default_and_invalid_ranges(self):
+        legacy = host.defaults()
+        legacy.pop('checkInterval')
+        self.assertEqual(host.validate_config(legacy)['checkInterval'], {'minMinutes': 4, 'maxMinutes': 6})
+        self.assertNotIn('checkInterval', legacy)
+        for interval in (None, {}, [2, 5], {'minMinutes': 0, 'maxMinutes': 5},
+                         {'minMinutes': 2, 'maxMinutes': 31}, {'minMinutes': 6, 'maxMinutes': 5},
+                         {'minMinutes': True, 'maxMinutes': 5}, {'minMinutes': 2.5, 'maxMinutes': 5},
+                         {'minMinutes': 2, 'maxMinutes': 5, 'extra': 1}):
+            with self.subTest(interval=interval), self.assertRaises(ApiError):
+                host.validate_config({**host.defaults(), 'checkInterval': interval})
+        for minute in (1, 30):
+            config = {**host.defaults(), 'checkInterval': {'minMinutes': minute, 'maxMinutes': minute}}
+            self.assertEqual(host.validate_config(config), config)
+            self.assertEqual(host.check_interval_seconds(config), minute * 60)
+
+    def test_check_interval_draws_fresh_seconds_with_inclusive_endpoints(self):
+        config = {**host.defaults(), 'checkInterval': {'minMinutes': 2, 'maxMinutes': 5}}
+        with patch.object(host.secrets, 'randbelow', side_effect=[0, 180, 79]) as random:
+            self.assertEqual([host.check_interval_seconds(config) for _ in range(3)], [120, 300, 199])
+        self.assertEqual([call.args for call in random.call_args_list], [(181,)] * 3)
+
     def test_sleep_crosses_midnight_and_resumes_at_exclusive_end(self):
         config = host.defaults()
         for moment, expected in [('2026-11-12T23:00', '2026-11-13T08:00'), ('2026-11-13T07:59', '2026-11-13T08:00')]:
@@ -44,8 +79,22 @@ class AutoBookingRulesTests(unittest.TestCase):
         self.assertFalse(auto_booking.matches_identity({'cid': '123', 'bookingId': '456'}, {'cid': '124', 'bookingId': '456'}))
         self.assertFalse(auto_booking.matches_identity({'cid': '123', 'bookingId': '456', 'bid': '11'}, {'bookingId': '456', 'bid': '12'}))
 
+    def test_consecutive_groups_use_slot_priorities_independently_of_time_order(self):
+        cases = (
+            (['20:00', '19:30'], 2, ['19:30', '20:00']),
+            (['20:00', '18:00', '18:30', '19:30'], 2, ['19:30', '20:00']),
+            (['19:30', '20:00', '19:00'], 2, ['19:30', '20:00']),
+            (['20:00', '19:00', '19:30'], 3, ['19:00', '19:30', '20:00']),
+            (['20:00', '19:00'], 2, None),
+        )
+        for slots, count, expected in cases:
+            with self.subTest(slots=slots, count=count):
+                self.assertEqual(auto_booking.consecutive(slots, count), expected)
+
 
 class AutoBookingApiTests(booking_fixture.BookingApiTests):
+    notification_config = {'enabled': True, 'barkKeys': ['fixture_bark_key_A', 'fixture_bark_key_B'], 'events': ['booked']}
+
     def setUp(self):
         super().setUp()
         self.plugin_id = 'mison-booking'
@@ -91,7 +140,8 @@ class AutoBookingApiTests(booking_fixture.BookingApiTests):
         fields = {**host.defaults(), 'teachers': [{'id': '101', 'name': 'Teacher 101', 'avatarUrl': None}], 'dates': [self.day], **changes}
         fields.setdefault('dailyLessons', 1)
         fields.setdefault('rebookCancelled', True)
-        fields['weekdaySlots'][str(datetime.fromisoformat(self.day).isoweekday())] = ['19:30', '19:00'] if changes.get('dailyLessons', 1) == 1 else ['19:30', '20:00']
+        if 'weekdaySlots' not in changes:
+            fields['weekdaySlots'][str(datetime.fromisoformat(self.day).isoweekday())] = ['19:30', '19:00'] if changes.get('dailyLessons', 1) == 1 else ['19:30', '20:00']
         return self.run_api('auto-booking/config', 'PUT', {**fields, 'operationId': str(uuid.uuid4()), 'bindingRevision': 1, 'expectedRevision': config['revision']})
 
     def start_auto(self):
@@ -103,6 +153,28 @@ class AutoBookingApiTests(booking_fixture.BookingApiTests):
 
     def context_scope(self):
         return {'plugin_id': self.plugin_id, 'child_id': self.child_id}
+
+    def peer_context(self):
+        peer = str(uuid.uuid4())
+
+        def fixture(cur):
+            cur.execute("INSERT INTO lele.children(id,name,owner_id) VALUES(%s,'auto-peer',%s)", (peer, self.user_id))
+            cur.execute('INSERT INTO lele.memberships(child_id,user_id,membership_version) VALUES(%s,%s,%s)',
+                        (peer, self.user_id, str(uuid.uuid4())))
+            cur.execute('INSERT INTO lele.child_plugins(child_id,plugin_id,installed,enabled) VALUES(%s,%s,true,true)',
+                        (peer, self.plugin_id))
+            cur.execute('INSERT INTO lele.child_plugin_configs(child_id,plugin_id,config,config_revision) VALUES(%s,%s,%s,1)',
+                        (peer, self.plugin_id, Jsonb({'message': 'ok'})))
+
+        self.service.transaction(fixture)
+        from lele_growth.plugins.policy import active_context
+        context = self.service.transaction(lambda cur: active_context(cur, self.plugin_id, peer))
+        context['actorId'] = self.user_id
+        self.addCleanup(lambda: self.sql('DELETE FROM lele.plugin_private_records WHERE child_id=%s AND plugin_id=%s',
+                                         (peer, self.plugin_id)))
+        self.assertTrue(handle_request(context, 'connection/login', 'POST',
+                                       {**self.body, 'operationId': str(uuid.uuid4())})['ok'])
+        return context
 
     def step(self):
         state = self.state()
@@ -129,6 +201,8 @@ class AutoBookingApiTests(booking_fixture.BookingApiTests):
             self.assertEqual(len(self.sent), 1)
             self.assertEqual(self.sent[0][1]['dtime'], '19:30')
             self.assertEqual(state['totalBooked'], 1)
+            self.assertIn('Teacher 101', state['message'])
+            self.assertIn('19:30', state['message'])
             self.assertEqual(state['checks'], 1)
             self.assertIn(self.day, state['fulfilledDates'])
             wait = (datetime.fromisoformat(state['nextCheckAt']) - self.moment).total_seconds()
@@ -136,6 +210,33 @@ class AutoBookingApiTests(booking_fixture.BookingApiTests):
             self.round()
             self.assertEqual(len(self.sent), 1)
             self.assertEqual(self.state()['totalBooked'], 1)
+
+    def test_saved_check_interval_is_used_after_each_round_and_interruption(self):
+        with self.connected():
+            interval = {'minMinutes': 2, 'maxMinutes': 5}
+            self.assertEqual(self.configured(checkInterval=interval)['checkInterval'], interval)
+            self.assertEqual(self.run_api('auto-booking/config')['checkInterval'], interval)
+            self.start_auto()
+            with patch.object(host.secrets, 'randbelow', side_effect=[0, 180]):
+                for expected in (120, 300):
+                    state = self.round()
+                    self.assertEqual((datetime.fromisoformat(state['nextCheckAt']) - self.moment).total_seconds(), expected)
+            self.scheduler.enqueue(self.plugin_id, self.child_id, 'auto-booking',
+                                   state['epoch'] + ':' + str(state['step']), self.moment)
+            self.sql("UPDATE lele.plugin_jobs SET status='failed' WHERE child_id=%s AND plugin_id=%s AND occurrence_key=%s",
+                     (self.child_id, self.plugin_id, state['epoch'] + ':' + str(state['step'])))
+            moment = self.moment + timedelta(minutes=6)
+            with patch.object(host.secrets, 'randbelow', return_value=80):
+                self.service.transaction(lambda cur: host.due(cur, self.context(), moment))
+            self.assertEqual((datetime.fromisoformat(self.state()['nextCheckAt']) - moment).total_seconds(), 200)
+
+    def test_legacy_save_request_keeps_original_check_interval_default(self):
+        with self.connected():
+            fields = host.defaults()
+            fields.pop('checkInterval')
+            result = self.run_api('auto-booking/config', 'PUT', {
+                **fields, 'operationId': str(uuid.uuid4()), 'bindingRevision': 1, 'expectedRevision': 0})
+            self.assertEqual(result['checkInterval'], {'minMinutes': 4, 'maxMinutes': 6})
 
     def test_existing_manual_lesson_blocks_automatic_even_at_other_time(self):
         with self.connected():
@@ -145,6 +246,168 @@ class AutoBookingApiTests(booking_fixture.BookingApiTests):
             self.round()
             self.assertEqual(self.sent, [])
             self.assertIn(self.day, self.state()['fulfilledDates'])
+
+    def test_notification_keys_encrypted_at_rest_and_hidden_from_members(self):
+        with self.connected():
+            result = self.configured(notifications=deepcopy(self.notification_config))
+            self.assertEqual(result['notifications'], self.notification_config)
+            raw = json.dumps(self.state())
+            for key in self.notification_config['barkKeys']:
+                self.assertNotIn(key, raw)
+            self.assertIn('ciphertext', raw)
+            self.assertEqual(self.run_api('auto-booking/config')['notifications'], self.notification_config)
+            previous_context = self.ctx
+            self.ctx = {**self.ctx, 'actorId': str(uuid.uuid4())}
+            try:
+                public = self.run_api('auto-booking/config')
+            finally:
+                self.ctx = previous_context
+            self.assertFalse(public['canManage'])
+            self.assertEqual(public['notifications']['barkKeys'], ['已配置', '已配置'])
+
+    def test_notifications_only_send_once_after_confirmed_booking_and_preserve_legacy_save(self):
+        with self.connected(), patch.object(bark, 'push', return_value='succeeded') as push:
+            self.configured(notifications=deepcopy(self.notification_config))
+            config = self.run_api('auto-booking/config')
+            legacy = {key: value for key, value in config.items() if key not in ('revision', 'canManage', 'notifications')}
+            result = self.run_api('auto-booking/config', 'PUT', {
+                **legacy, 'operationId': str(uuid.uuid4()), 'expectedRevision': config['revision']})
+            self.assertEqual(result['notifications'], self.notification_config)
+            self.start_auto()
+            state = self.round()
+            self.assertEqual(push.call_count, 1)
+            notice = push.call_args.args[0]
+            self.assertEqual(notice['keys'], self.notification_config['barkKeys'])
+            self.assertIn(self.day, notice['body'])
+            self.assertIn('19:30', notice['body'])
+            self.assertIn('Teacher 101', notice['body'])
+            self.assertEqual(next(iter(state['notificationQueue'].values()))['state'], 'succeeded')
+            self.round()
+            self.assertEqual(push.call_count, 1)
+            self.assertEqual(len(self.sent), 1)
+            self.assertEqual(self.state()['totalBooked'], 1)
+
+    def test_notification_transport_failure_never_replays_booking_or_leaks_keys(self):
+        with self.connected(), patch.object(bark, 'push', side_effect=TimeoutError('fixture_bark_key_A')) as push:
+            self.configured(notifications=deepcopy(self.notification_config))
+            self.start_auto()
+            state = self.round()
+            self.assertEqual(state['totalBooked'], 1)
+            self.assertEqual(next(iter(state['notificationQueue'].values()))['state'], 'uncertain')
+            self.round()
+            self.assertEqual(push.call_count, 1)
+            self.assertEqual(len(self.sent), 1)
+            logs = self.run_api('auto-booking/logs')['items']
+            self.assertTrue(any(item['kind'] == 'notification' and '未确认' in item['message'] for item in logs))
+            self.assertNotIn('fixture_bark_key_A', json.dumps(logs))
+
+    def test_disabled_notifications_do_not_send_after_success(self):
+        with self.connected(), patch.object(bark, 'push') as push:
+            self.configured(notifications={**deepcopy(self.notification_config), 'enabled': False})
+            self.start_auto()
+            self.round()
+            self.assertEqual(self.state()['totalBooked'], 1)
+            push.assert_not_called()
+
+    def test_reconciled_success_after_stop_sends_notification_once(self):
+        with self.connected(), patch.object(bark, 'push', return_value='succeeded') as push:
+            self.configured(notifications=deepcopy(self.notification_config))
+            self.start_auto()
+            self.drop = 'onevoneAppointment'
+            with patch.object(operations, 'reconcile_book', side_effect=auth.AuthError('UPSTREAM_UNAVAILABLE', '回执尚未同步。')):
+                self.round()
+            push.assert_not_called()
+            self.run_api('auto-booking/stop', 'POST', {'operationId': str(uuid.uuid4()), 'bindingRevision': 1})
+            self.drop = None
+            self.round()
+            self.assertEqual(push.call_count, 1)
+            self.assertFalse(self.state()['enabled'])
+            self.assertIsNone(self.state()['nextCheckAt'])
+            self.assertEqual(len(self.sent), 1)
+
+    def test_notification_queued_before_worker_restart_delivers_after_stop(self):
+        with self.connected(), patch.object(bark, 'push', return_value='succeeded') as push:
+            self.configured(notifications=deepcopy(self.notification_config))
+            self.start_auto()
+            with patch.object(auto_booking, 'flush_notifications'):
+                self.round()
+            self.assertTrue(host.notifications.pending(self.state()))
+            self.run_api('auto-booking/stop', 'POST', {'operationId': str(uuid.uuid4()), 'bindingRevision': 1})
+            self.service.transaction(lambda cur: host.due(cur, self.context(), self.moment + timedelta(seconds=1)))
+            self.step()
+            self.assertEqual(push.call_count, 1)
+            self.assertIsNone(self.state()['nextCheckAt'])
+            self.assertFalse(self.state()['enabled'])
+
+    def test_claimed_notification_is_not_resent_after_acknowledgement_loss(self):
+        with self.connected(), patch.object(bark, 'push', return_value='succeeded') as push:
+            self.configured(notifications=deepcopy(self.notification_config))
+            self.start_auto()
+            original = auto_booking.host
+
+            def host_call(context, action, payload=None):
+                if action == 'notification-finish':
+                    raise auth.AuthError('UPSTREAM_UNAVAILABLE', '回执丢失。')
+                return original(context, action, payload)
+
+            with patch.object(auto_booking, 'host', side_effect=host_call):
+                self.round()
+            self.round()
+            self.assertEqual(push.call_count, 1)
+            self.assertEqual(next(iter(self.state()['notificationQueue'].values()))['state'], 'uncertain')
+
+    def test_stopped_notification_batches_get_new_scheduler_occurrences_until_drained(self):
+        with self.connected(), patch.object(bark, 'push', return_value='succeeded') as push, patch.object(
+                self.gateway.runtime, 'call', side_effect=lambda context, method, args, **kwargs:
+                handle_job(context, args['task'], args['payload'])):
+            self.configured(notifications=deepcopy(self.notification_config))
+            self.start_auto()
+            with patch.object(auto_booking, 'flush_notifications'):
+                self.round()
+
+            def add_pending(cur):
+                key, record, state, _ = host.load(cur, self.context_scope())
+                original = next(iter(state['notificationQueue'].values()))
+                for _ in range(3):
+                    state['notificationQueue'][str(uuid.uuid4())] = deepcopy(original)
+                host.save(cur, self.context_scope(), key, record, state)
+
+            self.service.transaction(add_pending)
+            self.run_api('auto-booking/stop', 'POST', {'operationId': str(uuid.uuid4()), 'bindingRevision': 1})
+            self.scheduler.schedule_due()
+            self.assertTrue(self.scheduler.run_one(self.plugin_id))
+            self.assertEqual(push.call_count, 3)
+            self.assertTrue(host.notifications.pending(self.state()))
+            self.scheduler.schedule_due()
+            self.assertTrue(self.scheduler.run_one(self.plugin_id))
+            self.assertEqual(push.call_count, 4)
+            self.assertFalse(host.notifications.pending(self.state()))
+            self.assertIsNone(self.state()['nextCheckAt'])
+
+    def test_transient_notification_claim_failure_after_stop_recovers_on_new_occurrence(self):
+        with self.connected(), patch.object(bark, 'push', return_value='succeeded') as push, patch.object(
+                self.gateway.runtime, 'call', side_effect=lambda context, method, args, **kwargs:
+                handle_job(context, args['task'], args['payload'])):
+            self.configured(notifications=deepcopy(self.notification_config))
+            self.start_auto()
+            with patch.object(auto_booking, 'flush_notifications'):
+                self.round()
+            self.run_api('auto-booking/stop', 'POST', {'operationId': str(uuid.uuid4()), 'bindingRevision': 1})
+            original = auto_booking.host
+
+            def fail_claim(context, action, payload=None):
+                if action == 'notification-claim':
+                    raise auth.AuthError('UPSTREAM_UNAVAILABLE', '短暂不可用。')
+                return original(context, action, payload)
+
+            self.scheduler.schedule_due()
+            with patch.object(auto_booking, 'host', side_effect=fail_claim):
+                self.assertTrue(self.scheduler.run_one(self.plugin_id))
+            push.assert_not_called()
+            self.scheduler.schedule_due()
+            self.assertTrue(self.scheduler.run_one(self.plugin_id))
+            self.assertEqual(push.call_count, 1)
+            self.assertIsNone(self.state()['nextCheckAt'])
 
     def test_transient_empty_course_list_does_not_release_manual_reservation(self):
         with self.connected():
@@ -156,18 +419,67 @@ class AutoBookingApiTests(booking_fixture.BookingApiTests):
             self.round()
             self.assertEqual(self.sent, [])
 
+    def test_dashboard_counts_one_manual_lesson_on_a_two_lesson_target(self):
+        with self.connected():
+            draft = self.create_draft(['20:00'])
+            self.assertEqual(self.run_api('bookings', 'POST', self.submit_body(draft))['state'], 'succeeded')
+            other_day = (datetime.fromisoformat(self.day) + timedelta(days=1)).date().isoformat()
+            self.live.append(self.fake.record(8801, other_day + ' 20:00'))
+            self.configured(dailyLessons=2)
+            self.start_auto()
+            self.round()
+            status = self.run_api('auto-booking/status')
+            self.assertEqual(status['completedLessons'], 1)
+            self.assertEqual(status['totalBooked'], 0)
+            self.assertEqual(len(self.sent), 1)
+
     def test_two_lessons_require_one_contiguous_pair_and_disabled_rebook_keeps_day_closed(self):
         with self.connected():
-            self.configured(dailyLessons=2, rebookCancelled=False)
+            weekdays = host.defaults()['weekdaySlots']
+            weekdays[str(datetime.fromisoformat(self.day).isoweekday())] = ['20:00', '19:30']
+            self.configured(dailyLessons=2, rebookCancelled=False, weekdaySlots=weekdays)
             self.start_auto()
             state = self.round()
             self.assertEqual(len(self.sent), 1)
             self.assertEqual(self.sent[0][1]['dtime'], '19:30')
             self.assertEqual(self.sent[0][1]['lesson_period'], 2)
-            self.assertEqual(state['totalBooked'], 1)
+            self.assertEqual(state['totalBooked'], 2)
+            self.round()
+            status = self.run_api('auto-booking/status')
+            self.assertEqual(status['completedLessons'], 2)
+            self.assertEqual(status['totalBooked'], 2)
             original = self.live.pop()
             self.cancelled.append({'cid': original['cid'], 'dateTime': original['datestart'], 'teachername': original['teachername'], 'courseware_id': original['courseware_id']})
             self.round()
+            self.assertEqual(len(self.sent), 1)
+            status = self.run_api('auto-booking/status')
+            self.assertEqual(status['completedLessons'], 1)
+            self.assertEqual(status['totalBooked'], 2)
+            self.cancelled.append({'cid': self.live.pop()['cid']})
+            self.round()
+            status = self.run_api('auto-booking/status')
+            self.assertEqual(status['completedLessons'], 0)
+            self.assertEqual(status['totalBooked'], 2)
+            self.assertEqual(len(self.sent), 1)
+
+    def test_dashboard_recovers_legacy_batch_total_from_receipt_during_list_lag(self):
+        with self.connected():
+            self.configured(dailyLessons=2)
+            self.start_auto()
+            self.round()
+            self.sql("""UPDATE lele.plugin_private_records
+SET payload=(payload - 'completedLessonCounts') || %s
+WHERE child_id=%s AND plugin_id=%s AND collection='auto-booking'""",
+                     (Jsonb({'totalBooked': 1, 'lastCheckAt': host.stamp(self.moment + timedelta(seconds=5))}),
+                      self.child_id, self.plugin_id))
+            self.live.clear()
+            status = self.run_api('auto-booking/status')
+            self.assertEqual(status['completedLessons'], 2)
+            self.assertEqual(status['totalBooked'], 2)
+            self.round()
+            status = self.run_api('auto-booking/status')
+            self.assertEqual(status['completedLessons'], 2)
+            self.assertEqual(status['totalBooked'], 2)
             self.assertEqual(len(self.sent), 1)
 
     def test_confirmed_cancellation_reopens_date_and_counts_rebooking(self):
@@ -205,15 +517,185 @@ class AutoBookingApiTests(booking_fixture.BookingApiTests):
                 self.assertFalse(response['ok'])
                 self.assertEqual(response['error']['code'], 'OWNER_REQUIRED')
 
-    def test_schedule_pages_are_read_only_and_do_not_hide_unopened_days(self):
+    def test_saved_snapshot_is_read_only_and_keeps_unopened_days(self):
         with self.connected():
             self.configured()
-            end = (self.moment.date() + timedelta(days=22)).isoformat()
-            response = self.run_api('auto-booking/schedules?teacherId=101&from=' + self.day + '&to=' + end)
-            self.assertEqual(len(response['days']), 2)
-            self.assertIsNotNone(response['nextCursor'])
-            final = self.run_api('auto-booking/schedules?teacherId=101&from=' + end + '&to=' + end)
-            self.assertEqual(final['days'][0]['state'], 'unopened')
+            self.start_auto()
+            read = Client.call
+
+            def call(client, endpoint, body):
+                if endpoint == 'onevoneGetDaysAvailable':
+                    return {'data': [1, 0]}
+                return read(client, endpoint, body)
+
+            with patch.object(Client, 'call', call):
+                self.round()
+            response = self.run_api('auto-booking/snapshot?teacherId=101')
+            self.assertEqual([day['state'] for day in response['teacher']['days']], ['ready', 'unopened'])
+            self.assertFalse(response['teacher']['bookingUnavailable'])
+            self.assertEqual(self.sent, [])
+
+    def test_large_schedules_can_match_the_last_teacher(self):
+        with self.connected():
+            teachers = range(101, 105)
+            self.fake.favorite_rows = [self.fake.teacher(teacher) for teacher in teachers]
+            self.configured(teachers=[{'id': str(teacher), 'name': f'Teacher {teacher}', 'avatarUrl': None}
+                                      for teacher in teachers])
+            self.start_auto()
+            read = Client.call
+
+            def call(client, endpoint, body):
+                if endpoint == 'onevoneGetDaysAvailable':
+                    return {'data': [1] * 14}
+                result = read(client, endpoint, body)
+                if endpoint == 'onevoneGetTeacherInfo':
+                    result['data'].update(tid=body['tid'], name=f"Teacher {body['tid']}", all_date=[
+                        {'dtime': f'{minute // 60:02d}:{minute % 60:02d}',
+                         'is_dated': 0 if body['tid'] == 104 else 99}
+                        for minute in range(5 * 60, 23 * 60, 30)
+                    ])
+                return result
+
+            with patch.object(Client, 'call', call):
+                for _ in range(10):
+                    self.step()
+                    cursor = self.state()['run']['cursor']
+                    if cursor.get('candidate'):
+                        break
+                self.assertEqual(cursor['candidate']['teacher']['id'], '104')
+                self.assertNotIn('schedules', cursor)
+                self.round()
+
+            self.assertEqual([(body['tid'], body['dtime']) for name, body in self.sent
+                              if name == 'onevoneAppointment'], [(104, '19:30')])
+            schedule = self.run_api('auto-booking/snapshot?teacherId=104')['teacher']
+            self.assertEqual(len(schedule['days']), 14)
+            self.assertEqual(len(schedule['days'][3]['slots']), 36)
+
+    def test_sixty_day_snapshot_resumes_from_persisted_day_index(self):
+        with self.connected():
+            self.configured()
+            self.start_auto()
+            self.step()
+            self.step()
+            read = Client.call
+            scanned = []
+            bridge_call = auth.BridgeClient.call
+
+            def drop_snapshot_reply(context, action, payload=None):
+                result = bridge_call(context, action, payload)
+                if action == 'autoBooking.snapshot-stage':
+                    raise TimeoutError('snapshot bridge response was lost')
+                return result
+
+            def call(client, endpoint, body):
+                if endpoint == 'onevoneGetDaysAvailable':
+                    return {'data': [1] * 60}
+                result = read(client, endpoint, body)
+                if endpoint == 'onevoneGetTeacherInfo':
+                    scanned.append(body['ddate'])
+                    result['data']['all_date'] = [
+                        {'dtime': f'{minute // 60:02d}:{minute % 60:02d}', 'is_dated': 0}
+                        for minute in range(0, 24 * 60, 30)
+                    ]
+                    if len(scanned) == 30:
+                        client.deadline = auto_booking.time.monotonic() + 5
+                return result
+
+            with patch.object(Client, 'call', call):
+                with patch.object(auth.BridgeClient, 'call', side_effect=drop_snapshot_reply):
+                    with self.assertRaisesRegex(RuntimeError, '进度暂未确认'):
+                        self.step()
+                checkpoint = self.state()
+                self.assertIsNone(checkpoint['snapshot'])
+                capture = checkpoint['run']['cursor']['capture']
+                self.assertEqual(capture['dayIndex'], 30)
+                self.assertNotIn('days', capture)
+
+                self.sql("""UPDATE lele.plugin_jobs SET status='failed',lease_owner=NULL,lease_until=NULL
+                            WHERE child_id=%s AND plugin_id=%s AND status='running'""",
+                         (self.child_id, self.plugin_id))
+                self.scheduler = PluginScheduler(self.service, self.gateway)
+                with patch.object(auth.BridgeClient, 'call', side_effect=drop_snapshot_reply):
+                    with self.assertRaisesRegex(RuntimeError, '进度暂未确认'):
+                        self.step()
+                self.assertEqual(len(scanned), 60)
+                state = self.state()
+                published = state['snapshot']['id']
+                self.assertEqual(state['run']['cursor']['phase'], 'matching')
+                self.sql("""UPDATE lele.plugin_jobs SET status='failed',lease_owner=NULL,lease_until=NULL
+                            WHERE child_id=%s AND plugin_id=%s AND status='running'""",
+                         (self.child_id, self.plugin_id))
+                self.step()
+                self.assertEqual(self.state()['snapshot']['id'], published)
+                self.assertEqual(len(scanned), 60)
+                self.assertEqual(len(set(scanned)), 60)
+                self.round()
+
+            snapshot = self.run_api('auto-booking/snapshot?teacherId=101')['teacher']
+            self.assertEqual(len(snapshot['days']), 60)
+            self.assertEqual(len(snapshot['days'][-1]['slots']), 48)
+            self.assertEqual(len(self.sent), 1)
+
+    def test_legacy_snapshot_is_readable_until_new_round_publishes(self):
+        with self.connected():
+            self.configured()
+            self.start_auto()
+            scope = self.context_scope()
+            previous_id = uuid.uuid4().hex
+            day = {'date': self.day, 'state': 'unopened', 'slots': []}
+
+            def persist_legacy(cur):
+                key, record, state, _ = host.load(cur, scope)
+                state['snapshot'] = {'id': previous_id, 'checkedAt': host.stamp(),
+                                     'configRevision': state['configRevision'], 'teachers': [
+                                         {'id': '101', 'baseDate': self.day, 'dayCount': 1},
+                                     ]}
+                state['run'] = {'id': str(uuid.uuid4()), 'configRevision': state['configRevision'],
+                                'cursor': {'phase': 'matching', 'schedules': {}}, 'startedAt': host.stamp()}
+                private_store.put(cur, scope, host.SNAPSHOTS, host.snapshot_record_id(key, previous_id, '101'),
+                                  {'schedule': {'baseDate': self.day, 'days': [day], 'bookingUnavailable': False}})
+                host.save(cur, scope, key, record, state)
+
+            self.service.transaction(persist_legacy)
+            self.assertEqual(self.run_api('auto-booking/snapshot?teacherId=101')['teacher']['days'], [day])
+            self.step()
+            self.assertEqual(self.state()['run']['cursor']['phase'], 'inventory')
+            self.assertEqual(self.run_api('auto-booking/status')['snapshot']['id'], previous_id)
+            self.round()
+            self.assertNotEqual(self.run_api('auto-booking/status')['snapshot']['id'], previous_id)
+            self.assertEqual(self.sql("""SELECT count(*) FROM lele.plugin_private_records
+                WHERE child_id=%s AND plugin_id=%s AND collection=%s AND record_id LIKE %s""",
+                (self.child_id, self.plugin_id, host.SNAPSHOTS, '%:' + previous_id + ':%')), [(0,)])
+
+    def test_unavailable_teacher_does_not_hide_other_teachers_or_change_their_date_windows(self):
+        with self.connected():
+            self.configured(teachers=[
+                {'id': '101', 'name': 'Teacher 101', 'avatarUrl': None},
+                {'id': '102', 'name': 'Teacher 102', 'avatarUrl': None},
+            ])
+            self.start_auto()
+            read = Client.call
+
+            def call(client, endpoint, body):
+                if endpoint == 'onevoneGetDaysAvailable':
+                    return {'data': [0, 0, 0] if body['tid'] == 101 else [1, 0]}
+                if endpoint == 'onevoneGetTeacherInfo':
+                    if body['tid'] == 101:
+                        raise auth.AuthError('UPSTREAM_REJECTED', '该老师由于个人原因暂时无法预约')
+                    return {'data': {**read(client, endpoint, body)['data'], 'tid': 102}}
+                return read(client, endpoint, body)
+
+            with patch.object(Client, 'call', call):
+                state = self.round()
+                self.assertIsNotNone(state['snapshot'], state['message'])
+            with patch.object(Client, 'call', side_effect=AssertionError('stored snapshots need no upstream recheck')):
+                unavailable = self.run_api('auto-booking/snapshot?teacherId=101')['teacher']
+                other = self.run_api('auto-booking/snapshot?teacherId=102')['teacher']
+            self.assertTrue(unavailable['bookingUnavailable'])
+            self.assertEqual([day['state'] for day in unavailable['days']], ['unopened'] * 3)
+            self.assertFalse(other['bookingUnavailable'])
+            self.assertEqual([day['state'] for day in other['days']], ['ready', 'unopened'])
             self.assertEqual(self.sent, [])
 
     def test_sleep_start_is_deferred_and_stop_is_idempotent(self):
@@ -277,6 +759,101 @@ class AutoBookingApiTests(booking_fixture.BookingApiTests):
             self.assertFalse(state['enabled'])
             self.assertEqual(state['totalBooked'], 1)
             self.assertEqual(len(self.sent), 1)
+
+    def test_acknowledgement_of_partial_booking_releases_only_the_other_dates(self):
+        with self.connected():
+            later = (datetime.fromisoformat(self.day) + timedelta(days=7)).date().isoformat()
+            self.configured(dailyLessons=2, dates=[self.day, later])
+            self.start_auto()
+            self.drop = 'onevoneAppointment'
+            with patch.object(operations, 'reconcile_book', side_effect=auth.AuthError('UPSTREAM_UNAVAILABLE', '回执尚未同步。')):
+                pending = self.round()['pending']
+            self.drop = None
+            self.live.pop()
+            operation_id = pending['operationId']
+            path = 'operations/' + operation_id
+            self.step()
+            partial = self.run_api(path)
+            self.assertEqual(partial['state'], 'partially_succeeded')
+            self.assertEqual([lesson['startTime'] for lesson in partial['result']['bookingEvidence']], ['19:30'])
+            status = self.run_api('auto-booking/status')
+            self.assertEqual(status['completedLessons'], 1)
+            self.assertEqual(status['totalBooked'], 1)
+            self.sql('UPDATE lele.plugin_external_operations SET updated_at=%s WHERE operation_id=%s',
+                     (self.moment - timedelta(seconds=61), operation_id))
+            for _ in range(2):
+                self.step()
+            self.assertEqual(self.run_api(path)['stageVersion'], partial['stageVersion'])
+
+            confirmation = {'bindingRevision': 1, 'confirmedInApp': True}
+            receipt = self.run_api(path + '/acknowledge', 'POST', confirmation)
+            self.assertEqual(receipt['state'], 'cancelled')
+            self.assertEqual(receipt['result']['bookingEvidence'], partial['result']['bookingEvidence'])
+            self.assertEqual(self.run_api(path + '/acknowledge', 'POST', confirmation), receipt)
+            self.assertEqual(self.run_api('auto-booking/status')['totalBooked'], 1)
+            state = self.state()
+            self.assertTrue(state['enabled'])
+            self.assertIsNone(state['pending'])
+            self.assertIsNone(state['run'])
+            self.assertEqual(state['closedDates'], [self.day])
+
+            self.live.clear()  # A temporarily incomplete upstream list cannot reopen the closed date.
+            self.scheduler = PluginScheduler(self.service, self.gateway)
+            self.round()
+            self.assertEqual([body['ddate'] for name, body in self.sent if name == 'onevoneAppointment'],
+                             [self.day, later])
+
+    def test_stopped_task_can_recover_a_cancelled_receipt_from_an_older_release(self):
+        with self.connected():
+            self.configured()
+            self.start_auto()
+            self.drop = 'onevoneAppointment'
+            with patch.object(operations, 'reconcile_book', side_effect=auth.AuthError('UPSTREAM_UNAVAILABLE', '回执尚未同步。')):
+                pending = self.round()['pending']
+            self.run_api('auto-booking/stop', 'POST', {'operationId': str(uuid.uuid4()), 'bindingRevision': 1})
+            receipt = self.bridge.handle(self.ctx, 'operation.get', {'operationId': pending['operationId']})['data']
+            self.service.transaction(lambda cur: external_operations.handle(
+                cur, self.context_scope(), self.ctx, 'operation.finish',
+                {'operationId': receipt['operationId'], 'canonicalRequest': receipt['canonicalRequest'],
+                 'expectedStageVersion': receipt['stageVersion'], 'state': 'cancelled', 'result': {}},
+            ))
+            self.assertIsNotNone(self.state()['pending'])
+            self.step()
+            state = self.state()
+            self.assertIsNone(state['pending'])
+            self.assertIsNone(state['nextCheckAt'])
+            self.assertEqual(state['phase'], 'stopped')
+            self.assertEqual(state['closedDates'], [self.day])
+            self.assertEqual(len(self.sent), 1)
+
+    def test_repeated_acknowledgement_recovers_legacy_pending_without_a_scheduled_job(self):
+        with self.connected():
+            self.configured()
+            self.start_auto()
+            self.drop = 'onevoneAppointment'
+            with patch.object(operations, 'reconcile_book', side_effect=auth.AuthError('UPSTREAM_UNAVAILABLE', '回执尚未同步。')):
+                pending = self.round()['pending']
+            self.run_api('auto-booking/stop', 'POST', {'operationId': str(uuid.uuid4()), 'bindingRevision': 1})
+            receipt = self.bridge.handle(self.ctx, 'operation.get', {'operationId': pending['operationId']})['data']
+            scope = self.context_scope()
+
+            def persist_legacy_closure(cur):
+                external_operations.handle(
+                    cur, scope, self.ctx, 'operation.finish',
+                    {'operationId': receipt['operationId'], 'canonicalRequest': receipt['canonicalRequest'],
+                     'expectedStageVersion': receipt['stageVersion'], 'state': 'cancelled', 'result': {}},
+                )
+                key, record, state, _ = host.load(cur, scope)
+                state['nextCheckAt'] = None
+                host.save(cur, scope, key, record, state)
+
+            self.service.transaction(persist_legacy_closure)
+            self.assertIsNotNone(self.state()['pending'])
+            self.run_api(f"operations/{pending['operationId']}/acknowledge", 'POST',
+                         {'bindingRevision': 1, 'confirmedInApp': True})
+            self.assertIsNone(self.state()['pending'])
+            self.assertIsNone(self.state()['nextCheckAt'])
+            self.assertEqual(self.state()['closedDates'], [self.day])
 
     def test_manual_booking_between_selection_and_dispatch_blocks_second_lesson(self):
         with self.connected():
@@ -424,32 +1001,52 @@ class AutoBookingApiTests(booking_fixture.BookingApiTests):
         with self.connected():
             self.configured()
             self.start_auto()
-            peer = str(uuid.uuid4())
-
-            def fixture(cur):
-                cur.execute("INSERT INTO lele.children(id,name,owner_id) VALUES(%s,'auto-peer',%s)", (peer, self.user_id))
-                cur.execute('INSERT INTO lele.memberships(child_id,user_id,membership_version) VALUES(%s,%s,%s)', (peer, self.user_id, str(uuid.uuid4())))
-                cur.execute('INSERT INTO lele.child_plugins(child_id,plugin_id,installed,enabled) VALUES(%s,%s,true,true)', (peer, self.plugin_id))
-                cur.execute('INSERT INTO lele.child_plugin_configs(child_id,plugin_id,config,config_revision) VALUES(%s,%s,%s,1)', (peer, self.plugin_id, Jsonb({'message': 'ok'})))
-
-            self.service.transaction(fixture)
-            from lele_growth.plugins.policy import active_context
-            context = self.service.transaction(lambda cur: active_context(cur, self.plugin_id, peer))
-            context['actorId'] = self.user_id
-            self.addCleanup(lambda: self.sql('DELETE FROM lele.plugin_private_records WHERE child_id=%s AND plugin_id=%s', (peer, self.plugin_id)))
-            self.assertTrue(handle_request(context, 'connection/login', 'POST', {**self.body, 'operationId': str(uuid.uuid4())})['ok'])
-            original_context = self.ctx
-            try:
-                self.ctx = context
+            context = self.peer_context()
+            with patch.object(self, 'ctx', context):
                 self.configured()
                 response = handle_request(context, 'auto-booking/start', 'POST', {'operationId': str(uuid.uuid4()), 'bindingRevision': 1, 'expectedRevision': 1})
                 self.assertEqual(response['error']['code'], 'AUTO_BOOKING_ACCOUNT_BUSY')
-            finally:
-                self.ctx = original_context
 
-    def test_owner_transfer_reconciles_pending_without_restoring_write_authority(self):
+    def test_closed_appointment_date_is_protected_for_another_child_on_the_same_account(self):
+        self.check_closed_date_across_children(legacy=False)
+
+    def test_legacy_cancelled_receipt_protects_other_children_before_reconciliation(self):
+        self.check_closed_date_across_children(legacy=True)
+
+    def check_closed_date_across_children(self, *, legacy):
         with self.connected():
             self.configured()
+            self.start_auto()
+            self.drop = 'onevoneAppointment'
+            with patch.object(operations, 'reconcile_book', side_effect=auth.AuthError('UPSTREAM_UNAVAILABLE', '回执尚未同步。')):
+                pending = self.round()['pending']
+            self.run_api('auto-booking/stop', 'POST', {'operationId': str(uuid.uuid4()), 'bindingRevision': 1})
+            if legacy:
+                receipt = self.bridge.handle(self.ctx, 'operation.get', {'operationId': pending['operationId']})['data']
+                self.service.transaction(lambda cur: external_operations.handle(
+                    cur, self.context_scope(), self.ctx, 'operation.finish',
+                    {'operationId': receipt['operationId'], 'canonicalRequest': receipt['canonicalRequest'],
+                     'expectedStageVersion': receipt['stageVersion'], 'state': 'cancelled', 'result': {}},
+                ))
+                self.assertIsNotNone(self.state()['pending'])
+            else:
+                self.sql('UPDATE lele.plugin_external_operations SET updated_at=%s WHERE operation_id=%s',
+                         (self.moment - timedelta(seconds=61), pending['operationId']))
+                self.run_api(f"operations/{pending['operationId']}/acknowledge", 'POST',
+                             {'bindingRevision': 1, 'confirmedInApp': True})
+            self.live.clear()
+            self.drop = None
+            context = self.peer_context()
+            with patch.object(self, 'ctx', context), patch.object(self, 'child_id', context['childId']):
+                self.configured()
+                self.start_auto()
+                self.round()
+                self.assertEqual(self.state()['totalBooked'], 0)
+                self.assertEqual(len(self.sent), 1)
+
+    def test_owner_transfer_reconciles_pending_without_restoring_write_authority(self):
+        with self.connected(), patch.object(bark, 'push', return_value='succeeded') as push:
+            self.configured(notifications=deepcopy(self.notification_config))
             self.start_auto()
             self.drop = 'onevoneAppointment'
             with patch.object(operations, 'reconcile_book', side_effect=auth.AuthError('UPSTREAM_UNAVAILABLE', '回执尚未同步。')):
@@ -468,6 +1065,9 @@ class AutoBookingApiTests(booking_fixture.BookingApiTests):
             self.assertEqual(self.state()['ownerId'], successor)
             self.assertIsNone(self.state()['pending'])
             self.assertEqual(len(self.sent), 1)
+            push.assert_not_called()
+            self.ctx = {**self.ctx, 'actorId': successor}
+            self.assertEqual(self.run_api('auto-booking/config')['notifications'], host.notifications.defaults())
 
     def test_contradictory_pagination_never_allows_automatic_booking(self):
         with self.connected():

@@ -1,0 +1,114 @@
+.mison-overlay.mison-auto-notification-drawer.is-drawer {
+  width: min(440px, 100vw);
+  max-width: 100vw;
+  background: var(--card);
+  color: var(--foreground);
+  font-size: var(--text-body, 14px);
+  line-height: var(--text-body--line-height, 1.5);
+}
+
+.mison-auto-notification-drawer .mison-overlay-body {
+  padding: 24px;
+}
+
+.mison-auto-notification-drawer .mison-auto-notification-form {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  min-width: 0;
+}
+
+.mison-auto-notification-drawer [data-slot="field-set"] {
+  min-width: 0;
+  gap: 16px;
+}
+
+.mison-auto-notification-drawer [data-slot="field-legend"] {
+  margin-bottom: 16px;
+  font-size: var(--text-card, 16px);
+  font-weight: 600;
+}
+
+.mison-auto-notification-drawer .mison-auto-notification-key-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.mison-auto-notification-drawer .mison-auto-notification-key {
+  min-width: 0;
+  gap: 6px;
+}
+
+.mison-auto-notification-drawer .mison-auto-notification-key-controls {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr) 44px;
+  align-items: center;
+  gap: 8px;
+}
+
+.mison-auto-notification-drawer [data-slot="field-label"] {
+  font-size: var(--text-body, 14px);
+  font-weight: 400;
+}
+
+.mison-auto-notification-drawer [data-slot="input"] {
+  height: 44px;
+  font-size: 16px;
+  background: transparent;
+}
+
+.mison-auto-notification-drawer .mison-auto-notification-device-name {
+  padding-inline: 10px;
+}
+
+.mison-auto-notification-drawer .mison-button {
+  min-height: 44px;
+}
+
+.mison-auto-notification-drawer .mison-button[data-size="icon"] {
+  width: 44px;
+  height: 44px;
+}
+
+.mison-auto-notification-drawer .mison-auto-notification-add {
+  align-self: flex-start;
+  width: auto;
+  padding-inline: 16px;
+}
+
+.mison-auto-notification-drawer .mison-auto-notification-scenes [data-slot="field"] {
+  align-items: center;
+  min-height: 44px;
+  gap: 12px;
+}
+
+.mison-auto-notification-drawer .mison-auto-notification-scenes [data-slot="checkbox"] {
+  width: 20px;
+  height: 20px;
+}
+
+.mison-auto-notification-drawer .mison-auto-notification-count {
+  color: var(--muted-foreground);
+}
+
+.mison-auto-notification-drawer [data-slot="field-error"] {
+  color: var(--destructive);
+  font-size: var(--text-body, 14px);
+  overflow-wrap: anywhere;
+}
+
+.mison-auto-notification-drawer .mison-overlay-footer .mison-button {
+  min-width: 88px;
+}
+
+@media (max-width: 599px) {
+  .mison-overlay.mison-auto-notification-drawer.is-drawer {
+    width: 100vw;
+    max-width: 100vw;
+  }
+
+  .mison-auto-notification-drawer .mison-overlay-body {
+    padding: 20px 16px;
+  }
+}

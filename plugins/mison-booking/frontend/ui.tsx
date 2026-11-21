@@ -36,6 +36,7 @@ import { DatePicker as SharedDatePicker } from "@shared/components/date-picker"
 import { NumberPicker as SharedNumberPicker } from "@shared/components/number-picker"
 import { PopoverContent as SharedPopoverContent } from "@shared/components/ui/popover"
 import { cn } from "@shared/lib/utils"
+import { DropdownMenuContent as SharedDropdownMenuContent } from "@shared/components/ui/dropdown-menu"
 export { Input } from "@shared/components/ui/input"
 
 import { PortalContext, PageActiveContext } from "./contexts"
@@ -48,6 +49,9 @@ export function NumberPicker(props: React.ComponentProps<typeof SharedNumberPick
 }
 export function PopoverContent(props: React.ComponentProps<typeof SharedPopoverContent>) {
   return <SharedPopoverContent {...props} portalContainer={useContext(PortalContext)} />
+}
+export function DropdownMenuContent(props: React.ComponentProps<typeof SharedDropdownMenuContent>) {
+  return <SharedDropdownMenuContent {...props} portalContainer={useContext(PortalContext)} />
 }
 const AVATAR_HOSTS = new Set(["mp.mison.cn", "file.mison.cn"])
 
@@ -133,6 +137,7 @@ export function Overlay({
   confirm = false,
   contained = false,
   preview = false,
+  className,
 }: {
   title: string
   titleMeta?: ReactNode
@@ -146,6 +151,7 @@ export function Overlay({
   confirm?: boolean
   contained?: boolean
   preview?: boolean
+  className?: string
 }) {
   const portal = useContext(PortalContext)
   const pageActive = useContext(PageActiveContext)
@@ -181,6 +187,7 @@ export function Overlay({
           wide && "is-wide",
           contained && "is-contained",
           preview && "is-preview",
+          className,
         )}
         onCloseAutoFocus={(event) => {
           if (returnFocus.current?.isConnected) {

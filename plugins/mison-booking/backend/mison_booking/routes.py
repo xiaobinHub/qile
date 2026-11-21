@@ -38,8 +38,8 @@ def handle(context, path, method, body):
             return success(auto_booking.save(context, body))
         if path in ('auto-booking/start', 'auto-booking/stop') and method == 'POST':
             return success(auto_booking.control(context, path.rsplit('/', 1)[1], body))
-        if path == 'auto-booking/schedules' and method == 'GET':
-            return success(auto_booking.schedules(context, body))
+        if path == 'auto-booking/snapshot' and method == 'GET':
+            return success(auto_booking.get_snapshot(context, body))
         if path == 'auto-booking/logs' and method == 'GET':
             return success(auto_booking.host(context, 'logs', body))
         raise PluginError('ACTION_UNAVAILABLE', '自动约课操作不存在。')

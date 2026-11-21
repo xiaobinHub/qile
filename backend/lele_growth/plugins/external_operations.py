@@ -11,6 +11,10 @@ from .policy import row_dict
 TERMINAL = {'succeeded', 'failed', 'cancelled'}
 UNRESOLVED = {'prepared', 'dispatching', 'uncertain', 'partially_succeeded', 'needs_repair'}
 
+
+def account_fingerprint(provider, userid):
+    return hashlib.sha256(f'{provider}:{userid}'.encode()).hexdigest()
+
 def public(row, internal=False):
     value = dict(operationId=str(row['operation_id']), kind=row['kind'], state=row['state'],
                  stage=row['stage'], stageVersion=row['stage_version'], bindingRevision=row['binding_revision'],
@@ -28,7 +32,7 @@ def handle(cur, current, context, action, payload):
     cur.execute("SELECT * FROM lele.plugin_credentials WHERE id=%s AND child_id=%s AND plugin_id=%s AND state='active'", (binding.get('credentialId'), current['child_id'], current['plugin_id']))
     credential = row_dict(cur)
     require(credential and credential['expires_at'] > datetime.now(timezone.utc), 409, '请重新登录美森账号。', 'RECONNECT_REQUIRED')
-    fingerprint = hashlib.sha256((credential['provider'] + ':' + str(binding.get('userid'))).encode()).hexdigest()
+    fingerprint = account_fingerprint(credential['provider'], binding.get('userid'))
     # Same upstream account bound to another child must share the same write fence.
     cur.execute('SELECT pg_advisory_xact_lock(hashtextextended(%s,0))', (current['plugin_id'] + ':' + fingerprint,))
     if action == 'operation.list':

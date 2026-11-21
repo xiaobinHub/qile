@@ -7,12 +7,90 @@ import {
   type ReactElement,
   type ReactNode,
 } from "react"
-import { ArrowDown, ArrowUp, Clock3, GripVertical, X } from "lucide-react"
+import { Clock3, Info, MoreHorizontal, X } from "lucide-react"
+import {
+  DropdownMenu,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@shared/components/ui/dropdown-menu"
 import { Popover, PopoverTrigger } from "@shared/components/ui/popover"
 import { TimeWheel, type TimeWheelHandle } from "@shared/components/time-wheel"
 import { PageActiveContext } from "./contexts"
-import { Button, Input, PopoverContent } from "./ui"
+import { Button, DropdownMenuContent, Input, PopoverContent } from "./ui"
 import type { PluginContext } from "./types"
+
+export function AutoBookingHelp({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button variant="ghost" size="icon-sm" aria-label={label} title={label}>
+          <Info />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent aria-label={label} className="mison-auto-help">
+        {children}
+      </PopoverContent>
+    </Popover>
+  )
+}
+
+export function AutoBookingMenu({
+  label,
+  disabled,
+  items,
+}: {
+  label: string
+  disabled: boolean
+  items: {
+    label: string
+    disabled?: boolean
+    destructive?: boolean
+    opensDialog?: boolean
+    onSelect(): void
+  }[]
+}) {
+  const pageActive = useContext(PageActiveContext)
+  const [open, setOpen] = useState(false)
+  const opensDialog = useRef(false)
+  useEffect(() => {
+    if (!pageActive || disabled) setOpen(false)
+  }, [pageActive, disabled])
+  return (
+    <DropdownMenu open={open && pageActive && !disabled} onOpenChange={setOpen}>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" size="icon-sm" aria-label={label} title={label} disabled={disabled}>
+          <MoreHorizontal />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        align="end"
+        className="mison-auto-menu"
+        aria-label={label}
+        onCloseAutoFocus={(event) => {
+          if (opensDialog.current) {
+            event.preventDefault()
+            opensDialog.current = false
+          }
+        }}
+      >
+        {items.map((item) => (
+          <DropdownMenuItem
+            key={item.label}
+            disabled={item.disabled}
+            variant={item.destructive ? "destructive" : "default"}
+            onSelect={() => {
+              opensDialog.current = !!item.opensDialog
+              setOpen(false)
+              item.onSelect()
+            }}
+          >
+            {item.label}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
 
 export function useAutoBookingLive(context: PluginContext) {
   const live = useRef(false)
@@ -163,6 +241,7 @@ export function PriorityList<T>({
   disabled,
   onChange,
   compact = false,
+  removable = true,
 }: {
   items: T[]
   itemKey(item: T): string
@@ -171,9 +250,22 @@ export function PriorityList<T>({
   disabled: boolean
   onChange(items: T[]): void
   compact?: boolean
+  removable?: boolean
 }) {
-  const dragging = useRef<string | null>(null)
+  const dragging = useRef<{ key: string; order: string[] } | null>(null)
+  const [preview, setPreview] = useState<string[] | null>(null)
   const [announcement, setAnnouncement] = useState("")
+  useEffect(() => {
+    dragging.current = null
+    setPreview(null)
+  }, [items, disabled])
+  function ordered(keys: string[]) {
+    const positions = new Map(keys.map((key, index) => [key, index]))
+    return [...items].sort(
+      (a, b) => (positions.get(itemKey(a)) ?? items.length) - (positions.get(itemKey(b)) ?? items.length),
+    )
+  }
+  const displayedItems = preview && !disabled ? ordered(preview) : items
   function move(from: number, to: number) {
     if (disabled || from < 0 || to < 0 || to >= items.length || from === to) return
     const next = [...items]
@@ -184,69 +276,103 @@ export function PriorityList<T>({
   }
   return (
     <>
-      <ol className={compact ? "mison-auto-priorities is-compact" : "mison-auto-priorities"}>
-        {items.map((item, index) => (
+      <ol
+        className={compact ? "mison-auto-priorities is-compact" : "mison-auto-priorities"}
+        data-sorting={!!preview && !disabled}
+        onDragOver={(event) => {
+          if (!disabled && dragging.current) {
+            event.preventDefault()
+            event.dataTransfer.dropEffect = "move"
+          }
+        }}
+        onDrop={(event) => {
+          const session = dragging.current
+          if (disabled || !session) return
+          event.preventDefault()
+          event.stopPropagation()
+          const next = ordered(session.order)
+          if (next.some((item, index) => itemKey(item) !== itemKey(items[index]))) {
+            onChange(next)
+            const index = next.findIndex((item) => itemKey(item) === session.key)
+            if (index >= 0) setAnnouncement(`${itemLabel(next[index])}已移到第${index + 1}优先`)
+          }
+          dragging.current = null
+          setPreview(null)
+        }}
+      >
+        {displayedItems.map((item, index) => (
           <li
             key={itemKey(item)}
             data-priority={index + 1}
+            data-dragging={!!preview && dragging.current?.key === itemKey(item)}
+            draggable={!disabled}
+            tabIndex={disabled ? undefined : 0}
+            aria-label={
+              disabled ? undefined : `拖动或按上下方向键调整${itemLabel(item)}优先级`
+            }
             onDragOver={(event) => {
-              if (!disabled && dragging.current !== null) event.preventDefault()
-            }}
-            onDrop={(event) => {
+              const session = dragging.current
+              if (disabled || !session) return
               event.preventDefault()
-              const from = items.findIndex((value) => itemKey(value) === dragging.current)
-              move(from, index)
+              const from = session.order.indexOf(session.key)
+              const to = session.order.indexOf(itemKey(item))
+              if (from < 0 || to < 0 || from === to) return
+              const source = event.currentTarget.parentElement?.querySelector<HTMLElement>(
+                '[data-dragging="true"]',
+              )
+              if (!source) return
+              const sourceRect = source.getBoundingClientRect()
+              const targetRect = event.currentTarget.getBoundingClientRect()
+              const sameRow = Math.abs(sourceRect.top - targetRect.top) < targetRect.height / 2
+              const pointer = sameRow ? event.clientX : event.clientY
+              const middle = sameRow
+                ? targetRect.left + targetRect.width / 2
+                : targetRect.top + targetRect.height / 2
+              // Cross the target midpoint before moving so shifted neighbours do not flicker back.
+              if (from < to ? pointer < middle : pointer > middle) return
+              const next = [...session.order]
+              const [key] = next.splice(from, 1)
+              next.splice(to, 0, key)
+              session.order = next
+              setPreview(next)
+            }}
+            onDragStart={(event) => {
+              if (disabled) return
+              if (event.target instanceof Element && event.target.closest("button")) {
+                event.preventDefault()
+                return
+              }
+              const order = items.map(itemKey)
+              dragging.current = { key: itemKey(item), order }
+              setPreview(order)
+              event.dataTransfer.effectAllowed = "move"
+              event.dataTransfer.setData("text/plain", itemKey(item))
+            }}
+            onDragEnd={() => {
               dragging.current = null
+              setPreview(null)
+            }}
+            onKeyDown={(event) => {
+              if (disabled || event.currentTarget !== event.target) return
+              if (event.key === "ArrowUp" || event.key === "ArrowLeft") {
+                event.preventDefault()
+                move(index, index - 1)
+              } else if (event.key === "ArrowDown" || event.key === "ArrowRight") {
+                event.preventDefault()
+                move(index, index + 1)
+              }
             }}
           >
-            {!disabled ? (
-              <Button
-                variant="ghost"
-                size="icon"
-                draggable
-                tabIndex={-1}
-                aria-label={`拖动调整${itemLabel(item)}优先级，也可使用前移和后移按钮`}
-                className="mison-auto-drag"
-                onDragStart={(event) => {
-                  dragging.current = itemKey(item)
-                  event.dataTransfer.effectAllowed = "move"
-                  event.dataTransfer.setData("text/plain", itemKey(item))
-                }}
-                onDragEnd={() => {
-                  dragging.current = null
-                }}
-              >
-                <GripVertical />
-              </Button>
-            ) : null}
-            <span className="mison-auto-priority-number mison-caption">{index + 1}</span>
             {render(item, index)}
-            {!disabled ? (
+            {!disabled && removable ? (
               <div className="mison-auto-priority-actions">
                 <Button
                   variant="ghost"
                   size="icon"
-                  aria-label={`前移${itemLabel(item)}`}
-                  className="mison-auto-priority-move"
-                  disabled={index === 0}
-                  onClick={() => move(index, index - 1)}
-                >
-                  <ArrowUp />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  aria-label={`后移${itemLabel(item)}`}
-                  className="mison-auto-priority-move"
-                  disabled={index === items.length - 1}
-                  onClick={() => move(index, index + 1)}
-                >
-                  <ArrowDown />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
                   aria-label={`移除${itemLabel(item)}`}
+                  title={`移除${itemLabel(item)}`}
+                  onMouseDown={(event) => event.stopPropagation()}
+                  onPointerDown={(event) => event.stopPropagation()}
                   onClick={() => onChange(items.filter((_, at) => at !== index))}
                 >
                   <X />

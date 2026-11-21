@@ -55,7 +55,8 @@ def main():
         def origin_trusted(self, value, surface):
             return surface == "parent" and value == origin
 
-        def request(self, method, route, body, token, csrf, request_origin, surface, client):
+        def request(self, method, route, body, token, csrf, request_origin, surface, client,
+                    *, frontend_api=None):
             authorize(self, token, surface, "mison-booking")
             with (args.root / "requests.jsonl").open("a") as log:
                 log.write(json.dumps({"method": method, "path": route}) + "\n")

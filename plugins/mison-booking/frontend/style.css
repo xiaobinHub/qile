@@ -1611,7 +1611,6 @@
   overflow-y: auto;
   overscroll-behavior: contain;
   touch-action: pan-y pinch-zoom;
-  scrollbar-gutter: stable;
 }
 .mison-auto-schedule-scroll:focus-visible {
   outline: 2px solid var(--ring);
@@ -1798,11 +1797,56 @@
 .mison-auto-logs > li {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  gap: 6px;
+  align-items: stretch;
+  gap: 8px;
   padding-block: 12px;
   border-bottom: 1px solid var(--border);
   overflow-wrap: anywhere;
+}
+.mison-auto-log-filter {
+  display: flex;
+  gap: 4px;
+}
+.mison-auto-log-summary {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.mison-auto-log-summary > span {
+  min-width: 0;
+}
+.mison-auto-log-summary svg {
+  transition: transform 160ms ease;
+}
+.mison-auto-log-summary svg[data-expanded] {
+  transform: rotate(180deg);
+}
+.mison-auto-log-details {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0 0 0 12px;
+  list-style: none;
+}
+.mison-auto-log-details > li {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.mison-auto-log-details span {
+  color: var(--muted-foreground);
+  font-size: var(--text-caption);
+  line-height: var(--text-caption--line-height);
 }
 .mison-auto-log-meta {
   height: auto;
@@ -1844,7 +1888,6 @@
   }
   .mison-auto-priorities:not(.is-compact) .mison-auto-priority-actions {
     justify-content: flex-end;
-    flex-basis: 100%;
   }
   .mison-auto-date-selection .shared-calendar {
     padding-inline: 0;

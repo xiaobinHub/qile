@@ -2,7 +2,7 @@ import type {
   AutoBookingConfig,
   AutoBookingLogs,
   AutoBookingSaveRequest,
-  AutoBookingSchedules,
+  AutoBookingSnapshot,
   AutoBookingStatus,
   Bootstrap,
   BookingQuery,
@@ -96,16 +96,9 @@ export const stopAutoBooking = (
   context: PluginContextLike,
   body: { operationId: string; bindingRevision: number },
 ) => request<AutoBookingStatus>(context, "auto-booking/stop", { method: "POST", body })
-export const getAutoBookingSchedules = (
-  context: PluginContextLike,
-  teacherId: string,
-  from: string,
-  to: string,
-  cursor?: string | null,
-) => {
-  const query = new URLSearchParams({ teacherId, from, to })
-  if (cursor) query.set("cursor", cursor)
-  return request<AutoBookingSchedules>(context, `auto-booking/schedules?${query}`)
+export const getAutoBookingSnapshot = (context: PluginContextLike, teacherId: string) => {
+  const query = new URLSearchParams({ teacherId })
+  return request<AutoBookingSnapshot>(context, `auto-booking/snapshot?${query}`)
 }
 export const getAutoBookingLogs = (context: PluginContextLike, cursor?: string | null) =>
   request<AutoBookingLogs>(

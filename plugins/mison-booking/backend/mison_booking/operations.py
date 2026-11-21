@@ -10,7 +10,16 @@ MESSAGES = {'prepared':'正在准备操作。','dispatching':'操作已发送，
             'failed':'操作未完成。','uncertain':'结果待核对，请勿重复提交。','partially_succeeded':'部分课时已预约，请核对剩余课时。',
             'needs_repair':'取消记录尚未确认，请核对结果。','cancelled':'操作已结束。'}
 
-def raw_get(client, operation_id): return bridge(client.context,'operation.get',{'operationId':drafts.uid(operation_id)})
+
+class NotDispatched(AuthError):
+    """Local admission failed before handing the write to the transport."""
+
+
+def raw_get(client, operation_id, *, settle_cancelled=False):
+    body = {'operationId': drafts.uid(operation_id)}
+    if settle_cancelled:
+        body['settleCancelled'] = True
+    return bridge(client.context, 'operation.get', body)
 
 def replay(client, body):
     operation_id = drafts.uid(body.get('operationId'))
@@ -115,14 +124,18 @@ def book(client,body):
                 raise AuthError('SLOT_UNAVAILABLE', '当天已有课程，本次没有提交预约。')
             bridge(client.context, 'autoBooking.guard', {})
     except AuthError as error:return output(client,finish(client,op,'failed',str(error)))
-    op=advance(client,op,'mark-dispatch',stage='appointment_sent')
     payload={'tid':int(draft['teacher']['id']),'userid':client.userid,'ddate':draft['date'],
              'dtime':draft['lessons'][0]['start'],'user1v1_id':read_api.contracts(client)['id'],
              'lesson_period':len(draft['lessons']),'courseware_id':','.join(item['courseware']['id'] for item in draft['lessons'])}
+    # Prepare anything that may read Mison before marking dispatch. Afterwards,
+    # only the guarded write may run, so a denial has an unambiguous origin.
+    op=advance(client,op,'mark-dispatch',stage='appointment_sent')
     try:client.mutate('onevoneAppointment',payload)
     except AuthError as error:
-        state='failed' if error.code in ('UPSTREAM_REJECTED','RECONNECT_REQUIRED','UPSTREAM_RATE_LIMITED') else 'uncertain'
-        op=finish(client,op,state,str(error),errorCode=error.code,retryAfter=error.retry_after)
+        unsent = isinstance(error, NotDispatched)
+        state='failed' if unsent or error.code in ('UPSTREAM_REJECTED','RECONNECT_REQUIRED','UPSTREAM_RATE_LIMITED') else 'uncertain'
+        op=finish(client,op,state,str(error),errorCode=error.code,retryAfter=error.retry_after,
+                  **({'notDispatched': True} if unsent else {}))
     else:op=finish(client,op,'succeeded','预约成功。',bookingKeys=[],pendingRecordSync=True)
     if op['state'] in ('succeeded','uncertain'):
         try:op=reconcile_book(client,op)
@@ -164,7 +177,28 @@ def reconcile_book(client,op):
             op={**op,'result':{**op['result'],'bookingKeys':found,'bookingEvidence':booking_evidence,'pendingRecordSync':not all_found,'lessons':items}}
         return op
     if all_found:return finish(client,op,'succeeded','已核对，预约成功。',bookingKeys=found,bookingEvidence=booking_evidence,lessons=items)
-    if found:return finish(client,op,'partially_succeeded',bookingKeys=found,lessons=items)
+    if found:
+        previous = op.get('result') or {}
+        previous_starts = [item['start'] for item in previous.get('lessons', []) if item['state'] == 'succeeded']
+        confirmed = dict(zip(previous_starts, previous.get('bookingKeys', [])))
+        current = {item['startTime']: key for item, key in zip(booking_evidence, found)}
+        if op['state'] == 'partially_succeeded' and current.keys() <= confirmed.keys():
+            return op  # Keep the receipt and its acknowledgement wait when the list regresses.
+        # The booking request fixes each lesson's start. Keep the first confirmed
+        # receipt for a lesson if a subsequent list response temporarily omits it.
+        confirmed = {**current, **confirmed}
+        evidence = {item['startTime']: item for item in booking_evidence}
+        evidence.update({item['startTime']: item for item in previous.get('bookingEvidence', [])})
+        ordered_starts = [item['start'] for item in items if item['start'] in confirmed]
+        for item in items:
+            if item['start'] in confirmed:
+                item['state'] = 'succeeded'
+        keys = [confirmed[start] for start in ordered_starts]
+        evidence = [evidence[start] for start in ordered_starts if start in evidence]
+        if len(set(keys)) == len(details['lessons']):
+            return finish(client, op, 'succeeded', '已核对，预约成功。', bookingKeys=keys,
+                          bookingEvidence=evidence, lessons=items)
+        return finish(client, op, 'partially_succeeded', bookingKeys=keys, bookingEvidence=evidence, lessons=items)
     return op
 
 def change(client,draft_id,start,body):
@@ -338,8 +372,17 @@ def learning(client,key,kind,body):
 def acknowledge(client,operation_id,body):
     if set(body)!={'bindingRevision','confirmedInApp'} or body['confirmedInApp'] is not True:read_api.invalid()
     drafts.binding(client,body['bindingRevision'])
-    op=raw_get(client,operation_id)
+    op=raw_get(client,operation_id,settle_cancelled=True)
     if op['state'] in ('succeeded','failed','cancelled'):return output(client,op)
     if datetime.fromisoformat(op['updatedAt'])+timedelta(seconds=60)>read_api.now():
         raise AuthError('OPERATION_IN_PROGRESS','操作可能仍在执行，请至少一分钟后再处理。')
-    return output(client,finish(client,op,'cancelled','已按你的确认结束核对；此操作不会取消或重发任何美森课程。',**{k:v for k,v in (op.get('result') or {}).items() if k!='message'}))
+    try:
+        op = finish(client, op, 'cancelled', '已按你的确认结束核对；此操作不会取消或重发任何美森课程。',
+                    **{key: value for key, value in (op.get('result') or {}).items() if key != 'message'})
+    except AuthError as error:
+        if error.code != 'RESULT_UNCERTAIN':
+            raise
+        op = raw_get(client, operation_id, settle_cancelled=True)
+        if op['state'] not in ('succeeded', 'failed', 'cancelled'):
+            raise
+    return output(client, op)

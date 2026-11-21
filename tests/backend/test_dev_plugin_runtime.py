@@ -221,5 +221,40 @@ class DevelopmentRuntimeTests(unittest.TestCase):
                 runtime.bridge.handle.assert_called_once()
 
 
+
+    def test_plugin_frontend_dev_reuses_a_live_detached_session(self):
+        registry = Mock()
+        registry.read.return_value = {'pid': 321, 'state': 'ready', 'sessionId': 'session-1', 'revision': 2, 'backend': False}
+        with patch('lele_growth.plugins.dev_mode.DevRegistry', return_value=registry), \
+             patch.object(dev.os, 'kill'), patch.object(dev.subprocess, 'Popen') as launch, \
+             contextlib.redirect_stdout(io.StringIO()) as output:
+            dev.start_plugin_frontend_dev('mison-booking')
+        launch.assert_not_called()
+        self.assertIn('"reused": true', output.getvalue())
+
+    def test_plugin_frontend_dev_starts_detached_and_waits_until_ready(self):
+        registry = Mock()
+        ready={'pid': 654, 'state': 'ready', 'sessionId': 'session-2', 'revision': 1, 'backend': False}
+        registry.read.side_effect = [None, None, ready, ready]
+        process = Mock()
+        process.poll.return_value = None
+        with patch('lele_growth.plugins.dev_mode.DevRegistry', return_value=registry), \
+             patch.object(dev.subprocess, 'Popen', return_value=process) as launch, \
+             patch.object(dev.time, 'sleep'), contextlib.redirect_stdout(io.StringIO()):
+            dev.start_plugin_frontend_dev('mison-booking')
+        self.assertTrue(launch.call_args.kwargs['start_new_session'])
+        self.assertEqual(launch.call_args.kwargs['stdin'], dev.subprocess.DEVNULL)
+        self.assertEqual(launch.call_args.args[0][-1], 'mison-booking')
+
+    def test_plugin_frontend_dev_stop_waits_for_registry_cleanup(self):
+        registry = Mock()
+        registry.read.side_effect = [{'pid': 654}, {'pid': 654}, None]
+        with patch('lele_growth.plugins.dev_mode.DevRegistry', return_value=registry), \
+             patch.object(dev.os, 'kill') as kill, patch.object(dev.time, 'sleep'), \
+             contextlib.redirect_stdout(io.StringIO()) as output:
+            dev.stop_plugin_frontend_dev('mison-booking')
+        kill.assert_called_once_with(654, dev.signal.SIGTERM)
+        self.assertIn('"development": null', output.getvalue())
+
 if __name__ == '__main__':
     unittest.main()

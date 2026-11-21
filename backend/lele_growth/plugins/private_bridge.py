@@ -39,7 +39,7 @@ class PluginBridge:
                 for capability in ('plugin.private-state', 'plugin.credentials', 'plugin.jobs.schedule', 'plugin.external-operations'):
                     self._capability(current, capability)
                 from . import auto_booking
-                return auto_booking.handle(cur, current, context, action, payload)
+                return auto_booking.handle(cur, current, context, action, payload, vault=self.vault)
             require(action in ('actor.info', 'private.get', 'private.put', 'private.delete',
                                'credential.get', 'session.get', 'session.begin', 'session.finish', 'session.fail', 'session.disconnect', 'session.invalidate', 'operation.begin', 'operation.mark-dispatch',
                                'operation.stage', 'operation.finish', 'operation.get', 'operation.list',
@@ -134,9 +134,11 @@ AND attempt=%s AND generation=%s AND config_revision=%s AND release_epoch=%s AND
         if task_id == 'sync-courses':
             allowed = action in ('session.get', 'session.invalidate', 'courseSync.get', 'courseSync.run')
         else:
-            allowed = (action in ('session.get', 'session.invalidate', 'autoBooking.get', 'autoBooking.begin',
-                                   'autoBooking.guard', 'autoBooking.prepare', 'autoBooking.checkpoint', 'autoBooking.finish',
-                                   'autoBooking.outcome', 'autoBooking.release', 'autoBooking.observe', 'operation.begin', 'operation.mark-dispatch',
+            allowed = (action in ('session.get', 'session.invalidate', 'autoBooking.get', 'autoBooking.begin', 'autoBooking.snapshot-save',
+                                   'autoBooking.snapshot', 'autoBooking.snapshot-stage', 'autoBooking.snapshot-day',
+                                   'autoBooking.guard', 'autoBooking.read-guard', 'autoBooking.prepare', 'autoBooking.checkpoint', 'autoBooking.finish',
+                                   'autoBooking.outcome', 'autoBooking.release', 'autoBooking.observe',
+                                   'autoBooking.notification-claim', 'autoBooking.notification-finish', 'operation.begin', 'operation.mark-dispatch',
                                    'operation.finish', 'operation.get')
                        or action in ('private.get', 'private.put') and (payload or {}).get('collection') == 'auto-booking-draft')
             require('plugin.external-operations' in context.get('capabilities', []), 403, '任务未获得预约能力。', 'plugin_capability_denied')
@@ -150,8 +152,21 @@ AND attempt=%s AND generation=%s AND config_revision=%s AND release_epoch=%s AND
     def _operation(self, cur, current, context, action, payload):
         self._capability(current, 'plugin.external-operations')
         from . import external_operations
+        auto_state = None
+        closes_tracking = (action == 'operation.finish' and payload.get('state') == 'cancelled'
+                           or action == 'operation.get' and payload.get('settleCancelled') is True)
+        if (current['plugin_id'] == 'mison-booking' and closes_tracking
+                and context.get('actorId') and not context.get('jobId')):
+            from . import auto_booking
+            # Match the job's lock order: automatic booking state before the
+            # external operation. Finish both records in this transaction.
+            auto_state = auto_booking.load(cur, current)
         result = external_operations.handle(cur, current, context, action, payload)
-        operation = result.get('data', {}).get('operation', {})
+        data = result['data']
+        operation = data if action == 'operation.get' else data.get('operation', {})
+        if auto_state is not None:
+            key, record, state, _ = auto_state
+            auto_booking.close_cancelled_operation(cur, current, key, record, state, operation)
         if (current['plugin_id'] == 'mison-booking' and action == 'operation.finish'
                 and operation.get('kind') == 'cancel' and operation.get('state') == 'succeeded'):
             details = operation.get('canonicalRequest', {}).get('details', {})

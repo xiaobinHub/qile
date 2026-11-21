@@ -189,20 +189,33 @@ export type AutoBookingConfig = {
   minNoticeHours: number
   dailyLessons: number
   rebookCancelled: boolean
+  checkInterval: { minMinutes: number; maxMinutes: number }
+  notifications: { enabled: boolean; barkKeys: string[]; barkKeyNames?: string[]; events: Array<"booked"> }
+  /** Persisted quiet interval, the complement of the visible checking window. Disabled means all day. */
   sleep: { enabled: boolean; start: string; end: string }
 }
 export type AutoBookingSaveRequest = Omit<AutoBookingConfig, "revision" | "canManage"> & {
   operationId: string
   expectedRevision: number
 }
-export type AutoBookingEvent = {
-  id: string
-  at: string
+export type AutoBookingDecision = {
   kind: string
   message: string
   date?: string
   teacherName?: string
   time?: string
+}
+export type AutoBookingEvent = {
+  id: string
+  at: string
+  kind: string
+  message: string
+  status?: string
+  runId?: string
+  date?: string
+  teacherName?: string
+  time?: string
+  details?: AutoBookingDecision[]
 }
 export type AutoBookingStatus = {
   state: "running" | "stopped" | "sleeping"
@@ -211,25 +224,33 @@ export type AutoBookingStatus = {
   enabled: boolean
   checks: number
   totalBooked: number
+  completedLessons: number
   nextCheckAt: string | null
   lastCheckAt: string | null
   fulfilledDates: string[]
   targetDates: string[]
   latestEvent: AutoBookingEvent | null
+  snapshot: {
+    id: string
+    checkedAt: string
+    configRevision: number
+    teachers: Array<AutoBookingTeacher & { baseDate: string; days: number }>
+  } | null
   canManage: boolean
 }
-export type AutoBookingScheduleDay = {
+export type AutoBookingSnapshotDay = {
   date: string
-  state: "ready" | "unopened" | "error"
-  message?: string
-  slots: (TeacherSchedule["slots"][number] & { matches: boolean })[]
-  target: boolean
-  booked: boolean
+  state: "ready" | "unopened"
+  slots: { start: string; end: string; state: "available" | "mine" | "occupied" | "unscheduled" }[]
 }
-export type AutoBookingSchedules = {
-  teacherId: string
-  days: AutoBookingScheduleDay[]
-  nextCursor: string | null
-  updatedAt: string
+export type AutoBookingSnapshot = {
+  snapshotId: string
+  checkedAt: string
+  configRevision: number
+  teacher: AutoBookingTeacher & {
+    baseDate: string
+    days: AutoBookingSnapshotDay[]
+    bookingUnavailable?: boolean
+  }
 }
 export type AutoBookingLogs = { items: AutoBookingEvent[]; nextCursor: string | null }

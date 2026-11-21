@@ -113,7 +113,10 @@ def create_app(config_path, surface='parent'):
         if entry_match:
             descriptor = await run_in_threadpool(development.descriptor, entry_match[1], result.get('releaseId'))
             if descriptor is not None:
-                result = {**result, 'development': descriptor, 'entry': descriptor['base'] + '@plugin-entry', 'styles': []}
+                base = descriptor['base']
+                if descriptor['state'] == 'ready':
+                    descriptor['compiledEntry'] = base + '__compiled/entry.js'
+                result = {**result, 'development': descriptor, 'entry': base + '@plugin-entry', 'styles': []}
         if isinstance(result,ImageResponse):
             return Response(result.content,media_type=result.mime)
         token=result.pop('_cookie',None); clear=result.pop('_clear_cookie',False)

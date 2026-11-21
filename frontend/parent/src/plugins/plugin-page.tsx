@@ -127,7 +127,8 @@ export function PluginPage({
         if (controller.signal.aborted) return
         setLoading(false)
         setRequiresReload(
-          error instanceof ApiError && error.code === "plugin_frontend_incompatible",
+          error instanceof ApiError &&
+            ["plugin_frontend_incompatible", "plugin_module_load_failed"].includes(error.code),
         )
         if (!(error instanceof ApiError && error.kind === "stale")) setFailure(pluginError(error))
         void pluginStore.refresh()

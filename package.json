@@ -20,6 +20,7 @@
     "test:plugins:ui": "node tests/browser/plugin_parent_ui.cjs",
     "check:demo-plugins": "tsc -p plugins/demo-page/tsconfig.json && node scripts/build_plugin.mjs demo-page && node scripts/build_plugin.mjs demo-service",
     "check:mison": "tsc -p plugins/mison-booking/tsconfig.json --noEmit",
+    "test:mison:settings": "npm run check:mison && node tests/domain/mison_check_window.cjs && node tests/browser/mison_settings_groups_acceptance.cjs",
     "test:mison:ui": "npm run check:mison && npm run plugin:build -- mison-booking && node tests/browser/mison_frontend_acceptance.cjs",
     "test:ipad": "npm run check:parent && npm run check:mison && npm run plugin:build -- mison-booking && npm run test:ipad:chromium && npm run test:ipad:webkit",
     "test:ipad:chromium": "IPAD_TOUCH_ACCEPTANCE=1 node tests/browser/mison_frontend_acceptance.cjs",

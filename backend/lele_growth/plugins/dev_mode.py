@@ -11,6 +11,7 @@ from contextvars import ContextVar
 import base64
 import copy
 import fcntl
+import gzip
 import http.client
 import hashlib
 import hmac
@@ -325,6 +326,33 @@ def proxy_target(registry, plugin_id, session, path, query):
     return data, f"http://127.0.0.1:{data['port']}{base}{path}" + ('?' + query if query else '')
 
 
+def encode_development_resource(body, content_type, accept_encoding):
+    headers = {'Content-Type': content_type}
+    if content_type.split(';', 1)[0].strip().lower() not in (
+        'text/javascript', 'application/javascript', 'text/css',
+    ):
+        return body, headers
+    headers['Vary'] = 'Accept-Encoding'
+    qualities = {}
+    for part in accept_encoding.lower().split(','):
+        coding, *parameters = part.strip().split(';')
+        quality = 1.0
+        for parameter in parameters:
+            name, separator, value = parameter.strip().partition('=')
+            if name == 'q' and separator:
+                try:
+                    quality = float(value)
+                except ValueError:
+                    quality = 0.0
+        qualities[coding] = quality if 0 <= quality <= 1 else 0.0
+    if len(body) >= 1024 and qualities.get('gzip', qualities.get('*', 0)) > 0:
+        compressed = gzip.compress(body, compresslevel=5, mtime=0)
+        if len(compressed) < len(body):
+            headers['Content-Encoding'] = 'gzip'
+            return compressed, headers
+    return body, headers
+
+
 def mount_proxy(app, service, registry, surface, cookie_name):
     import httpx
     from fastapi import Request, WebSocket
@@ -351,8 +379,11 @@ def mount_proxy(app, service, registry, surface, cookie_name):
                     async for chunk in response.aiter_bytes():
                         body.extend(chunk)
                         require(len(body) <= 32 * 1024 * 1024, 502, '开发资源过大。')
-                    result = Response(bytes(body), status_code=response.status_code,
-                                      headers={'Content-Type': response.headers.get('content-type', 'application/octet-stream')})
+                    content, headers = encode_development_resource(
+                        bytes(body), response.headers.get('content-type', 'application/octet-stream'),
+                        request.headers.get('accept-encoding', ''),
+                    )
+                    result = Response(content, status_code=response.status_code, headers=headers)
             # Revocation/session replacement before bytes are returned.
             await target(request, plugin_id, session, resource)
             return result

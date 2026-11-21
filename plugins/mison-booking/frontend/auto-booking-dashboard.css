@@ -1,24 +1,34 @@
-/* Automatic booking composition; shared components retain the host theme. */
+/* Automatic booking uses the shared host colors, typography and controls. */
 .mison-auto-booking {
   --mison-auto-booked: oklch(0.48 0.2 260);
 }
+.mison-auto-dashboard {
+  gap: 16px;
+  padding: 18px 20px 24px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overflow-anchor: none;
+  scrollbar-gutter: stable;
+  overscroll-behavior: contain;
+  touch-action: pan-y pinch-zoom;
+  background: color-mix(in srgb, var(--muted) 28%, var(--card));
+}
 .mison-auto-toolbar {
-  min-height: 54px;
+  min-height: 56px;
   padding: 0 20px;
 }
 .mison-auto-toolbar > [role="tablist"] {
   align-self: stretch;
   height: auto;
-  gap: 8px;
+  gap: 12px;
   padding: 0;
 }
 .mison-auto-toolbar > [role="tablist"] > [role="tab"] {
   height: 100%;
-  padding: 0 18px;
+  padding: 0 12px;
   border: 0;
   border-radius: 0;
-  font-size: var(--text-section);
-  font-weight: 400;
+  font-size: var(--text-body);
   color: var(--muted-foreground);
 }
 .mison-auto-toolbar > [role="tablist"] > [role="tab"][data-state="active"] {
@@ -30,96 +40,347 @@
   height: 3px;
   background: var(--primary);
 }
+.mison-auto-unsaved-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--warning);
+}
 .mison-auto-stop {
-  border-color: var(--destructive);
-  color: var(--destructive);
-  min-width: 112px;
-  height: 34px;
+  border-color: var(--border);
+  color: var(--foreground);
+}
+.mison-auto-dashboard-status {
+  display: grid;
+  flex: none;
+  grid-template-columns: minmax(240px, 0.72fr) minmax(460px, 1.28fr);
+  align-items: stretch;
+  gap: 16px;
+  margin: 0;
 }
 .mison-auto-summary {
   display: grid;
-  grid-template-columns: minmax(250px, 1.5fr) repeat(3, minmax(100px, 1fr));
-  gap: 0;
-  margin: 18px 20px 8px;
-  padding: 14px 24px;
-  min-height: 86px;
-  border: 1px solid color-mix(in srgb, var(--border) 40%, transparent);
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+  gap: 14px;
+  height: auto;
+  margin: 0;
+  padding: 16px 20px;
+  border: 1px solid var(--border);
   border-radius: var(--radius-card);
-  background: color-mix(in srgb, var(--muted) 45%, var(--card));
+  background: var(--card);
 }
-.mison-auto-state,
-.mison-auto-metric {
+.mison-auto-state {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.mison-auto-state-copy {
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  gap: 2px;
+  gap: 4px;
+  min-width: 0;
 }
-.mison-auto-state > strong {
+.mison-auto-state-heading {
   display: flex;
   align-items: center;
-  gap: 12px;
-  font-size: var(--text-detail);
-  line-height: var(--text-detail--line-height);
+  gap: 8px;
+  min-width: 0;
 }
-.mison-auto-state-dot {
+.mison-auto-state-heading > .mison-button {
+  flex: none;
+  height: 32px;
+  min-height: 32px;
+  padding-inline: 8px;
+}
+.mison-auto-task-control {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  min-width: 40px;
+  min-height: 40px;
+  padding: 0;
+  border-radius: 50%;
+}
+.mison-auto-state > .mison-auto-task-control[data-action="start"] {
+  border-color: transparent;
+  background: var(--success);
+  color: var(--success-foreground);
+}
+.mison-auto-state > .mison-auto-task-control[data-action="start"]:hover {
+  background: color-mix(in srgb, var(--success) 86%, black);
+}
+.mison-auto-state > .mison-auto-task-control[data-action="stop"] {
+  border-color: color-mix(in srgb, var(--destructive) 32%, var(--border));
+  background: var(--card);
+  color: var(--destructive);
+}
+.mison-auto-state > .mison-auto-task-control[data-action="stop"]:hover {
+  background: color-mix(in srgb, var(--destructive) 8%, var(--card));
+}
+.mison-auto-play-icon {
+  width: 16px;
+  height: 16px;
+  margin-left: 2px;
+  fill: currentColor;
+  stroke: none;
+}
+.mison-auto-stop-mark {
   width: 12px;
   height: 12px;
+  border-radius: 2px;
+  background: currentColor;
+}
+.mison-auto-state strong {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: var(--text-detail);
+}
+.mison-auto-state-dot {
+  width: 9px;
+  height: 9px;
+  flex: none;
   border-radius: 50%;
   background: currentColor;
 }
 .mison-auto-state[data-state="running"] > strong {
   color: var(--success);
 }
+.mison-auto-state[data-state="running"] .mison-auto-state-heading > strong {
+  color: var(--success);
+}
 .mison-auto-state[data-state="sleeping"] > strong,
 .mison-auto-state[data-state="reconciling"] > strong {
   color: var(--warning);
 }
+.mison-auto-state[data-state="stopped"] .mison-auto-state-heading > strong {
+  color: var(--destructive);
+}
+.mison-auto-state[data-state="sleeping"] .mison-auto-state-heading > strong,
+.mison-auto-state[data-state="reconciling"] .mison-auto-state-heading > strong {
+  color: var(--warning);
+}
 .mison-auto-state > small {
-  padding-left: 24px;
+  color: var(--muted-foreground);
+  font-size: var(--text-caption);
 }
-.mison-auto-metric {
-  border-left: 1px solid var(--border);
-  padding-left: clamp(20px, 4cqw, 64px);
-  font-size: var(--text-body);
+.mison-auto-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 33px;
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+  font-variant-numeric: tabular-nums;
 }
-.mison-auto-metric > strong {
+.mison-auto-metrics > div {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 6px;
+  min-width: 0;
+  min-height: 64px;
+  padding-block: 8px;
+}
+.mison-auto-metrics > div:nth-child(even) {
+  position: relative;
+}
+.mison-auto-metrics > div:nth-child(even)::before {
+  content: "";
+  position: absolute;
+  top: 8px;
+  bottom: 8px;
+  left: -17px;
+  width: 1px;
+  background: var(--border);
+}
+.mison-auto-metrics > div:nth-child(-n + 2) {
+  padding-top: 0;
+}
+.mison-auto-metrics > div:nth-child(2)::before {
+  top: 0;
+}
+.mison-auto-metrics > div:nth-last-child(-n + 2) {
+  padding-bottom: 0;
+}
+.mison-auto-metrics > div:nth-child(6)::before {
+  bottom: 0;
+}
+.mison-auto-metrics strong {
   font-size: var(--text-number);
   line-height: var(--text-number--line-height);
-  font-weight: 700;
+  font-weight: 600;
 }
-.mison-auto-metric > span {
+.mison-auto-metrics strong > small {
   color: var(--muted-foreground);
+  font-size: var(--text-caption);
+  font-weight: 400;
+}
+.mison-auto-metrics span {
+  color: var(--muted-foreground);
+  font-size: var(--text-caption);
+  line-height: var(--text-caption--line-height);
 }
 .mison-auto-running-copy {
-  padding-block: 8px;
+  padding-bottom: 12px;
+}
+.mison-auto-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 260px;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  border-top: 1px solid var(--border);
+}
+.mison-auto-schedule-area {
+  display: flex;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+.mison-auto-schedule-area > .mison-empty {
+  flex: 1;
+  overflow-y: auto;
+}
+.mison-auto-insights {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  gap: 20px;
+  padding: 20px 16px;
+  border-left: 1px solid var(--border);
+  background: color-mix(in srgb, var(--muted) 35%, var(--card));
+}
+.mison-auto-insight-section {
+  min-width: 0;
+}
+.mison-auto-section-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.mison-auto-section-heading h2 {
+  font-size: var(--text-body);
+  font-weight: 600;
+}
+.mison-auto-section-heading > span {
+  font-size: var(--text-caption);
+  color: var(--muted-foreground);
+  font-variant-numeric: tabular-nums;
+}
+.mison-auto-progress {
+  display: block;
+  width: 100%;
+  height: 6px;
+  margin-block: 0 10px;
+  appearance: none;
+  border: 0;
+  overflow: hidden;
+  border-radius: var(--radius-control);
+  background: var(--border);
+  accent-color: var(--success);
+}
+.mison-auto-progress::-webkit-progress-bar {
+  background: var(--border);
+}
+.mison-auto-progress::-webkit-progress-value {
+  background: var(--success);
+  border-radius: var(--radius-control);
+}
+.mison-auto-progress::-moz-progress-bar {
+  background: var(--success);
+}
+.mison-auto-target-dates {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 14px;
+}
+.mison-auto-target-dates > .mison-button {
+  justify-content: space-between;
+  gap: 6px;
+  padding-inline: 10px;
+  background: var(--card);
+  font-variant-numeric: tabular-nums;
+  font-weight: 400;
+}
+.mison-auto-target-dates > .mison-button > span {
+  font-size: var(--text-meta);
+  color: var(--muted-foreground);
+}
+.mison-auto-target-dates > .mison-button[data-completed="true"] {
+  color: var(--success);
+  border-color: color-mix(in srgb, var(--success) 25%, var(--border));
+  background: color-mix(in srgb, var(--success) 5%, var(--card));
+}
+.mison-auto-insight-section + .mison-auto-insight-section {
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+.mison-auto-rule-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  font-size: var(--text-caption);
+}
+.mison-auto-rule-summary > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+.mison-auto-rule-summary dt {
+  color: var(--muted-foreground);
+}
+.mison-auto-rule-summary dd {
+  margin: 0;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 .mison-auto-schedule-toolbar {
   justify-content: space-between;
-  padding: 12px 20px 8px;
-  gap: 12px;
+  padding: 16px 20px 10px;
+  gap: 10px;
 }
-.mison-auto-schedule-toolbar > h2 {
-  font-size: var(--text-number);
-  line-height: var(--text-number--line-height);
-}
-.mison-auto-schedule-actions,
-.mison-auto-legend {
+.mison-auto-schedule-title {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: 10px;
+}
+.mison-auto-schedule-title h2 {
+  font-size: var(--text-section);
+  line-height: var(--text-section--line-height);
+}
+.mison-auto-schedule-title > span {
+  min-inline-size: 7em;
+  white-space: nowrap;
+  font-size: var(--text-meta);
+  color: var(--muted-foreground);
+}
+.mison-auto-schedule-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
   min-width: 0;
 }
 .mison-auto-filter {
   height: 36px;
-  min-width: 152px;
-  padding: 0 12px;
+  min-width: 130px;
+  padding: 0 10px;
   border: 1px solid var(--input);
-  border-radius: var(--radius);
+  border-radius: var(--radius-control);
   background: var(--card);
   color: var(--foreground);
   font: inherit;
-  box-shadow: 0 1px 2px rgb(0 0 0 / 0.04);
+  font-size: var(--text-body);
 }
 .mison-auto-filter:focus-visible {
   outline: 2px solid var(--ring);
@@ -132,86 +393,69 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: 12px;
+  padding: 0 20px 12px;
   overflow: visible;
-  padding: 8px 20px 12px;
+}
+.mison-auto-teacher-switch {
+  min-width: 0;
+  max-width: 100%;
+  flex: 1 1 auto;
+  gap: 0;
 }
 .mison-auto-teacher-navigation [role="tablist"] {
   min-width: 0;
   max-width: 100%;
   height: auto;
-  gap: 16px;
+  gap: 6px;
   background: transparent;
   border-radius: 0;
   padding: 2px;
   overflow-x: auto;
+  overflow-y: hidden;
   justify-content: flex-start;
   scrollbar-width: thin;
 }
+.mison-auto-teacher-navigation [role="tab"]::after {
+  content: none;
+}
 .mison-auto-teacher-navigation [role="tab"] {
-  min-height: 54px;
-  min-width: 220px;
+  position: relative;
+  min-width: 0;
+  min-height: 42px;
   justify-content: flex-start;
-  gap: 10px;
-  padding: 8px 16px;
+  gap: 8px;
+  padding: 6px 10px;
   border: 1px solid var(--border);
-  border-radius: var(--radius-card);
+  border-radius: var(--radius-control);
   background: var(--card);
   color: var(--foreground);
-  font-size: var(--text-detail);
-  box-shadow: 0 1px 2px rgb(0 0 0 / 0.03);
+  font-size: var(--text-body);
+  box-shadow: none;
 }
 .mison-auto-teacher-navigation [role="tab"][data-state="active"] {
   border-color: var(--primary);
-  background: color-mix(in srgb, var(--primary) 13%, var(--card));
-}
-.mison-auto-rank {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: none;
-  width: 26px;
-  height: 26px;
-  border-radius: 6px;
-  background: color-mix(in srgb, var(--primary) 20%, var(--card));
-  font-size: var(--text-body);
-  font-weight: 600;
-}
-.mison-auto-teacher-navigation .mison-avatar {
-  width: 40px;
-  height: 40px;
+  background: var(--accent);
 }
 .mison-auto-teacher-count {
-  margin-left: auto;
-  font-size: var(--text-caption);
-}
-.mison-auto-legend {
-  flex: none;
-  gap: 20px;
+  display: inline-grid;
+  place-items: center;
+  min-width: 4ch;
+  margin-left: 4px;
   color: var(--muted-foreground);
-  font-size: var(--text-caption);
+  font-size: var(--text-meta);
+  font-variant-numeric: tabular-nums;
 }
-.mison-auto-legend > span {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  white-space: nowrap;
+.mison-auto-teacher-navigation [role="tab"][data-state="active"] .mison-auto-teacher-count {
+  color: var(--foreground);
 }
-.mison-auto-legend > span::before {
-  content: "";
-  width: 28px;
-  height: 18px;
-  border: 1px solid var(--border);
-  border-radius: 5px;
-  background: var(--muted);
+.mison-auto-teacher-navigation [role="tab"] .mison-auto-teacher-loading {
+  position: absolute;
+  right: 8px;
 }
-.mison-auto-legend > [data-state="available"]::before {
-  background: color-mix(in srgb, var(--success) 7%, var(--card));
-  border-color: color-mix(in srgb, var(--success) 55%, var(--border));
-}
-.mison-auto-legend > [data-state="mine"]::before {
-  background: color-mix(in srgb, var(--mison-auto-booked) 10%, var(--card));
-  border-color: color-mix(in srgb, var(--mison-auto-booked) 50%, var(--border));
+.mison-auto-teacher-navigation .mison-avatar {
+  width: 26px;
+  height: 26px;
 }
 .mison-auto-range {
   gap: 6px;
@@ -230,218 +474,658 @@
 .mison-auto-schedule-scroll {
   margin: 0 20px;
   border-top: 1px solid var(--border);
+  overflow-anchor: none;
 }
 .mison-auto-day {
-  grid-template-columns: 170px minmax(0, 1fr);
+  grid-template-columns: 112px minmax(0, 1fr);
   gap: 0;
   padding: 0;
   border-top: 0;
   border-bottom: 1px solid var(--border);
+  scroll-margin-top: 0;
+}
+.mison-auto-day[data-focused="true"] {
+  background: color-mix(in srgb, var(--primary) 8%, var(--card));
 }
 .mison-auto-day-heading {
   height: 100%;
+  justify-content: center;
   gap: 4px;
-  padding: 16px 12px;
-  border-right: 1px solid var(--border);
+  padding: 14px 10px 14px 0;
 }
 .mison-auto-day-heading > h3 {
-  display: flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: 10px;
-  font-size: var(--text-detail);
+  font-size: var(--text-body);
+  font-variant-numeric: tabular-nums;
 }
-.mison-auto-day-heading h3 > span {
-  font-size: var(--text-caption);
-  font-weight: 400;
+.mison-auto-day-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--text-meta);
+  line-height: var(--text-meta--line-height);
   color: var(--muted-foreground);
+  white-space: nowrap;
+}
+.mison-auto-weekday[data-weekend] {
+  color: var(--foreground);
 }
 .mison-auto-target {
-  border: 0;
-  border-radius: 4px;
-  padding: 2px 8px;
-  font-weight: 400;
+  border-inline-start: 1px solid var(--border);
+  padding-inline-start: 6px;
 }
-.mison-auto-target[data-target="true"] {
-  background: color-mix(in srgb, var(--primary) 30%, var(--card));
-  color: var(--foreground);
+.mison-auto-day[data-target="true"] .mison-auto-target {
+  color: var(--warning);
 }
 .mison-auto-slots,
 .mison-auto-day > p,
 .mison-auto-day-loading,
 .mison-auto-day > .mison-notice {
-  padding: 14px 16px;
+  padding: 14px 0 14px 12px;
   align-self: center;
 }
 .mison-auto-slots {
-  gap: 8px;
+  gap: 7px;
+}
+.mison-auto-day-skeleton {
+  pointer-events: none;
+}
+.mison-auto-day-skeleton .mison-auto-slots {
+  display: flex;
 }
 .mison-auto-slot {
   height: 32px;
   min-height: 32px;
   padding: 4px 10px;
-  gap: 5px;
-  border-radius: 7px;
-  font-size: var(--text-section);
-  font-weight: 400;
+  gap: 6px;
+  border-radius: 999px;
+  font-size: var(--text-caption);
+  font-weight: 500;
+  box-shadow: none;
 }
 .mison-auto-slot[data-state="available"] {
-  border-color: color-mix(in srgb, var(--success) 55%, var(--border));
-  background: color-mix(in srgb, var(--success) 7%, var(--card));
+  border-color: transparent;
+  background: color-mix(in srgb, var(--success) 18%, var(--card));
+  color: var(--success);
 }
 .mison-auto-slot[data-state="mine"] {
-  background: color-mix(in srgb, var(--mison-auto-booked) 10%, var(--card));
-  border-color: color-mix(in srgb, var(--mison-auto-booked) 50%, var(--border));
+  background: color-mix(in srgb, var(--mison-auto-booked) 8%, var(--card));
+  border-color: color-mix(in srgb, var(--mison-auto-booked) 40%, var(--border));
   color: var(--mison-auto-booked);
-  font-weight: 500;
 }
-.mison-auto-slot[data-state="occupied"] {
+.mison-auto-slot[data-state="occupied"],
+.mison-auto-slot[data-state="unscheduled"] {
   color: var(--muted-foreground);
-  border-color: color-mix(in srgb, var(--border) 75%, var(--card));
+  border-color: transparent;
+  background: var(--muted);
 }
 .mison-auto-schedule-progress {
-  padding-block: 4px;
+  padding-block: 6px;
   font-size: var(--text-meta);
 }
 .mison-auto-footer {
-  min-height: 54px;
-  gap: 16px;
+  min-height: 58px;
+  gap: 12px;
 }
 .mison-auto-footer > strong {
-  font-size: var(--text-section);
+  font-size: var(--text-body);
   white-space: nowrap;
 }
 .mison-auto-dashboard > .mison-auto-footer > .mison-button:last-child {
   margin-left: auto;
-  color: var(--warning);
-  padding-inline: 0;
 }
 .mison-auto-latest {
-  font-size: var(--text-body);
+  font-size: var(--text-caption);
   color: var(--foreground);
 }
 .mison-auto-booked-result {
   color: var(--success);
   background: color-mix(in srgb, var(--success) 10%, var(--card));
 }
-@container mison (max-width: 1000px) {
+@container mison (max-width: 1100px) {
+  .mison-auto-workspace {
+    grid-template-columns: minmax(0, 1fr) 220px;
+  }
   .mison-auto-teacher-navigation {
     flex-wrap: wrap;
   }
   .mison-auto-teacher-navigation [role="tablist"] {
     flex: 1 1 100%;
   }
-  .mison-auto-metric {
-    padding-left: 20px;
+  .mison-auto-dashboard-status {
+    grid-template-columns: minmax(220px, 0.8fr) minmax(360px, 1.2fr);
+  }
+}
+@container mison (max-width: 900px) {
+  .mison-auto-workspace {
+    display: flex;
+    flex-direction: column;
+  }
+  .mison-auto-schedule-area {
+    flex: 1;
+  }
+  .mison-auto-insights {
+    order: -1;
+    flex: none;
+    overflow: hidden;
+    padding: 12px 20px;
+    border-left: 0;
+    border-bottom: 1px solid var(--border);
+    gap: 0;
+  }
+  .mison-auto-insight-section + .mison-auto-insight-section,
+  .mison-auto-insights > .mison-button,
+  .mison-auto-insight-section > .mison-caption {
+    display: none;
+  }
+  .mison-auto-section-heading {
+    margin-bottom: 6px;
+  }
+  .mison-auto-target-dates {
+    display: flex;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    margin-top: 8px;
+    padding-bottom: 2px;
+  }
+  .mison-auto-target-dates > .mison-button {
+    flex: none;
+    min-width: 86px;
+  }
+  .mison-auto-progress {
+    margin-bottom: 0;
+    height: 4px;
   }
 }
 @container mison (max-width: 600px) {
+  .mison-auto-dashboard {
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    touch-action: pan-y pinch-zoom;
+  }
+  .mison-auto-workspace {
+    flex: none;
+  }
+  .mison-auto-schedule-area,
+  .mison-auto-schedule,
+  .mison-auto-schedule-scroll {
+    flex: none;
+    overflow: visible;
+  }
+  .mison-auto-insights {
+    overflow: visible;
+  }
+  .mison-auto-schedule-area {
+    display: block;
+    width: 100%;
+  }
+  .mison-auto-schedule {
+    width: 100%;
+  }
   .mison-auto-toolbar {
     padding-inline: 12px;
+    min-height: 52px;
+  }
+  .mison-auto-toolbar > [role="tablist"] {
+    gap: 4px;
   }
   .mison-auto-toolbar > [role="tablist"] > [role="tab"] {
-    padding-inline: 10px;
-    font-size: var(--text-body);
+    padding-inline: 8px;
   }
   .mison-auto-toolbar .mison-actions {
     gap: 4px;
   }
-  .mison-auto-stop {
-    min-width: 80px;
+  .mison-auto-toolbar .mison-actions > .mison-button {
+    min-height: 44px;
+  }
+  .mison-auto-dashboard {
+    gap: 12px;
+    padding: 14px 12px 20px;
+  }
+  .mison-auto-dashboard-status {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+    margin: 0;
   }
   .mison-auto-summary {
-    margin: 12px 12px 4px;
-    padding: 10px 14px;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    row-gap: 10px;
+    padding: 12px;
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 14px;
   }
   .mison-auto-state {
     grid-column: 1 / -1;
+    gap: 8px;
   }
-  .mison-auto-state > strong {
+  .mison-auto-state strong {
     font-size: var(--text-section);
-    line-height: var(--text-section--line-height);
   }
-  .mison-auto-metric > strong {
-    font-size: var(--text-detail);
-    line-height: var(--text-detail--line-height);
-  }
-  .mison-auto-metric {
-    padding-left: 12px;
-  }
-  .mison-auto-metric:nth-child(2) {
-    border-left: 0;
-    padding-left: 0;
-  }
-  .mison-auto-metric > span {
+  .mison-auto-state > small {
     font-size: var(--text-meta);
   }
-  .mison-auto-schedule-toolbar,
-  .mison-auto-teacher-navigation {
-    padding-inline: 12px;
+  .mison-auto-metrics {
+    grid-column: 1 / -1;
+    column-gap: 17px;
   }
-  .mison-auto-schedule-actions {
-    gap: 8px;
+  .mison-auto-metrics > div {
+    gap: 4px;
+    min-height: 56px;
+    padding-block: 8px;
   }
-  .mison-auto-schedule-toolbar {
-    padding-block: 10px 8px;
-    gap: 8px;
+  .mison-auto-metrics > div:nth-child(even)::before {
+    left: -9px;
   }
-  .mison-auto-schedule-toolbar > h2 {
+  .mison-auto-metrics > div:nth-child(2)::before {
+    top: 0;
+  }
+  .mison-auto-metrics > div:nth-child(6)::before {
+    bottom: 0;
+  }
+  .mison-auto-metrics strong {
     font-size: var(--text-detail);
     line-height: var(--text-detail--line-height);
   }
+  .mison-auto-metrics span {
+    font-size: var(--text-meta);
+  }
+  .mison-auto-state-heading > .mison-button {
+    min-height: 44px;
+    height: 44px;
+  }
+  .mison-auto-task-control {
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
+  }
+  .mison-auto-insights {
+    padding: 10px 12px 8px;
+  }
+  .mison-auto-target-dates > .mison-button {
+    min-height: 44px;
+  }
+  .mison-auto-schedule-toolbar {
+    padding: 12px 12px 8px;
+    gap: 8px;
+  }
+  .mison-auto-schedule-title > span {
+    display: none;
+  }
+  .mison-auto-schedule-actions {
+    gap: 6px;
+  }
+  .mison-auto-schedule-actions > .mison-button,
+  .mison-auto-filter {
+    min-height: 44px;
+    height: 44px;
+  }
+  .mison-auto-filter {
+    min-width: 0;
+    flex: 1;
+    max-width: 150px;
+  }
+  .mison-auto-schedule-actions > .mison-button {
+    padding-inline: 8px;
+  }
+  .mison-auto-schedule-actions > .mison-button:last-child {
+    font-size: var(--text-meta);
+  }
   .mison-auto-teacher-navigation {
-    padding-block: 4px 8px;
-    gap: 10px;
+    padding: 0 12px 8px;
+    gap: 8px;
   }
   .mison-auto-teacher-navigation [role="tablist"] {
-    gap: 10px;
+    gap: 6px;
   }
   .mison-auto-teacher-navigation [role="tab"] {
     min-height: 44px;
-    min-width: 160px;
-    padding: 6px 10px;
-    gap: 8px;
-    font-size: var(--text-body);
+    gap: 6px;
+    padding-inline: 8px;
   }
   .mison-auto-teacher-navigation .mison-avatar {
-    width: 28px;
-    height: 28px;
-  }
-  .mison-auto-schedule-actions > small {
-    display: none;
+    width: 24px;
+    height: 24px;
   }
   .mison-auto-schedule-scroll {
     margin-inline: 12px;
   }
   .mison-auto-day {
     grid-template-columns: minmax(0, 1fr);
-    gap: 0;
   }
   .mison-auto-day-heading {
     flex-direction: row;
-    align-items: center;
-    border-right: 0;
+    align-items: baseline;
+    justify-content: flex-start;
     padding: 12px 0 0;
-    gap: 8px;
+    gap: 4px 10px;
   }
-  .mison-auto-slots {
+  .mison-auto-slots,
+  .mison-auto-day > p,
+  .mison-auto-day-loading,
+  .mison-auto-day > .mison-notice {
     padding: 10px 0 14px;
-    gap: 7px;
   }
   .mison-auto-slot {
-    min-height: 36px;
-    height: 36px;
+    min-height: 44px;
+    height: 44px;
   }
   .mison-auto-footer {
     gap: 8px;
-    padding-inline: 12px;
+    padding: 10px 12px;
   }
   .mison-auto-footer > small {
     flex-basis: auto;
   }
   .mison-auto-dashboard > .mison-auto-footer > .mison-button:last-child {
-    min-height: 36px;
+    margin-left: 0;
+    min-height: 44px;
+  }
+}
+.mison-auto-date-scope {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  font-size: var(--text-caption);
+  font-weight: 400;
+  color: var(--muted-foreground);
+  cursor: pointer;
+}
+.mison-auto-no-targets {
+  padding-block: 24px;
+  font-size: var(--text-body);
+  line-height: var(--text-body--line-height);
+  color: var(--muted-foreground);
+}
+.mison-auto-schedule-scroll[data-unavailable] {
+  display: flex;
+}
+.mison-auto-schedule-scroll[data-unavailable] > .mison-empty {
+  min-height: clamp(240px, 40dvh, 360px);
+  padding: 24px;
+}
+.mison-auto-schedule-scroll[data-unavailable] [data-slot="empty-title"] {
+  color: var(--muted-foreground);
+}
+.mison-auto-schedule-scroll[data-unavailable] [data-slot="empty-icon"] {
+  width: 96px;
+  height: 96px;
+  background: transparent;
+}
+.mison-auto-schedule-scroll[data-unavailable] [data-slot="empty-icon"] img {
+  width: 100%;
+  height: 100%;
+}
+@container mison (max-width: 600px) {
+  .mison-auto-schedule-scroll[data-unavailable] > .mison-empty {
+    min-height: 220px;
+  }
+  .mison-booking:has(> .mison-auto-tab[data-state="active"]) > .mison-header {
+    grid-template-rows: 1fr;
+    min-height: 52px;
+    gap: 4px;
+    padding: 8px 12px 0;
+  }
+  .mison-booking:has(> .mison-auto-tab[data-state="active"]) > .mison-header > .mison-page-tabs {
+    grid-area: 1 / 1;
+    width: auto;
+    gap: 4px;
+  }
+  .mison-booking:has(> .mison-auto-tab[data-state="active"]) > .mison-header > button:last-child {
+    grid-area: 1 / 2;
+    min-width: 44px;
+    min-height: 44px;
+  }
+  .mison-booking:has(> .mison-auto-tab[data-state="active"]) .mison-page-tabs > [role="tab"] {
+    padding-inline: 8px;
+  }
+  .mison-auto-state {
+    align-items: center;
+    gap: 8px;
+  }
+  .mison-auto-date-scope {
+    min-height: 44px;
+  }
+  .mison-auto-schedule-title {
+    width: 100%;
+    justify-content: space-between;
+  }
+}
+.mison-auto-summary[data-enabled="false"] {
+  grid-template-columns: minmax(0, 1fr);
+}
+.mison-auto-toolbar .mison-auto-timezone {
+  font-size: var(--text-meta);
+  color: var(--muted-foreground);
+  white-space: nowrap;
+}
+.mison-auto-teacher-loading {
+  width: 14px;
+  height: 14px;
+  color: var(--muted-foreground);
+}
+.mison-auto-feedback {
+  font-size: var(--text-body);
+  line-height: var(--text-body--line-height);
+}
+@container mison (max-width: 600px) {
+  .mison-auto-summary[data-enabled="false"] {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mison-auto-teacher-loading {
+    animation: none;
+  }
+}
+
+.mison-auto-state > p {
+  margin: 0;
+  color: var(--muted-foreground);
+  font-size: var(--text-caption);
+}
+.mison-auto-plan {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--card);
+}
+.mison-auto-plan-calendar {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+}
+.mison-auto-plan-month {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) 32px;
+  align-items: center;
+  gap: 8px;
+}
+.mison-auto-plan-month > span {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 8px;
+  font-size: var(--text-body);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.mison-auto-plan-month small {
+  color: var(--muted-foreground);
+  font-size: var(--text-meta);
+  font-weight: 400;
+}
+.mison-auto-plan-month-calendar {
+  --cell-size: 100%;
+}
+
+.mison-auto-plan .mison-auto-calendar-months,
+.mison-auto-plan .mison-auto-calendar-month,
+.mison-auto-plan .mison-auto-calendar-grid {
+  width: 100%;
+  border-collapse: collapse;
+  border: 1px solid var(--border);
+}
+.mison-auto-plan .mison-auto-calendar-weekday,
+.mison-auto-plan .mison-auto-calendar-day {
+  height: 52px;
+  padding: 0;
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  text-align: center;
+  vertical-align: middle;
+}
+.mison-auto-plan .mison-auto-calendar-weekday:last-child,
+.mison-auto-plan .mison-auto-calendar-day:last-child {
+  border-right: 0;
+}
+.mison-auto-plan .mison-auto-calendar-weekday {
+  height: 36px;
+  color: var(--muted-foreground);
+  font-size: var(--text-meta);
+  font-weight: 500;
+}
+.mison-auto-plan .mison-auto-calendar-day-button {
+  width: 100%;
+  height: 100%;
+  min-height: 52px;
+  margin: 0;
+  border-radius: 0;
+  font-weight: 600;
+}
+.mison-auto-plan .mison-auto-calendar-day-button[data-weekend="true"] {
+  background: color-mix(in srgb, var(--muted) 35%, var(--card));
+}
+.mison-auto-plan .mison-auto-calendar-selected > .mison-auto-calendar-day-button {
+  background: color-mix(in srgb, var(--primary) 10%, var(--card));
+  box-shadow: none;
+}
+.mison-auto-plan .mison-auto-calendar-day,
+.mison-auto-plan .mison-auto-calendar-day.opacity-40 {
+  opacity: 1;
+}
+.mison-auto-plan .mison-auto-calendar-day-button:disabled {
+  color: var(--foreground);
+  opacity: 1;
+}
+.mison-auto-plan
+  .mison-auto-calendar-outside:not(.mison-auto-plan-completed):not(.mison-auto-plan-expired)
+  > .mison-auto-calendar-day-button,
+.mison-auto-plan
+  .mison-auto-calendar-outside:not(.mison-auto-plan-completed):not(.mison-auto-plan-expired)
+  > .mison-auto-calendar-day-button:disabled {
+  color: var(--foreground);
+  opacity: 1;
+}
+.mison-auto-plan .mison-auto-plan-completed > .mison-auto-calendar-day-button {
+  background: color-mix(in srgb, var(--success) 14%, var(--card));
+  box-shadow: none;
+  color: var(--success);
+  font-weight: 600;
+}
+.mison-auto-plan .mison-auto-plan-expired > .mison-auto-calendar-day-button {
+  background: color-mix(in srgb, var(--destructive) 12%, var(--card));
+  box-shadow: none;
+  color: var(--destructive);
+  font-weight: 600;
+}
+.mison-auto-plan-swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--primary) 10%, var(--card));
+  box-shadow: none;
+}
+.mison-auto-plan-swatch[data-state="completed"] {
+  background: color-mix(in srgb, var(--success) 14%, var(--card));
+  box-shadow: none;
+}
+.mison-auto-plan-swatch[data-state="expired"] {
+  background: color-mix(in srgb, var(--destructive) 12%, var(--card));
+  box-shadow: none;
+}
+.mison-auto-current-config {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+.mison-auto-current-config > span {
+  color: var(--muted-foreground);
+  font-size: var(--text-caption);
+  line-height: var(--text-caption--line-height);
+}
+.mison-auto-current-config > p {
+  margin: 0;
+  font-size: var(--text-body);
+  line-height: var(--text-body--line-height);
+}
+.mison-auto-schedule-area {
+  display: flex;
+  flex: none;
+  height: auto;
+  overflow: visible;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--card);
+}
+.mison-auto-dashboard .mison-auto-schedule,
+.mison-auto-dashboard .mison-auto-schedule-scroll {
+  height: auto;
+  min-height: auto;
+  overflow: visible;
+}
+.mison-auto-dashboard .mison-auto-schedule {
+  flex: 1 1 0%;
+  width: 100%;
+}
+.mison-auto-dashboard .mison-auto-schedule-scroll {
+  flex: none;
+  align-self: stretch;
+  width: auto;
+}
+.mison-auto-slot[data-matches="true"] {
+  outline: 2px solid color-mix(in srgb, var(--warning) 70%, transparent);
+  outline-offset: -2px;
+}
+
+@container mison (max-width: 900px) {
+  .mison-auto-dashboard-status {
+    grid-template-columns: minmax(0, 1fr);
+    margin: 0;
+  }
+}
+@container mison (max-width: 600px) {
+  .mison-auto-state-heading > .mison-button {
+    min-height: 44px;
+    height: 44px;
+  }
+  .mison-auto-plan {
+    padding: 12px;
+  }
+  .mison-auto-plan .mison-auto-calendar-weekday {
+    height: 36px;
+  }
+  .mison-auto-plan .mison-auto-calendar-day {
+    height: 48px;
+  }
+  .mison-auto-plan .mison-auto-calendar-day-button {
+    min-height: 48px;
+  }
+  .mison-auto-plan-month > .mison-button {
+    width: 44px;
+    height: 44px;
+    min-height: 44px;
+  }
+  .mison-auto-plan-month {
+    grid-template-columns: 44px minmax(0, 1fr) 44px;
   }
 }

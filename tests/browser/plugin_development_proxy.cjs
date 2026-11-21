@@ -21,6 +21,8 @@ const session = randomUUID()
 const base = `/__plugin-dev/mison-booking/${session}/`
 const token = "isolated-proxy-parent"
 const sourceEdits = !process.argv.includes("--no-source-edits")
+const moduleRecovery = process.argv.includes("--module-recovery")
+const compiledPreview = process.argv.includes("--compiled-preview")
 const checks = [],
   edited = [],
   errors = [],
@@ -235,7 +237,7 @@ async function main() {
   fs.writeFileSync(path.join(runtime, "api.json"), JSON.stringify(api))
   host = spawn(
     path.join(root, ".venv/bin/python"),
-    ["tests/fixtures/plugin_dev_proxy.py", "--root", runtime],
+    ["-B", "tests/fixtures/plugin_dev_proxy.py", "--root", runtime],
     {
       cwd: root,
       env: {
@@ -277,6 +279,7 @@ async function main() {
   vite = await (
     await import("../../scripts/plugin_dev.mjs")
   ).createPluginDevServer("mison-booking", session, {
+    cacheDir: path.join(out, "plugin-vite-cache"),
     ws: { host: "127.0.0.1", clientPort: Number(new URL(origin).port), protocol: "ws" },
   })
   const vitePort = vite.httpServer.address().port
@@ -315,6 +318,7 @@ async function main() {
       signal: AbortSignal.timeout(20000),
       redirect: "manual",
     })
+  const entryPath = "/api/children/a/plugins/mison-booking/entry"
   for (const resource of [
     "@plugin-entry",
     "@vite/client",
@@ -352,6 +356,25 @@ async function main() {
     )
   }
   checks.push("source/config/backend paths cannot escape the Vite frontend allowlist")
+  const entrySource = await (await request(base + "frontend/entry.ts")).text()
+  const largeModule = entrySource.match(/from "([^"]+react-dom_client\.js[^"]*)"/)[1]
+  const plainResponse = await fetch(origin + largeModule, {
+    headers: { ...headers, "Accept-Encoding": "identity" },
+  })
+  const plainModule = await plainResponse.text()
+  const compressedResponse = await fetch(origin + largeModule, {
+    headers: { ...headers, "Accept-Encoding": "gzip" },
+  })
+  assert.equal(compressedResponse.headers.get("content-encoding"), "gzip")
+  assert.equal(compressedResponse.headers.get("vary"), "Accept-Encoding")
+  assert.equal(await compressedResponse.text(), plainModule)
+  const moduleTransfer = {
+    original: Buffer.byteLength(plainModule),
+    compressed: Number(compressedResponse.headers.get("content-length")),
+  }
+  assert.ok(moduleTransfer.compressed < moduleTransfer.original / 3)
+  fs.writeFileSync(path.join(out, "module-transfer.json"), JSON.stringify(moduleTransfer, null, 2))
+  checks.push("large development modules use negotiated gzip with unchanged code and smaller transfer")
   browser = await chromium.launch({ headless: true })
   const context = await browser.newContext({
     viewport: { width: 1440, height: 1000 },
@@ -367,6 +390,15 @@ async function main() {
     }
     return route.continue()
   })
+  let interruptedEntryRequests = 0
+  if (moduleRecovery || compiledPreview) {
+    await context.route(`**${base}frontend/entry.ts`, (route) => {
+      interruptedEntryRequests++
+      return interruptedEntryRequests === 1 ? route.abort("failed") : route.continue()
+    })
+  }
+  if (moduleRecovery)
+    await context.route(`**${base}__compiled/entry.js`, (route) => route.abort("failed"))
   await context.addInitScript(() => {
     window.__proxyCspViolations = []
     document.addEventListener("securitypolicyviolation", (event) => {
@@ -380,7 +412,8 @@ async function main() {
   page.setDefaultTimeout(20000)
   page.on("pageerror", (error) => errors.push(error.message))
   page.on("console", (message) => {
-    if (message.type() === "error") errors.push(message.text())
+    if (message.type() === "error" && !((moduleRecovery || compiledPreview) && message.text().includes("net::ERR_FAILED")))
+      errors.push(message.text())
   })
   const frames = [],
     requests = []
@@ -401,6 +434,80 @@ async function main() {
   assert.ok(!csp.includes("*"))
   assert.ok(!csp.includes("unsafe-eval"))
   await page.locator('[data-view="plugin:mison-booking"]').click()
+  if (compiledPreview) {
+    await page.getByRole("heading", { name: "请登录美森网课账号", exact: true }).waitFor()
+    await page.getByText(/前端编译预览，刷新获取改动/).waitFor()
+    assert.equal(sockets.length, 0)
+    assert.equal(interruptedEntryRequests, 1)
+    const compiledPath = base + "__compiled/entry.js"
+    const entryResponse = await request(entryPath)
+    assert.equal(entryResponse.status, 200)
+    const entry = await entryResponse.json()
+    assert.equal(entry.development.compiledEntry, compiledPath)
+    assert.equal((await request(entryPath, false)).status, 403)
+    assert.equal((await request(compiledPath, false)).status, 403)
+    assert.deepEqual(requests.filter((url) => url.includes("/__compiled/")), [origin + compiledPath])
+    assert.deepEqual(await page.evaluate(() => window.__proxyCspViolations), [])
+    checks.push("development source import failure loads the authorized descriptor's compiled entry")
+
+    await page.route("**" + base + "frontend/entry.ts", (route) => route.abort("failed"))
+    for (const [scope, compiledEntry] of [
+      ["origin", "http://127.0.0.1:1" + compiledPath],
+      ["plugin", compiledPath.replace("/mison-booking/", "/other-plugin/")],
+      ["session", compiledPath.replace(session, "other-session")],
+      ["pathname", base + "__compiled/other.js"],
+      ["query", compiledPath + "?v=1"],
+    ]) {
+      await page.route(origin + entryPath, (route) =>
+        route.fulfill({ json: { ...entry, development: { ...entry.development, compiledEntry } } }),
+      )
+      const firstRequest = requests.length
+      await page.goto(origin)
+      await page.locator('[data-view="plugin:mison-booking"]').click()
+      await page.getByText("开发资源地址不正确。", { exact: true }).waitFor()
+      assert.deepEqual(requests.slice(firstRequest).filter((url) => url.includes("/__compiled/")), [], scope)
+      assert.deepEqual(await page.evaluate(() => window.__proxyCspViolations), [], scope)
+      await page.unroute(origin + entryPath)
+    }
+    assert.deepEqual(errors, [])
+    assert.deepEqual(blocked, [])
+    checks.push("compiled fallback rejects mismatched origin, plugin, session, pathname and query before import")
+    return
+  }
+  if (moduleRecovery) {
+    await page.getByRole("heading", { name: "应用加载失败", exact: true }).waitFor()
+    assert.equal(sockets.length, 0, "HMR must wait for the initial plugin module graph")
+    await page.getByText("应用资源加载中断，请刷新页面后重试。", { exact: true }).waitFor()
+    const cachedFailure = await page.evaluate(async (url) => {
+      try { await import(url); return false }
+      catch (error) { return error instanceof TypeError }
+    }, origin + base + "@plugin-entry")
+    assert.equal(cachedFailure, true)
+    assert.equal(interruptedEntryRequests, 1, "retrying the failed module never re-fetches its dependency")
+    checks.push("interrupted module stays cached and does not start the HMR socket")
+    await page.screenshot({ path: path.join(out, "module-refresh-required.png") })
+    await Promise.all([
+      page.waitForNavigation(),
+      page.getByRole("button", { name: "刷新页面", exact: true }).click(),
+    ])
+    await page.locator('[data-view="plugin:mison-booking"]').click()
+    await page.getByRole("heading", { name: "请登录美森网课账号", exact: true }).waitFor()
+    await waitFor(
+      () => frames.some((frame) => frame.type === "connected"),
+      "HMR connected after successful module load",
+    )
+    assert.equal(sockets.length, 1)
+    assert.equal(interruptedEntryRequests, 2)
+    await page.screenshot({ path: path.join(out, "module-refresh-recovered.png") })
+    violations.push(...(await page.evaluate(() => window.__proxyCspViolations)))
+    assert.deepEqual(violations, [])
+    assert.deepEqual(errors, [])
+    assert.deepEqual(blocked, [])
+    const calls = fs.readFileSync(path.join(runtime, "requests.jsonl"), "utf8").trim().split("\n").map(JSON.parse)
+    assert.ok(calls.every((call) => call.method === "GET"))
+    checks.push("whole-page refresh recovers the real development module without business writes")
+    return
+  }
   await page.getByRole("heading", { name: "请登录美森网课账号", exact: true }).waitFor()
   await page.getByRole("button", { name: "登录", exact: true }).waitFor()
   await waitFor(
@@ -474,13 +581,18 @@ async function main() {
   await page.locator(".calendar-panel").waitFor()
   assert.ok((await ownStyles()) > 0, "development styles stay while the page plugin is suspended")
   assert.equal(await page.locator(".plugin-page[hidden]").count(), 1)
-  await page.locator('[data-view="plugin:mison-booking"]').click()
+  const [bootstrapResponse] = await Promise.all([
+    page.waitForResponse(origin + "/api/children/a/plugins/mison-booking/runtime/bootstrap"),
+    page.locator('[data-view="plugin:mison-booking"]').click(),
+  ])
+  assert.equal(bootstrapResponse.status(), 200)
   await page.locator("#mison-login-title").waitFor()
   assert.ok((await ownStyles()) > 0, "returning reuses the suspended development module")
   const registryFile = path.join(runtime, "registry/mison-booking.json")
   const descriptor = JSON.parse(fs.readFileSync(registryFile, "utf8"))
   fs.writeFileSync(registryFile, JSON.stringify({ ...descriptor, state: "draining" }))
   await page.getByText("开发模式 · 正在等待请求完成并重载…", { exact: true }).waitFor()
+  assert.equal((await (await request(entryPath)).json()).development.compiledEntry, undefined)
   fs.writeFileSync(registryFile, JSON.stringify({ ...descriptor, revision: 2 }))
   await waitFor(
     async () =>
@@ -506,6 +618,7 @@ async function main() {
     oldSocketClosed = true
   })
   fs.unlinkSync(registryFile)
+  assert.equal((await (await request(entryPath)).json()).development, undefined)
   await waitFor(
     async () => (await ownStyles()) === 0,
     "session stop removes styles outside the plugin view",
@@ -564,7 +677,7 @@ main()
     clearTimeout(watchdog)
     const report = {
       passed: !failure,
-      mode: sourceEdits ? "http-ws-csp-and-source-hmr" : "http-ws-csp-without-source-edits",
+      mode: compiledPreview ? "compiled-preview" : moduleRecovery ? "module-failure-refresh-and-compression" : sourceEdits ? "http-ws-csp-and-source-hmr" : "http-ws-csp-without-source-edits",
       checks,
       evidence: out,
       sourceRestored: edited.map(({ file, before }) => ({
