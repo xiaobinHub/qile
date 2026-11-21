@@ -38,6 +38,7 @@ class BookingApiTests(DatabaseFixture):
         self.fake=FakeClient();self.fake.userid=42
         self.day=(read_api.now().date()+timedelta(days=3)).isoformat()
         self.live=[];self.cancelled=[];self.sent=[];self.remaining=5;self.drop=None;self.reject=False
+        self.grouped_bookings = False
         self.course=lambda i:{'id':i,'title':f'合成课件{i}','category_id':5,'category_name':'测试分类','status':1,'student_file_url':f'https://file.mison.cn/course{i}.pdf'}
         for cache in (read_store.memo,read_store.cursors):cache.values.clear();cache.size=0
         read_store.teacher_cursors.clear()
@@ -49,8 +50,14 @@ class BookingApiTests(DatabaseFixture):
             except ApiError as e:raise BridgeError(e.kind,e.error) from None
         def read(client,endpoint,body):
             if endpoint=='onevoneGetTeacherInfo':
+                occupied = {row['datestart'] for row in self.live}
+                if self.grouped_bookings:
+                    for row in self.live:
+                        start = read_api.datetime.fromisoformat(row['datestart'])
+                        occupied.update((start + timedelta(minutes=30*i)).strftime('%Y-%m-%d %H:%M')
+                                        for i in range(len(str(row['courseware_id']).split(','))))
                 return {'data':{**self.fake.teacher(101),'name':'Teacher 101','lessonTime':'25分钟/课时',
-                    'all_date':[{'dtime':time,'is_dated':42 if any(r['datestart']==body['ddate']+' '+time for r in self.live) else 0} for time in ('19:00','19:30','20:00')]}}
+                    'all_date':[{'dtime':time,'is_dated':42 if body['ddate']+' '+time in occupied else 0} for time in ('19:00','19:30','20:00')]}}
             if endpoint=='onevoneGetDaysAvailable':return {'data':[1]*17}
             if endpoint=='getRecommendCourseware':return {'data':{'status':1,'list':[self.course(501+i) for i in range(body['count'])],'lastCourse':self.course(500)}}
             if endpoint=='getCoursewareCategoryTree':return {'data':{'tree':[{'id':5,'name':'测试分类','children':[]}]}}
@@ -66,9 +73,17 @@ class BookingApiTests(DatabaseFixture):
             if self.reject:raise auth.AuthError('UPSTREAM_REJECTED','时段不可约')
             if endpoint=='onevoneAppointment':
                 ids=body['courseware_id'].split(',')
-                for i,course in enumerate(ids):
-                    start=(read_api.datetime.fromisoformat(body['ddate']+'T'+body['dtime'])+timedelta(minutes=30*i)).strftime('%Y-%m-%d %H:%M')
-                    self.live.append({**self.fake.record(9000+len(self.live),start),'teachername':'Teacher 101','courseware_id':course,'courseid':'12345'})
+                starts_at = read_api.datetime.fromisoformat(body['ddate']+'T'+body['dtime'])
+                if self.grouped_bookings:
+                    cid = 9000 + len(self.sent)
+                    end = starts_at + timedelta(minutes=30*(len(ids)-1)+25)
+                    self.live.append({**self.fake.record(cid, starts_at.strftime('%Y-%m-%d %H:%M')),
+                                      'dateend': end.strftime('%H:%M'), 'teachername': 'Teacher 101',
+                                      'courseware_id': body['courseware_id'], 'courseid': str(12345+cid), 'bid': '7654'})
+                else:
+                    for i,course in enumerate(ids):
+                        start=(starts_at+timedelta(minutes=30*i)).strftime('%Y-%m-%d %H:%M')
+                        self.live.append({**self.fake.record(9000+len(self.live),start),'teachername':'Teacher 101','courseware_id':course,'courseid':'12345'})
                 data=[]
             elif endpoint=='teacherCollect':
                 self.fake.favorite_rows=[r for r in self.fake.favorite_rows if int(r['tid'])!=body['tid']]
@@ -78,7 +93,13 @@ class BookingApiTests(DatabaseFixture):
             elif endpoint=='cancelLesson':
                 row=next(r for r in self.live if r['cid']==body['cid']);self.cancel_target=deepcopy(row);self.live.remove(row);data={'status':1}
             elif endpoint=='onevoneSaveCancelLesson':
-                row=self.cancel_target;self.cancelled.append({'cid':row['cid'],'dateTime':row['datestart'],'teachername':row['teachername'],'course_name':row['course_name'],'courseware_id':row['courseware_id']});data=[]
+                row=self.cancel_target
+                record = {'dateTime':row['datestart'],'teachername':row['teachername'],'course_name':row['course_name'],'courseware_id':row['courseware_id']}
+                if self.grouped_bookings:
+                    record.update(dateTime=f"{row['datestart']}-{row['dateend']}", courseid=row['courseid'], bid=row['bid'])
+                else:
+                    record['cid'] = row['cid']
+                self.cancelled.append(record);data=[]
             else:raise AssertionError(endpoint)
             if endpoint==self.drop:raise auth.AuthError('RESULT_UNCERTAIN','模拟上游已写入但响应丢失')
             return {'code':200,'data':data}
@@ -150,6 +171,34 @@ class BookingApiTests(DatabaseFixture):
             result=self.run_api('bookings','POST',body)
             self.assertEqual(result['state'],'succeeded') # Only read matching confirms.
             self.run_api('bookings','POST',body);self.assertEqual(len(self.sent),1)
+
+    def test_grouped_booking_and_cancel_recover_after_lost_responses(self):
+        self.grouped_bookings = True
+        with self.connected(), patch.object(operations, 'reconcile_book', side_effect=auth.AuthError('UPSTREAM_UNAVAILABLE', '等待列表')):
+            body = self.submit_body(self.create_draft())
+            self.drop = 'onevoneAppointment'
+            self.assertEqual(self.run_api('bookings', 'POST', body)['state'], 'uncertain')
+        with self.connected():
+            booked = self.run_api('operations/'+body['operationId'])
+            self.assertEqual(booked['state'], 'succeeded')
+            self.assertEqual([lesson['state'] for lesson in booked['result']['lessons']], ['succeeded', 'succeeded'])
+            self.assertEqual(len(booked['result']['bookingKeys']), 1)
+            row = self.live[0]
+            self.cancelled.append({'bid': row['bid'], 'courseid': '99999', 'dateTime': f"{row['datestart']}-{row['dateend']}",
+                                   'teachername': row['teachername'], 'course_name': row['course_name'], 'courseware_id': row['courseware_id']})
+            booking = self.run_api('bookings')['items'][0]
+            path = 'bookings/'+booking['key']+'/cancel'
+            body = {'operationId':str(uuid.uuid4()), 'bindingRevision':1, 'snapshotVersion':booking['snapshotVersion'], 'adjustLessons':False}
+            self.drop = 'onevoneSaveCancelLesson'
+            self.assertEqual(self.run_api(path, 'POST', body)['state'], 'needs_repair')
+            self.assertEqual(self.live, [])
+            actual = self.cancelled.pop()
+            self.assertEqual(self.run_api('operations/'+body['operationId'])['state'], 'needs_repair')
+            self.cancelled.append(actual)
+            self.assertEqual(self.run_api('operations/'+body['operationId'])['state'], 'succeeded')
+            self.assertEqual([endpoint for endpoint, _ in self.sent],
+                             ['onevoneAppointment', 'cancelLesson', 'onevoneSaveCancelLesson'])
+            self.assertEqual(self.sent[1][1]['cid'], self.sent[2][1]['cid'])
 
     def test_ambiguous_match_cannot_claim_success_or_resend(self):
         with self.connected(),patch.object(operations,'reconcile_book',side_effect=auth.AuthError('UPSTREAM_UNAVAILABLE','读取失败')):

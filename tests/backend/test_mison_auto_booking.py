@@ -496,6 +496,51 @@ WHERE child_id=%s AND plugin_id=%s AND collection='auto-booking'""",
             self.assertEqual(len(self.sent), 2, self.state())
             self.assertEqual(self.state()['totalBooked'], 2)
 
+    def check_grouped_cancellation(self, *, rebook, list_lag=False):
+        from lele_growth.business_operations import default_data
+        from lele_growth.child_service import STORE_FORMAT, STORE_VERSION, now_iso
+
+        def initialize_child_store(cur):
+            record = dict(format=STORE_FORMAT, version=STORE_VERSION, revision=0,
+                          updatedAt=now_iso(), data=default_data('测试'))
+            self.service.store.replace(cur, self.child_id, record['data'])
+            self.service.store.metadata(cur, self.child_id, record, insert=True)
+
+        self.service.transaction(initialize_child_store)
+        self.grouped_bookings = True
+        with self.connected():
+            self.configured(dailyLessons=2, rebookCancelled=rebook)
+            self.start_auto()
+            if list_lag:
+                with patch.object(operations, 'reconcile_book', side_effect=auth.AuthError('UPSTREAM_UNAVAILABLE', '等待列表')):
+                    initial = self.round()
+                self.assertNotIn('evidence', initial['ledger'][self.day])
+            else:
+                initial = self.round()
+                self.assertEqual(initial['ledger'][self.day]['evidence']['coursewareIds'], ['501', '502'])
+                self.round()
+            self.assertEqual(self.run_api('auto-booking/status')['completedLessons'], 2)
+            self.assertEqual(len(self.live), 1)
+            booking = self.run_api('bookings')['items'][0]
+            self.run_api('bookings/'+booking['key']+'/cancel', 'POST', {
+                'operationId':str(uuid.uuid4()), 'bindingRevision':1,
+                'snapshotVersion':booking['snapshotVersion'], 'adjustLessons':False})
+            self.assertEqual(self.live, [])
+            self.round()
+            appointments = [body for endpoint, body in self.sent if endpoint == 'onevoneAppointment']
+            self.assertEqual([body['lesson_period'] for body in appointments], [2, 2] if rebook else [2])
+            self.assertEqual(len(self.live), int(rebook))
+            self.assertEqual(self.run_api('auto-booking/status')['completedLessons'], 2 if rebook else 0)
+
+    def test_grouped_cancellation_with_rebooking(self):
+        self.check_grouped_cancellation(rebook=True)
+
+    def test_grouped_cancellation_without_rebooking(self):
+        self.check_grouped_cancellation(rebook=False)
+
+    def test_grouped_cancellation_with_rebooking_before_booking_identity_is_observed(self):
+        self.check_grouped_cancellation(rebook=True, list_lag=True)
+
     def test_stop_between_selection_and_dispatch_prevents_new_booking(self):
         with self.connected():
             self.configured()
@@ -731,6 +776,70 @@ WHERE child_id=%s AND plugin_id=%s AND collection='auto-booking'""",
             self.assertEqual(self.sent[0][1]['tid'], 101)
             self.assertEqual(self.sent[0][1]['dtime'], '19:00')
 
+    def test_unavailable_draft_slot_tries_same_teacher_before_lower_priority_teacher(self):
+        with self.connected():
+            read = Client.call
+            teacher_ids = ['101', '102']
+            self.configured(teachers=[{'id': tid, 'name': 'Teacher ' + tid, 'avatarUrl': None} for tid in teacher_ids])
+            self.start_auto()
+            reads = 0
+
+            def call(client, endpoint, body):
+                nonlocal reads
+                result = read(client, endpoint, body)
+                if endpoint == 'onevoneGetTeacherInfo':
+                    tid = body['tid']
+                    result['data'].update(tid=tid, name=f'Teacher {tid}')
+                    if tid == 101 and body['ddate'] == self.day:
+                        reads += 1
+                        if reads > 1:
+                            result['data']['all_date'][1]['is_dated'] = 999
+                return result
+
+            with patch.object(Client, 'call', call):
+                state = self.round()
+            self.assertEqual(state['checks'], 1)
+            self.assertEqual([(body['tid'], body['dtime']) for _, body in self.sent], [(101, '19:00')])
+
+    def test_rejected_two_lesson_group_keeps_overlapping_backup_eligible(self):
+        with self.connected():
+            weekdays = host.defaults()['weekdaySlots']
+            weekdays[str(datetime.fromisoformat(self.day).isoweekday())] = ['19:00', '19:30', '20:00']
+            self.configured(dailyLessons=2, weekdaySlots=weekdays)
+            self.start_auto()
+            mutate = Client.mutate
+
+            def reject_first(client, endpoint, body):
+                if body['dtime'] == '19:00':
+                    self.sent.append((endpoint, body))
+                    raise auth.AuthError('UPSTREAM_REJECTED', '时段不可约')
+                return mutate(client, endpoint, body)
+
+            with patch.object(Client, 'mutate', reject_first):
+                state = self.round()
+            self.assertEqual(state['checks'], 1)
+            self.assertEqual([(body['dtime'], body['lesson_period']) for _, body in self.sent], [('19:00', 2), ('19:30', 2)])
+
+    def test_confirmed_unavailable_slot_excludes_all_overlapping_groups(self):
+        with self.connected():
+            weekdays = host.defaults()['weekdaySlots']
+            weekdays[str(datetime.fromisoformat(self.day).isoweekday())] = ['19:00', '19:30', '20:00']
+            self.configured(dailyLessons=2, weekdaySlots=weekdays)
+            self.start_auto()
+            slots = auto_booking.drafts.slots
+            inspected = []
+
+            def late_conflict(client, teacher_id, day, starts):
+                inspected.append(starts)
+                if len(inspected) == 3:
+                    raise auto_booking.drafts.UnavailableSlots(['19:30'])
+                return slots(client, teacher_id, day, starts)
+
+            with patch.object(auto_booking.drafts, 'slots', late_conflict):
+                self.round()
+            self.assertEqual(self.sent, [])
+            self.assertEqual(inspected, [['19:00', '19:30']] * 3)
+
     def test_failed_high_priority_teacher_query_never_falls_through(self):
         with self.connected():
             self.configured(teachers=[{'id': '101', 'name': 'Teacher 101', 'avatarUrl': None}, {'id': '102', 'name': 'Teacher 102', 'avatarUrl': None}])
@@ -868,7 +977,9 @@ WHERE child_id=%s AND plugin_id=%s AND collection='auto-booking'""",
                     break
             draft = self.create_draft(['19:00'])
             self.run_api('bookings', 'POST', self.submit_body(draft))
-            self.round()
+            with patch.object(operations, 'book', wraps=operations.book) as auto_book:
+                self.round()
+            self.assertEqual(auto_book.call_count, 1)
             self.assertEqual(len(self.sent), 1)
 
     def test_stale_job_cannot_resume_after_config_change(self):
@@ -1040,6 +1151,39 @@ WHERE child_id=%s AND plugin_id=%s AND collection='auto-booking'""",
             self.round()
             self.assertEqual(len(self.sent), 1)
             self.assertEqual(self.state()['totalBooked'], 1)
+
+    def test_restart_recovers_failed_receipt_and_tries_backup_once(self):
+        with self.connected():
+            self.configured()
+            self.start_auto()
+            for _ in range(10):
+                self.step()
+                if self.state()['run']['cursor'].get('candidate'):
+                    break
+            self.assertEqual(self.state()['run']['cursor']['candidate']['time'], '19:30')
+            mutate = Client.mutate
+            save_progress = auto_booking.save_progress
+
+            def reject_first(client, endpoint, body):
+                if body['dtime'] == '19:30':
+                    self.sent.append((endpoint, body))
+                    raise auth.AuthError('UPSTREAM_REJECTED', '时段不可约')
+                return mutate(client, endpoint, body)
+
+            def interrupt_before_outcome(context, action, payload):
+                if action == 'outcome':
+                    raise RuntimeError('worker stopped after recording upstream rejection')
+                return save_progress(context, action, payload)
+
+            with patch.object(Client, 'mutate', reject_first):
+                with patch.object(auto_booking, 'save_progress', interrupt_before_outcome):
+                    with self.assertRaisesRegex(RuntimeError, 'worker stopped'):
+                        self.step()
+                self.assertIsNotNone(self.state()['pending'])
+                self.sql("""UPDATE lele.plugin_jobs SET status='retry',lease_until=NULL,lease_owner=NULL,due_at=now()-interval '1 second'
+WHERE child_id=%s AND plugin_id=%s AND status='running'""", (self.child_id, self.plugin_id))
+                self.round()
+            self.assertEqual([body['dtime'] for _, body in self.sent], ['19:30', '19:00'])
 
     def test_two_children_cannot_enable_the_same_account(self):
         with self.connected():

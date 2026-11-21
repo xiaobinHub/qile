@@ -18,6 +18,20 @@ def _id(value):
     return str(value) if type(value) in (str, int) and re.fullmatch(r'[1-9][0-9]{0,17}', str(value)) else None
 
 
+def courseware_ids(value):
+    parts = value.split(',') if isinstance(value, str) else [value]
+    identifiers = [_id(part.strip() if isinstance(part, str) else part) for part in parts]
+    return identifiers if all(identifiers) else []
+
+
+def matches_identity(first, second):
+    if first.get('bid') and second.get('bid') and first['bid'] != second['bid']:
+        return False
+    if first.get('cid') and second.get('cid'):
+        return first['cid'] == second['cid'] and not (first.get('bookingId') and second.get('bookingId') and first['bookingId'] != second['bookingId'])
+    return bool(first.get('bookingId') and first.get('bookingId') == second.get('bookingId'))
+
+
 def _lesson(row, status):
     row = row if isinstance(row, dict) else {}
     cid = _id(row.get('cid'))
@@ -29,15 +43,17 @@ def _lesson(row, status):
         end = found[1] if found else None
     start = match[2] if match else None
     lesson_date = match[1] if match else None
-    courseware_id = _id(row.get('courseware_id'))
+    identifiers = courseware_ids(row.get('courseware_id'))
+    courseware_id = identifiers[0] if len(identifiers) == 1 else None
     teacher_id = _id(row.get('tid'))
     teacher_name = _plain(row.get('teachername'), 100)
-    identity = cid or (status == 'cancelled' and courseware_id and (teacher_id or teacher_name))
+    identity = cid or (status == 'cancelled' and identifiers and (teacher_id or teacher_name))
     valid = bool(identity and lesson_date and start and end and TIME_RE.fullmatch(start) and TIME_RE.fullmatch(end) and start < end)
     return {'cid': cid, 'status': status, 'date': lesson_date, 'startTime': start, 'endTime': end,
             'teacherId': teacher_id, 'teacherName': teacher_name, 'coursewareId': courseware_id,
             'coursewareTitle': _plain(row.get('course_name'), 300),
             'bid': _id(row.get('bid')), 'bookingId': _id(row.get('courseid')),
+            **({'coursewareIds': identifiers} if len(identifiers) > 1 else {}),
             'invalid': not valid}
 
 

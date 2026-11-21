@@ -9,6 +9,7 @@ import uuid
 
 from .auth import AuthError, bridge
 from . import bark, course_sync, drafts, operations, read_api
+from .course_sync import matches_identity
 from .upstream import Client
 
 STOP_ERRORS = {'RECONNECT_REQUIRED', 'CONTRACT_SELECTION_REQUIRED', 'NO_ACTIVE_CONTRACT',
@@ -99,16 +100,14 @@ def exclusion(config, day, slot, booked):
     return None
 
 
-def matches_identity(first, second):
-    if first.get('bid') and second.get('bid') and first['bid'] != second['bid']:
-        return False
-    if first.get('cid') and second.get('cid'):
-        return first['cid'] == second['cid'] and not (first.get('bookingId') and second.get('bookingId') and first['bookingId'] != second['bookingId'])
-    return bool(first.get('bookingId') and first.get('bookingId') == second.get('bookingId'))
+EVIDENCE_FIELDS = ('cid', 'date', 'startTime', 'teacherId', 'teacherName', 'coursewareId', 'bookingId', 'bid')
 
 
 def evidence(row):
-    return {key: row.get(key) for key in ('cid', 'date', 'startTime', 'teacherId', 'teacherName', 'coursewareId', 'bookingId', 'bid')}
+    result = {key: row.get(key) for key in EVIDENCE_FIELDS}
+    if row.get('coursewareIds'):
+        result.update(coursewareIds=row['coursewareIds'], endTime=row.get('endTime'))
+    return result
 
 
 def initial_cursor(state):
@@ -234,9 +233,7 @@ def consolidate(context, state, cursor):
     for day, item in state['ledger'].items():
         if day not in state['config']['dates'] or day < read_api.now().date().isoformat():
             continue
-        found = [row for row in cursor['observed'].get(day, [])
-                 if row['startTime'] == item['time'] and row['coursewareId'] == item.get('coursewareId')
-                 and (row['teacherId'] == item['teacher']['id'] if row['teacherId'] else row['teacherName'] == item['teacher']['name'])]
+        found = [row for row in cursor['observed'].get(day, []) if matches_booking_record(row, item)]
         if len(found) == 1:
             host(context, 'observe', {'date': day, 'operationId': item['operationId'], 'evidence': found[0]})
         elif item.get('evidence') and any(matches_identity(item['evidence'], row)
@@ -246,8 +243,7 @@ def consolidate(context, state, cursor):
             else:
                 cursor['occupied'] = sorted(set(cursor['occupied'] + [day]))
         elif not item.get('evidence') and item.get('cancelBaseline') is not None and len([row for row in cancelled
-                 if row['date'] == day and row['startTime'] == item['time'] and row['coursewareId'] == item.get('coursewareId')
-                 and (row['teacherId'] == item['teacher']['id'] if row['teacherId'] else row['teacherName'] == item['teacher']['name'])
+                 if row['date'] == day and matches_booking_record(row, item)
                  and (row['cid'] or row['bookingId']) and cancellation_key(row) not in item['cancelBaseline']]) == 1:
             if state['config'].get('rebookCancelled', True):
                 host(context, 'release', {'date': day, 'operationId': item['operationId']})
@@ -260,7 +256,7 @@ def consolidate(context, state, cursor):
     cursor['consolidated'] = True
 
 
-def reconcile(context, client, state):
+def reconcile(context, client, state, cursor):
     pending = state['pending']
     try:
         operation = operations.raw_get(client, pending['operationId'])
@@ -276,13 +272,19 @@ def reconcile(context, client, state):
     else:
         result = operations.get(client, pending['operationId'])
     outcome = result['state'] if result['state'] in ('succeeded', 'failed') else 'uncertain'
+    failure = result.get('result') or {}
+    if (outcome == 'failed' and failure.get('errorCode') and state['enabled']
+            and pending.get('runId') == state['run']['id'] and cursor.get('candidate')):
+        return failed_candidate(context, state, cursor, result['message'], failure, pending['operationId'])
     return record_outcome(context, {'operationId': pending['operationId'], 'outcome': outcome,
                                    'bookingKeys': (result.get('result') or {}).get('bookingKeys', []),
                                    'evidence': next(iter((result.get('result') or {}).get('bookingEvidence', [])), None)})
 
 
 def cancellation_key(row):
-    return hashlib.sha256(json.dumps(evidence(row), sort_keys=True).encode()).hexdigest()
+    # Preserve keys already persisted before grouped courseware was parsed.
+    identity = {key: row.get(key) for key in EVIDENCE_FIELDS}
+    return hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()
 
 
 def matches_booking_slot(row, teacher, start, courseware):
@@ -291,10 +293,20 @@ def matches_booking_slot(row, teacher, start, courseware):
     )
 
 
+def matches_booking_record(row, booking):
+    if not row.get('coursewareIds'):
+        return matches_booking_slot(row, booking['teacher'], booking['time'], booking.get('coursewareId'))
+    teacher = booking['teacher']
+    return (row['startTime'] == booking['time'] and row['coursewareIds'] == booking.get('coursewareIds')
+            and (not booking.get('endTime') or row['endTime'] == booking['endTime'])
+            and (row['teacherId'] == teacher['id'] if row['teacherId'] else row['teacherName'] == teacher['name']))
+
+
 def completed_lesson_counts(state, cursor):
     target_dates = set(state['config']['dates'])
     holds = cursor['holds']
-    counts = {day: len(lessons) for day, lessons in holds.items() if day in target_dates}
+    counts = {day: sum(len(row.get('coursewareIds') or [None]) for row in rows)
+              for day, rows in holds.items() if day in target_dates}
     for day, booking in state['ledger'].items():
         if day not in target_dates:
             continue
@@ -306,6 +318,13 @@ def completed_lesson_counts(state, cursor):
         tracked = booking.get('evidence') or {}
         cancelled = [row for row in cursor['cancelled']
                      if (row['date'] == day or matches_identity(tracked, row)) and cancellation_key(row) not in baseline]
+        if any(row.get('coursewareIds') and matches_booking_record(row, booking) for row in active):
+            continue
+        if tracked.get('coursewareIds') and any(matches_identity(tracked, row) for row in cancelled):
+            continue
+        if not tracked and len([row for row in cancelled if row.get('coursewareIds')
+                                and (row['cid'] or row['bookingId']) and matches_booking_record(row, booking)]) == 1:
+            continue
         for start, courseware in zip(booking.get('times', [booking['time']]),
                                      booking.get('coursewareIds', [booking['coursewareId']])):
             known = tracked if start == tracked.get('startTime', booking['time']) else None
@@ -323,13 +342,47 @@ def completed_lesson_counts(state, cursor):
     return counts
 
 
-def consecutive(starts, count):
+def consecutive(starts, count, excluded=()):
     priorities = {int(slot[:2]) * 60 + int(slot[3:]): rank for rank, slot in enumerate(starts)}
     groups = (range(start, start + count * 30, 30) for start in priorities)
-    eligible = (group for group in groups if all(slot in priorities for slot in group))
+    eligible = (tuple(priorities[slot] for slot in group) for group in groups if all(slot in priorities for slot in group))
     # Compare the best-ranked member of each group first, then the remaining ranks.
-    best = min(eligible, key=lambda group: sorted(priorities[slot] for slot in group), default=None)
-    return [starts[priorities[slot]] for slot in best] if best is not None else None
+    best = min((ranks for ranks in eligible if tuple(starts[rank] for rank in ranks) not in excluded),
+               key=sorted, default=None)
+    return [starts[rank] for rank in best] if best is not None else None
+
+
+def failed_candidate(context, state, cursor, message, failure, operation_id=None):
+    candidate = cursor['candidate']
+    day, teacher = candidate['date'], candidate['teacher']
+    times = candidate.get('times', [candidate['time']])
+    code = failure.get('errorCode')
+    stop = code in STOP_ERRORS or bool(re.search(r'课时不足|余额不足|额度不足|课时.*用完|合[约同].*(?:失效|到期)', message))
+    skip_day = code in ('AUTO_BOOKING_DAY_OCCUPIED', 'AUTO_BOOKING_DATE_CLOSED')
+    upstream_declined = code == 'UPSTREAM_REJECTED' and not failure.get('notDispatched')
+    try_next = (code == 'SLOT_UNAVAILABLE' or upstream_declined) and not stop
+    continue_round = skip_day or try_next
+    if code == 'AUTO_BOOKING_DAY_OCCUPIED':
+        cursor['occupied'] = sorted(set(cursor['occupied'] + [day]))
+    if skip_day:
+        cursor.update(dateIndex=cursor['dateIndex'] + 1, teacherIndex=0)
+    if try_next:
+        cursor.setdefault('rejected', []).append([day, teacher['id'], *times])
+        for start in failure.get('unavailableStarts', []):
+            cursor.setdefault('unavailable', []).append([day, teacher['id'], start])
+    remember(cursor, 'rejected', date=day, teacherName=teacher['name'], time='、'.join(times), message=message)
+    cursor.pop('candidate')
+    cursor['phase'] = 'matching'
+    if operation_id:
+        payload = {'operationId': operation_id, 'outcome': 'failed', 'message': message}
+        if continue_round:
+            payload.update(runId=state['run']['id'], cursor=cursor)
+        updated = save_progress(context, 'outcome', payload)
+        if continue_round and updated['step'] != state['step']:
+            return updated
+    if continue_round:
+        return checkpoint(context, state, cursor)
+    return finish(context, state, cursor, message, stop=stop, retry_after=failure.get('retryAfter'))
 
 
 def book_candidate(context, client, state, cursor):
@@ -343,24 +396,34 @@ def book_candidate(context, client, state, cursor):
     host(context, 'guard', {'runId': state['run']['id']})
     day, teacher = candidate['date'], candidate['teacher']
     operation_id = str(uuid.uuid4())
-    draft = drafts.create(client, {'operationId': str(uuid.uuid4()), 'bindingRevision': client.session['bindingRevision'],
-                                  'teacherId': teacher['id'], 'date': day, 'slotStarts': times})
+    try:
+        draft = drafts.create(client, {'operationId': str(uuid.uuid4()), 'bindingRevision': client.session['bindingRevision'],
+                                      'teacherId': teacher['id'], 'date': day, 'slotStarts': times})
+    except drafts.UnavailableSlots as error:
+        return failed_candidate(context, state, cursor, str(error), operations.booking_failure(error))
     if not draft['valid']:
         raise AuthError('COURSEWARE_REQUIRED', '美森未提供可用推荐课件，任务已停止。')
     pending = {'operationId': operation_id, 'date': day, 'teacher': {'id': teacher['id'], 'name': teacher['name']},
-               'time': times[0], 'times': times,
+               'time': times[0], 'times': times, 'endTime': draft['lessons'][-1]['end'],
                'coursewareId': draft['lessons'][0]['courseware']['id'],
                'coursewareIds': [lesson['courseware']['id'] for lesson in draft['lessons']],
                'cancelBaseline': [cancellation_key(row) for row in cursor['cancelled'] if row['date'] == day]}
-    host(context, 'prepare', {'runId': state['run']['id'], 'pending': pending})
+    try:
+        host(context, 'prepare', {'runId': state['run']['id'], 'pending': pending})
+    except AuthError as error:
+        if error.code != 'AUTO_BOOKING_DATE_CLOSED':
+            raise
+        return failed_candidate(context, state, cursor, str(error), operations.booking_failure(error))
     try:
         result = operations.book(client, {'operationId': operation_id, 'bindingRevision': client.session['bindingRevision'],
                                           'draftId': draft['id'], 'expectedRevision': draft['revision']})
     except AuthError as error:
-        if error.code in ('SLOT_UNAVAILABLE', 'COURSEWARE_REQUIRED', 'COURSEWARE_UNAVAILABLE'):
-            host(context, 'outcome', {'operationId': operation_id, 'outcome': 'failed', 'message': str(error)})
+        if error.code in ('SLOT_UNAVAILABLE', 'AUTO_BOOKING_DATE_CLOSED', 'COURSEWARE_REQUIRED', 'COURSEWARE_UNAVAILABLE'):
+            return failed_candidate(context, state, cursor, str(error), operations.booking_failure(error), operation_id)
         raise
-    outcome = result['state'] if result['state'] in ('succeeded', 'failed') else 'uncertain'
+    if result['state'] == 'failed':
+        return failed_candidate(context, state, cursor, result['message'], result.get('result') or {}, operation_id)
+    outcome = 'succeeded' if result['state'] == 'succeeded' else 'uncertain'
     record_outcome(context, {'operationId': operation_id, 'outcome': outcome,
                             'bookingKeys': (result.get('result') or {}).get('bookingKeys', []),
                             'evidence': next(iter((result.get('result') or {}).get('bookingEvidence', [])), None),
@@ -373,14 +436,6 @@ def book_candidate(context, client, state, cursor):
         cursor['occupied'] = sorted(set(cursor['occupied'] + [day]))
         cursor['dateIndex'] += 1
         cursor['teacherIndex'] = 0
-    elif outcome == 'failed':
-        cursor.setdefault('rejected', []).append([day, teacher['id'], *times])
-        message = result.get('message', '预约未完成。')
-        remember(cursor, 'rejected', message=message, **label)
-        if (result.get('result') or {}).get('errorCode') == 'UPSTREAM_RATE_LIMITED':
-            return finish(context, state, cursor, message, retry_after=result['result'].get('retryAfter'))
-        if re.search(r'课时不足|余额不足|额度不足|课时.*用完|合[约同].*(?:失效|到期)', message):
-            return finish(context, state, cursor, message, stop=True)
     else:
         remember(cursor, 'uncertain', **label)
         return finish(context, state, cursor)
@@ -551,10 +606,12 @@ def matching(context, client, state, cursor):
                 continue
             available = {slot['start']: {**slot, 'reason': None if slot['state'] == 'available' else '该时段不可约。'} for slot in source['slots']}
             count = config.get('dailyLessons', 1)
+            unavailable = {start for date, tid, start in cursor.get('unavailable', []) if date == day and tid == teacher['id']}
             eligible = [start for start in slots if available.get(start)
-                        and exclusion(config, day, available[start], False) is None]
-            group = consecutive(eligible, count)
-            if group and [day, teacher['id'], *group] not in cursor.get('rejected', []):
+                        and start not in unavailable and exclusion(config, day, available[start], False) is None]
+            rejected = {tuple(times) for date, tid, *times in cursor.get('rejected', []) if date == day and tid == teacher['id']}
+            group = consecutive(eligible, count, rejected)
+            if group:
                 cursor.update(phase='booking', candidate={
                     'date': day, 'teacher': {'id': teacher['id'], 'name': teacher['name']},
                     'time': group[0], 'times': group,
@@ -577,11 +634,11 @@ def _run(context):
         client = AutoBookingClient(context, state['run']['id'])
         if state['pending']:
             pending = state['pending']
-            updated = reconcile(context, client, state)
+            updated = reconcile(context, client, state, cursor)
             if updated['pending']:
                 remember(cursor, 'uncertain', date=pending['date'], teacherName=pending['teacher']['name'], time=pending['time'])
                 return finish(context, state, cursor)
-            if not updated.get('run'):
+            if not updated.get('run') or updated['step'] != state['step']:
                 return updated
             return checkpoint(context, state, cursor) if state['enabled'] else finish(context, state, cursor, '已核对上次预约，任务已停止。')
         if cursor['phase'] == 'inventory':

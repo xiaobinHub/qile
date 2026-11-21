@@ -3,7 +3,7 @@ from copy import deepcopy
 from datetime import datetime, timedelta
 import re
 from .auth import AuthError, bridge
-from . import courseware, drafts, read_api
+from . import course_sync, courseware, drafts, read_api
 from .media import public_media_url
 
 MESSAGES = {'prepared':'正在准备操作。','dispatching':'操作已发送，请核对结果。','succeeded':'操作成功。',
@@ -96,6 +96,14 @@ def validate_courses(client,draft):
         if not current or not current['active'] or current['selectedElsewhere']:
             raise AuthError('COURSEWARE_UNAVAILABLE','所选课件已不可用，请返回重新选择。')
 
+
+def booking_failure(error):
+    details = {'errorCode': error.code, 'retryAfter': error.retry_after}
+    if isinstance(error, drafts.UnavailableSlots):
+        details['unavailableStarts'] = error.starts
+    return details
+
+
 def book(client,body):
     if set(body)!={'operationId','bindingRevision','draftId','expectedRevision'}:read_api.invalid()
     previous=replay(client,body)
@@ -121,9 +129,11 @@ def book(client,body):
                         read_api.schema('已有课程日期不完整，未提交自动预约。')
                     occupied_dates.add(read_api.date_arg(raw_date[:10]))
             if draft['date'] in occupied_dates:
-                raise AuthError('SLOT_UNAVAILABLE', '当天已有课程，本次没有提交预约。')
+                raise AuthError('AUTO_BOOKING_DAY_OCCUPIED', '当天已有课程，本次没有提交预约。')
             bridge(client.context, 'autoBooking.guard', {})
-    except AuthError as error:return output(client,finish(client,op,'failed',str(error)))
+    except AuthError as error:
+        details = {**booking_failure(error), 'notDispatched': True} if client.context.get('jobId') else {}
+        return output(client, finish(client, op, 'failed', str(error), **details))
     payload={'tid':int(draft['teacher']['id']),'userid':client.userid,'ddate':draft['date'],
              'dtime':draft['lessons'][0]['start'],'user1v1_id':read_api.contracts(client)['id'],
              'lesson_period':len(draft['lessons']),'courseware_id':','.join(item['courseware']['id'] for item in draft['lessons'])}
@@ -150,20 +160,45 @@ def reconcile_book(client,op):
     unique={}
     for status,row in rows:
         unique.setdefault(read_api.identifier(row.get('cid')),(status,row))
+    available = []
+    for cid, (status, raw) in unique.items():
+        if cid in baseline:
+            continue
+        value = read_api.booking(client, contract, status, raw)
+        teacher = value['teacher']
+        same_teacher = (teacher['id'] == details['teacher']['id'] if teacher['id'] else
+                        teacher['name'].strip().casefold() == details['teacher']['name'].strip().casefold())
+        if same_teacher and value['startsAt'][:10] == details['date']:
+            available.append((value, course_sync._lesson(raw, status)))
+
+    lessons = details['lessons']
+    if len(lessons) > 1:
+        expected_ids = [lesson['courseware']['id'] for lesson in lessons]
+        expected_end = lessons[-1].get('end')
+        groups = [(value, row) for value, row in available if not row['invalid']
+                  and row['startTime'] == lessons[0]['start'] and row.get('coursewareIds') == expected_ids
+                  and (expected_end is None or row['endTime'] == expected_end)]
+        if len(groups) > 1:
+            return op
+        if groups:
+            value, row = groups[0]
+            evidence = {key: row[key] for key in ('cid', 'date', 'startTime', 'endTime', 'teacherId', 'teacherName',
+                                                'coursewareId', 'coursewareIds', 'bookingId', 'bid')}
+            result = {'bookingKeys': [value['key']], 'bookingEvidence': [evidence],
+                      'lessons': [{'start': item['start'], 'coursewareTitle': item['courseware']['title'], 'state': 'succeeded'}
+                                  for item in lessons]}
+            if op['state'] == 'succeeded':
+                if (op.get('result') or {}).get('pendingRecordSync'):
+                    return {**op, 'result': {**op['result'], **result, 'pendingRecordSync': False}}
+                return op
+            return finish(client, op, 'succeeded', '已核对，预约成功。', **result)
+
     found=[];items=[];booking_evidence=[]
-    for lesson in details['lessons']:
-        expected=details['date']+'T'+lesson['start']
-        candidates=[]
-        for status,raw in unique.values():
-            value=read_api.booking(client,contract,status,raw)
-            if value['cid'] in baseline or not value['startsAt'].startswith(expected) or not value['courseware'] or value['courseware']['id']!=lesson['courseware']['id']:continue
-            teacher=value['teacher']
-            if (teacher['id']==details['teacher']['id'] if teacher['id'] else teacher['name'].strip().casefold()==details['teacher']['name'].strip().casefold()):candidates.append(value)
+    for lesson in lessons:
+        candidates = [(value, row) for value, row in available if row['startTime'] == lesson['start']
+                      and row['coursewareId'] == lesson['courseware']['id']]
         if len(candidates)==1:
-            value=candidates[0]
-            from .course_sync import _lesson
-            source_status,source_row=unique[value['cid']]
-            source_evidence=_lesson(source_row,source_status)
+            value, source_evidence = candidates[0]
             found.append(value['key'])
             booking_evidence.append({'cid':value['cid'],'date':details['date'],'startTime':lesson['start'],
                 'teacherId':value['teacher']['id'],'teacherName':value['teacher']['name'],
@@ -305,10 +340,9 @@ def cancel(client,key,body):
     value,row=lookup_booking(client,key)
     if body['snapshotVersion']!=value['snapshotVersion']:raise AuthError('REVISION_CONFLICT','课程记录已改变，请刷新预约。')
     if not value['actions'].get('cancel',{}).get('allowed'):raise AuthError('ACTION_UNAVAILABLE','该课程已临近上课，请在美森App确认取消规则。')
-    from .course_sync import _lesson
     contract = read_api.contracts(client)
     sync = {'accountId': str(client.session['userid']), 'contractId': contract['id'],
-            'lesson': _lesson({**row, 'dateTime': row.get('datestart')}, 'cancelled')}
+            'lesson': course_sync._lesson({**row, 'dateTime': row.get('datestart')}, 'cancelled')}
     op=begin(client,'cancel',body,{'booking':value, 'courseSync': sync})
     op=advance(client,op,'mark-dispatch',stage='cancel_sent')
     try:
@@ -324,15 +358,32 @@ def cancel(client,key,body):
     return output(client,finish(client,op,'succeeded','课程已取消。'))
 
 def reconcile_cancel(client,op):
-    value=op['canonicalRequest']['details']['booking'];contract=read_api.contracts(client)
+    details = op['canonicalRequest']['details']
+    value = details['booking']
+    known = details.get('courseSync', {}).get('lesson', {})
+    identity = {**known, 'cid': value['cid']}
+    requested_ids = course_sync.courseware_ids((value.get('courseware') or {}).get('id'))
+    contract = read_api.contracts(client)
     raw=client.call('onevoneGetCancelLesson',{'userid':client.userid,'classid':contract['id'],'page':1,'limit':1000})
     cancelled=read_api.rows(raw.get('data'))
     count=raw.get('count')
     if type(count) is int and count>len(cancelled):return op
-    matches=[]
+    identified = []
+    fallback = []
     for row in cancelled:
-        item=read_api.booking(client,contract,'cancelled',row)
-        if (item['cid']==value['cid'] if item['cid'] else item['startsAt']==value['startsAt'] and item['teacher']['name']==value['teacher']['name'] and item['courseware'] and value['courseware'] and item['courseware']['id']==value['courseware']['id']):matches.append(item)
+        evidence = course_sync._lesson(row, 'cancelled')
+        if course_sync.matches_identity(identity, evidence):
+            identified.append(evidence)
+            continue
+        if evidence['cid'] or any(known.get(key) and evidence.get(key) and known[key] != evidence[key]
+                                  for key in ('bookingId', 'bid')):
+            continue
+        item = read_api.booking(client, contract, 'cancelled', row)
+        if (item['startsAt'] == value['startsAt'] and item['teacher']['name'] == value['teacher']['name']
+                and requested_ids and course_sync.courseware_ids(row.get('courseware_id')) == requested_ids
+                and (len(requested_ids) == 1 or item['timeLabel'] == value['timeLabel'])):
+            fallback.append(evidence)
+    matches = identified or fallback
     if len(matches)==1 and all(str(row['cid'])!=value['cid'] for row in live_rows(client)):
         return finish(client,op,'succeeded','已核对，课程已取消。')
     return op

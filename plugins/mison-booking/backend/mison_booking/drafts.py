@@ -11,6 +11,13 @@ from .read_api import contracts, schedule, date_arg, identifier, invalid
 COLLECTION = 'booking-draft'
 MAX_LESSONS = 38  # bounded by the actual 30-minute day template; not an upstream guarantee.
 
+
+class UnavailableSlots(AuthError):
+    def __init__(self, starts):
+        super().__init__('SLOT_UNAVAILABLE', '部分时段已不可约，请返回重新选择。')
+        self.starts = starts
+
+
 def uid(value):
     try: return str(uuid.UUID(value))
     except (ValueError, TypeError, AttributeError): invalid('操作或草稿标识不正确。')
@@ -60,8 +67,9 @@ def slots(client, tid, day, starts):
         raise AuthError('NON_CONTIGUOUS_SLOTS', '请选择同一天的连续时段。')
     result = schedule(client, identifier(tid), {'date': date_arg(day)})
     available = {item['start']: item for item in result['slots'] if item['state'] == 'available'}
-    if any(start not in available for start in starts):
-        raise AuthError('SLOT_UNAVAILABLE', '部分时段已不可约，请返回重新选择。')
+    unavailable = [start for start in starts if start not in available]
+    if unavailable:
+        raise UnavailableSlots(unavailable)
     return result, [available[start] for start in starts]
 
 def refresh_valid(draft):

@@ -578,7 +578,7 @@ AND expires_at>%s AND (%s::text IS NULL OR record_id<%s) ORDER BY record_id DESC
                 and all(time in state['config']['weekdaySlots'][weekday] for time in times),
                 409, '候选课程不再符合配置。', 'AUTO_BOOKING_CHANGED')
         require(pending['date'] not in account_closed_dates(cur, current, key), 409,
-                '该日期已结束预约核对，暂停自动预约。', 'SLOT_UNAVAILABLE')
+                '该日期已结束预约核对，暂停自动预约。', 'AUTO_BOOKING_DATE_CLOSED')
         starts = datetime.fromisoformat(pending['date'] + 'T' + times[0]).replace(tzinfo=TZ)
         require(starts > now() and starts >= now() + timedelta(hours=state['config']['minNoticeHours']),
                 409, '课程提前量不足。', 'AUTO_BOOKING_CHANGED')
@@ -701,6 +701,12 @@ AND expires_at>%s AND (%s::text IS NULL OR record_id<%s) ORDER BY record_id DESC
                 notifications.enqueue(state, pending)
             state['pending'] = None
         elif outcome == 'failed':
+            if 'cursor' in payload:
+                # Keep rejection progress and clearing the pending receipt in one transaction.
+                require(state['enabled'] and state['run'] and state['run']['id'] == payload.get('runId') == pending['runId']
+                        and state['run']['jobId'] == context['jobId'] and isinstance(payload['cursor'], dict),
+                        409, '检查轮次已改变。', 'AUTO_BOOKING_CHANGED')
+                save_checkpoint(state, payload['cursor'])
             state['pending'] = None
             event(cur, current, key, state, 'rejected',
                   f"{pending['teacher']['name']} {pending['date'][5:7].lstrip('0')}/{pending['date'][8:10].lstrip('0')} {pending['time']} 未约成：{payload.get('message', '预约未完成。')[:180]}",
@@ -745,7 +751,7 @@ def operation_context(cur, current, context, action, payload):
         guard(cur, current, context, {})
         require(pending['configRevision'] == state['configRevision'], 409, '约课条件已改变。', 'AUTO_BOOKING_CHANGED')
         require(pending['date'] not in account_closed_dates(cur, current, key), 409,
-                '该日期已结束预约核对，暂停自动预约。', 'SLOT_UNAVAILABLE')
+                '该日期已结束预约核对，暂停自动预约。', 'AUTO_BOOKING_DATE_CLOSED')
         starts = datetime.fromisoformat(pending['date'] + 'T' + pending.get('times', [pending['time']])[0]).replace(tzinfo=TZ)
         require(starts > now() and starts >= now() + timedelta(hours=state['config']['minNoticeHours']),
                 409, '课程提前量不足。', 'AUTO_BOOKING_CHANGED')
