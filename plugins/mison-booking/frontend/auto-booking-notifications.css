@@ -54,7 +54,7 @@
 
 .mison-auto-notification-drawer [data-slot="input"] {
   height: 44px;
-  font-size: 16px;
+  font-size: var(--text-section, 1rem);
   background: transparent;
 }
 

@@ -685,7 +685,7 @@ exports.exerciseGroupedSettings = async function ({
         await auto
           .getByRole("tab", { name: "运行看板", exact: true, includeHidden: true })
           .evaluate((el) =>
-            el.dispatchEvent(new MouseEvent("mousedown", { button: 0, bubbles: true })),
+            el.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })),
           )
         await drawer().waitFor({ state: "hidden" })
         await internalTab("预约设置").click()
@@ -693,7 +693,7 @@ exports.exerciseGroupedSettings = async function ({
         await page
           .getByRole("tab", { name: "教师与约课", exact: true, includeHidden: true })
           .evaluate((el) =>
-            el.dispatchEvent(new MouseEvent("mousedown", { button: 0, bubbles: true })),
+            el.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })),
           )
         await drawer().waitFor({ state: "hidden" })
         await tabs.getByRole("tab", { name: "自动约课", exact: true }).click()

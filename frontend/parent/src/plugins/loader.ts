@@ -53,8 +53,12 @@ function compiledDevelopmentUrl(value: unknown, base: string) {
 }
 
 function moduleLoadInterrupted(error: unknown) {
-  return error instanceof TypeError &&
-    /failed to fetch dynamically imported module|importing a module script failed|error loading dynamically imported module|failed to load module script/i.test(error.message)
+  return (
+    error instanceof TypeError &&
+    /failed to fetch dynamically imported module|importing a module script failed|error loading dynamically imported module|failed to load module script/i.test(
+      error.message,
+    )
+  )
 }
 
 function businessPath(path: string) {

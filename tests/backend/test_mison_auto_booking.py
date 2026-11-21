@@ -281,9 +281,9 @@ class AutoBookingApiTests(booking_fixture.BookingApiTests):
             self.assertEqual(push.call_count, 1)
             notice = push.call_args.args[0]
             self.assertEqual(notice['keys'], self.notification_config['barkKeys'])
-            self.assertIn(self.day, notice['body'])
-            self.assertIn('19:30', notice['body'])
-            self.assertIn('Teacher 101', notice['body'])
+            _, month, day = self.day.split('-')
+            self.assertEqual(notice['title'], '美森约课成功')
+            self.assertEqual(notice['body'], f'成功预约 Teacher 101 {int(month)}/{int(day)} 19:30')
             self.assertEqual(next(iter(state['notificationQueue'].values()))['state'], 'succeeded')
             self.round()
             self.assertEqual(push.call_count, 1)

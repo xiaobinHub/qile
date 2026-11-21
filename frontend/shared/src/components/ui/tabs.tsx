@@ -65,7 +65,13 @@ function TabsTrigger({ className, ...props }: React.ComponentProps<typeof TabsPr
       {...props}
       onMouseDown={(event) => {
         props.onMouseDown?.(event)
-        if (event.defaultPrevented || event.button !== 0 || event.ctrlKey || event.currentTarget.disabled) return
+        if (
+          event.defaultPrevented ||
+          event.button !== 0 ||
+          event.ctrlKey ||
+          event.currentTarget.disabled
+        )
+          return
         event.preventDefault()
         event.currentTarget.focus({ preventScroll: true })
       }}
