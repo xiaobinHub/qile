@@ -103,7 +103,10 @@ class PluginLifecycleTests(PluginDatabaseCase):
         state=self.call('GET','children/'+self.a['id']+'/data')
         body=dict(expectedRevision=state['revision'],membershipVersion=state['context']['membershipVersion'],
                   operationId=operation_id or str(uuid.uuid4()),kind=kind,payload=payload)
-        return body,self.call('POST','children/'+self.a['id']+'/operations',body)
+        result=self.call('POST','children/'+self.a['id']+'/operations',body)
+        if kind=='completion.set':
+            result=self.call('GET','children/'+self.a['id']+'/data')
+        return body,result
 
     def task_occurrence(self):
         state=self.call('GET','children/'+self.a['id']+'/data')

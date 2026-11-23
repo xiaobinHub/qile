@@ -150,7 +150,8 @@ async function exerciseQuickEdit({ browser, dad, origin, firstId, out, api, data
     const trashExtra = current.data.series.at(-1).id + "@" + next
     current = await command("task.create", { task: { ...task, title: "快捷已完成", startTime: "11:00", endTime: "11:30", recurrence: null } })
     const completed = current.data.series.at(-1).id + "@" + today
-    await command("completion.set", { occurrenceKey: completed, completed: true })
+    const completedResult = await command("completion.set", { occurrenceKey: completed, completed: true })
+    assert.equal(completedResult.changes.completion.occurrenceKey, completed)
     await dad.goto(`${origin}/children/${id}`)
     await dad.locator("#quickEditBtn").waitFor()
     await showDate(dad, today)

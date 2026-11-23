@@ -1,6 +1,13 @@
 import { normalizeBusinessData } from "../domain/normalize"
 import { isDone, occurrences } from "../domain/calendar"
-import type { BusinessData, Child, DataPackage, Occurrence, User } from "../domain/types"
+import type {
+  BusinessData,
+  Child,
+  CompletionChange,
+  DataPackage,
+  Occurrence,
+  User,
+} from "../domain/types"
 export function operationId() {
   if (typeof globalThis.crypto?.randomUUID === "function") return crypto.randomUUID()
   const bytes = new Uint8Array(16)
@@ -26,15 +33,15 @@ type CompletionJob = {
   occurrence: Occurrence
   path: string
   body: {
-    expectedRevision: number
+    expectedRevision?: number
     membershipVersion: Child["membershipVersion"]
     operationId: string
     kind: "completion.set"
     payload: { occurrenceKey: string; completed: boolean }
   }
-  active: boolean
+  sending: boolean
   uncertain: boolean
-  promise?: Promise<void>
+  waiter?: { promise: Promise<void>; resolve: () => void; reject: (error: unknown) => void }
 }
 const completionFingerprint = (o: Occurrence) =>
   JSON.stringify([
@@ -93,7 +100,6 @@ export class Runtime {
   private writing = false
   private normalUnconfirmed = false
   private completionJobs = new Map<string, CompletionJob>()
-  private completionRetryTail = Promise.resolve()
   private channel =
     typeof BroadcastChannel === "function" ? new BroadcastChannel("lele-parent-auth") : null
   constructor() {
@@ -118,8 +124,9 @@ export class Runtime {
     this.pending = null
     this.writing = false
     this.normalUnconfirmed = false
+    for (const job of this.completionJobs.values())
+      job.waiter?.reject(new ApiError("页面已切换。", "stale"))
     this.completionJobs.clear()
-    this.completionRetryTail = Promise.resolve()
     this.editing = 0
     this.navigationGuard = null
     this.patch({
@@ -348,6 +355,41 @@ export class Runtime {
       child: { ...this.state.child, membershipVersion: pkg.context.membershipVersion },
     })
   }
+  private applyCompletion(change: CompletionChange) {
+    if (!this.state.child || change.context?.childId !== this.state.child.id)
+      throw new ApiError("孩子上下文已变化。", "stale")
+    if (
+      change.format !== "lele-task-manager-store" ||
+      change.version !== 1 ||
+      !Number.isInteger(change.revision) ||
+      !this.state.data
+    )
+      throw new ApiError("任务完成结果格式不正确。", "corrupt")
+    if (change.revision <= this.state.revision) return
+    if (change.revision !== this.state.revision + 1)
+      throw new ApiError("任务完成结果缺少中间版本，请刷新核对。", "corrupt")
+    const current = this.state.data
+    const { completion, ledger, operation } = change.changes
+    const completions = current.completions.slice()
+    if (completion) {
+      const index = completions.findIndex((item) => item.occurrenceKey === completion.occurrenceKey)
+      if (index < 0) completions.push(completion)
+      else completions[index] = completion
+    }
+    this.patch({
+      data: {
+        ...current,
+        completions,
+        ledger: current.ledger.concat(ledger),
+        operationLog: operation
+          ? [...current.operationLog, operation].slice(-500)
+          : current.operationLog,
+      },
+      revision: change.revision,
+      updatedAt: change.updatedAt,
+      child: { ...this.state.child, membershipVersion: change.context.membershipVersion },
+    })
+  }
   refresh = async (quiet = false) => {
     if (this.state.busy) return
     const id = this.state.child?.id
@@ -431,11 +473,11 @@ export class Runtime {
     const pending = this.pending
     if (this.state.busy) return
     if (!pending) {
-      const jobs = [...this.completionJobs.values()].filter((job) => job.uncertain)
-      const results = await Promise.allSettled(jobs.map((job) => this.startCompletion(job)))
-      const failure = results.find((result) => result.status === "rejected")
-      if (failure?.status === "rejected") throw failure.reason
-      if (jobs.length) this.patch({ message: "任务完成结果已确认，已读取最新数据。" })
+      const head = this.completionJobs.values().next().value
+      if (head?.uncertain) {
+        await this.startCompletion(head)
+        this.patch({ message: "任务完成结果已确认。" })
+      }
       return
     }
     const { expectedRevision, membershipVersion, operationId, ...values } = pending.body as Record<
@@ -448,10 +490,10 @@ export class Runtime {
   private mutationState() {
     const jobs = [...this.completionJobs.values()]
     const completionPending = jobs
-      .filter((job) => job.active)
+      .filter((job) => job.waiter)
       .map((job) => job.occurrence.occurrenceKey)
     this.patch({
-      busy: this.writing || completionPending.length > 0,
+      busy: this.writing || !!jobs[0]?.waiter,
       unconfirmed: this.normalUnconfirmed || jobs.some((job) => job.uncertain),
       completionPending,
     })
@@ -461,10 +503,10 @@ export class Runtime {
     if (!child || child.archived)
       return Promise.reject(new ApiError("该孩子仅可查看。", "forbidden"))
     const existing = this.completionJobs.get(occurrence.occurrenceKey)
-    if (existing?.active) {
+    if (existing?.waiter) {
       if (existing.body.payload.completed !== completed)
         return Promise.reject(new ApiError("该任务正在保存，请稍候。", "busy"))
-      return existing.promise!
+      return existing.waiter.promise
     }
     if (existing) {
       if (existing.body.payload.completed !== completed)
@@ -475,106 +517,90 @@ export class Runtime {
     }
     if (this.writing || this.pending || this.state.unconfirmed)
       return Promise.reject(new ApiError("请先完成或核对上一项保存，再操作任务。", "busy"))
-    const latest =
-      this.state.data &&
-      occurrences(this.state.data, occurrence.date, occurrence.date).find(
-        (item) => item.occurrenceKey === occurrence.occurrenceKey,
-      )
-    if (!latest || completionFingerprint(latest) !== completionFingerprint(occurrence))
-      return Promise.reject(
-        new ApiError("任务已被修改，请核对后重新操作。", "conflict", 409, "task_changed"),
-      )
     const job: CompletionJob = {
       occurrence,
       path: `/api/children/${child.id}/operations`,
       body: {
-        expectedRevision: this.state.revision,
         membershipVersion: child.membershipVersion,
         operationId: operationId(),
         kind: "completion.set",
         payload: { occurrenceKey: occurrence.occurrenceKey, completed },
       },
-      active: false,
+      sending: false,
       uncertain: false,
     }
     this.completionJobs.set(occurrence.occurrenceKey, job)
     return this.startCompletion(job)
   }
   private startCompletion(job: CompletionJob): Promise<void> {
-    if (job.active) return job.promise!
-    const generation = this.generation
-    job.active = true
+    if (job.waiter) return job.waiter.promise
+    let resolve!: () => void
+    let reject!: (error: unknown) => void
+    const promise = new Promise<void>((done, fail) => {
+      resolve = done
+      reject = fail
+    })
+    job.waiter = { promise, resolve, reject }
     this.mutationState()
-    const promise = this.sendCompletion(job, generation)
-      .catch((error: ApiError) => {
-        if (generation !== this.generation) throw new ApiError("页面已切换。", "stale")
-        throw error
-      })
-      .finally(() => {
-        if (generation !== this.generation) return
-        job.active = false
-        job.promise = undefined
-        if (!job.uncertain) this.completionJobs.delete(job.occurrence.occurrenceKey)
-        this.mutationState()
-      })
-    job.promise = promise
+    void this.dispatchCompletion()
     return promise
   }
+  private async dispatchCompletion() {
+    const job = this.completionJobs.values().next().value
+    if (!job?.waiter || job.sending) return
+    const waiter = job.waiter,
+      generation = this.generation
+    job.sending = true
+    try {
+      if (!job.uncertain) {
+        this.checkCompletionIntent(job)
+        job.body.expectedRevision = this.state.revision
+      }
+      await this.sendCompletion(job, generation)
+      waiter.resolve()
+    } catch (error) {
+      waiter.reject(error)
+    } finally {
+      if (generation === this.generation) {
+        job.waiter = undefined
+        job.sending = false
+        if (!job.uncertain) this.completionJobs.delete(job.occurrence.occurrenceKey)
+        this.mutationState()
+        if (!job.uncertain) void this.dispatchCompletion()
+      }
+    }
+  }
+  private checkCompletionIntent(job: CompletionJob) {
+    if (
+      this.state.child?.membershipVersion !== job.body.membershipVersion ||
+      this.state.child.archived
+    )
+      throw new ApiError("管理权限已更新，请重新打开孩子。", "conflict", 409, "membership_changed")
+    const { date, occurrenceKey } = job.occurrence
+    const data = this.state.data
+    const latest =
+      data && occurrences(data, date, date).find((item) => item.occurrenceKey === occurrenceKey)
+    if (!latest || completionFingerprint(latest) !== completionFingerprint(job.occurrence))
+      throw new ApiError("任务已被修改，请核对后重新操作。", "conflict", 409, "task_changed")
+  }
   private async sendCompletion(job: CompletionJob, generation: number) {
-    const send = async () => {
+    for (let attempt = 0; ; attempt++) {
       try {
-        this.load(await this.api<DataPackage>(job.path, "POST", job.body))
+        const result = await this.api<DataPackage | CompletionChange>(job.path, "POST", job.body)
+        if ("data" in result) this.load(result)
+        else this.applyCompletion(result)
         job.uncertain = false
+        return
       } catch (error) {
         const failure = error as ApiError
         job.uncertain = !failure.status || failure.status >= 500
-        throw error
+        if (failure.code !== "revision_conflict" || attempt >= 3) throw error
       }
-    }
-    try {
-      await send()
-      return
-    } catch (error) {
-      if (!(error instanceof ApiError) || error.code !== "revision_conflict") throw error
-      // A confirmed conflict did not apply this operation. Unknown results never
-      // enter this lane until the exact original request has been retried.
-      job.uncertain = false
-    }
-    const previous = this.completionRetryTail
-    let release!: () => void
-    this.completionRetryTail = new Promise<void>((resolve) => {
-      release = resolve
-    })
-    await previous
-    try {
-      for (let attempt = 0; attempt < 3; attempt++) {
-        if (generation !== this.generation) throw new ApiError("页面已切换。", "stale")
-        this.load(await this.api<DataPackage>(job.path.replace(/\/operations$/, "/data")))
-        const data = this.state.data!
-        if (isDone(data, job.occurrence) === job.body.payload.completed) return
-        const latest = occurrences(data, job.occurrence.date, job.occurrence.date).find(
-          (item) => item.occurrenceKey === job.occurrence.occurrenceKey,
-        )
-        if (!latest || completionFingerprint(latest) !== completionFingerprint(job.occurrence))
-          throw new ApiError("任务已被修改，请核对后重新操作。", "conflict", 409, "task_changed")
-        if (this.state.child?.membershipVersion !== job.body.membershipVersion)
-          throw new ApiError(
-            "管理权限已更新，请重新打开孩子。",
-            "conflict",
-            409,
-            "membership_changed",
-          )
-        job.body = { ...job.body, expectedRevision: this.state.revision }
-        try {
-          await send()
-          return
-        } catch (error) {
-          if (!(error instanceof ApiError) || error.code !== "revision_conflict" || attempt === 2)
-            throw error
-        }
-      }
-    } finally {
-      release()
+      if (generation !== this.generation) throw new ApiError("页面已切换。", "stale")
+      this.load(await this.api<DataPackage>(job.path.replace(/\/operations$/, "/data")))
+      this.checkCompletionIntent(job)
+      if (isDone(this.state.data!, job.occurrence) === job.body.payload.completed) return
+      job.body = { ...job.body, expectedRevision: this.state.revision }
     }
   }
   setView = (view: View) => {

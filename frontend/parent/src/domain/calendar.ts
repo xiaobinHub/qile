@@ -156,8 +156,11 @@ export function occurrences(data: BusinessData, from: string, to: string) {
   const byKey = new Map(
     data.series.flatMap((s) => baseOccurrences(s, from, to)).map((o) => [o.occurrenceKey, o]),
   )
+  const seenExceptionKeys = new Set<string>()
   for (const ex of data.exceptions) {
     const key = `${ex.seriesId}@${ex.originalDate}`
+    if (seenExceptionKeys.has(key)) continue
+    seenExceptionKeys.add(key)
     byKey.delete(key)
     if (ex.action === "override" && ex.data && ex.data.date >= from && ex.data.date <= to)
       byKey.set(key, {

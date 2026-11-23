@@ -188,7 +188,10 @@ class ChildBackendTests(unittest.TestCase):
         created=command('task.create',{'task':dict(title='日期持久化',startDate='2026-10-17',startTime='18:00',endTime='18:30',categoryId=category,points=7,note='',recurrence=None)})
         key=created['data']['series'][-1]['id']+'@2026-10-17'
         completed=command('completion.set',{'occurrenceKey':key,'completed':True})
-        ledger_id=completed['data']['ledger'][-1]['id']
+        self.assertNotIn('data',completed)
+        self.assertEqual(completed['changes']['completion']['occurrenceKey'],key)
+        self.assertEqual(len(completed['changes']['ledger']),1)
+        ledger_id=completed['changes']['ledger'][0]['id']
         native=self.service.transaction(lambda cur:cur.execute('SELECT task_date::text,record_json FROM lele.points_ledger WHERE child_id=%s AND id=%s',(child['id'],ledger_id)).fetchone())
         self.assertEqual(native[0],'2026-10-17')
         self.assertNotIn('taskDate',native[1])
@@ -196,9 +199,131 @@ class ChildBackendTests(unittest.TestCase):
         self.service.transaction(lambda cur:cur.execute('UPDATE lele.points_ledger SET task_date=NULL,record_json=record_json || %s WHERE child_id=%s AND id=%s',(Jsonb({'taskDate':'2026-10-15'}),child['id'],ledger_id)))
         self.assertNotIn('taskDate',self.data(child)['data']['ledger'][-1])
         reversed_data=command('completion.set',{'occurrenceKey':key,'completed':False})
-        self.assertNotIn('taskDate',reversed_data['data']['ledger'][0])
-        self.assertEqual(reversed_data['data']['ledger'][-1]['taskDate'],'2026-10-17')
-        self.assertEqual(sum(row['amount'] for row in reversed_data['data']['ledger']),0)
+        self.assertEqual(len(reversed_data['changes']['ledger']),1)
+        self.assertEqual(reversed_data['changes']['ledger'][0]['taskDate'],'2026-10-17')
+        stored=self.data(child)['data']['ledger']
+        self.assertNotIn('taskDate',stored[0])
+        self.assertEqual(stored[-1]['taskDate'],'2026-10-17')
+        self.assertEqual(sum(row['amount'] for row in stored),0)
+
+    def seed_recurring_child(self, *, full_log=False):
+        child = self.child()
+        def seed(cur):
+            record = self.service.store.read(cur, child['id'], locked=True)
+            data = record['data']
+            task = dict(id='repeat', title='阅读', categoryId=data['categories'][0]['id'], points=3,
+                        startDate='2026-10-01', startTime='15:00', endTime='15:30',
+                        recurrence=dict(freq='daily', interval=1, endType='never'))
+            task['revisions'] = [dict(id='first', effectiveFrom='2026-10-01', points=2),
+                                 dict(id='last', effectiveFrom='2026-10-15', points=3)]
+            data['series'] = [task]
+            cancel = dict(seriesId='repeat', originalDate='2026-10-08', action='cancel')
+            override = dict(seriesId='repeat', date='2026-10-09', title='补课', points=11,
+                            startTime='16:00', endTime='16:30', categoryId=task['categoryId'])
+            data['exceptions'] = [{**cancel, 'action':'override', 'data':override},
+                                  {**cancel, 'id':'named'}, dict(cancel), dict(cancel)]
+            if full_log:
+                data['operationLog'] = [dict(id=f'event-{index}', at='2026-10-01T00:00:00Z',
+                                             action='ledger.manual', revision=index) for index in range(500)]
+            self.service.store.replace(cur, child['id'], data)
+        self.service.transaction(seed)
+        return child
+
+    def test_mixed_legacy_exception_rows_keep_physical_identity_and_order(self):
+        child = self.seed_recurring_child()
+        child_id = child['id']
+        def stored(cur):
+            return cur.execute('SELECT row_id,record_json FROM lele.task_exceptions WHERE child_id=%s ORDER BY sort_order', (child_id,)).fetchall()
+        before = self.service.transaction(stored)
+        def move(cur):
+            current = self.service.store.read(cur, child_id, locked=True)
+            data = copy.deepcopy(current['data'])
+            first, named, discarded, retained = data['exceptions']
+            retained['label'] = '保留第二条同日记录'
+            data['exceptions'] = [retained, first, named]
+            self.service.save(cur, child_id, current, data)
+        self.service.transaction(move)
+        after = self.service.transaction(stored)
+        self.assertEqual([row[0] for row in after], [before[index][0] for index in (3, 0, 1)])
+        self.assertEqual(after[0][1], {**before[3][1], 'label':'保留第二条同日记录'})
+        self.assertEqual(after[1:], before[:2])
+        public = self.data(child)['data']['exceptions']
+        self.assertEqual(public, [row[1] for row in after])
+        self.assertNotIn('id', public[0]); self.assertNotIn('row_id', public[0])
+        body = {**self.operation(child), 'kind':'completion.set', 'payload':{'occurrenceKey':'repeat@2026-10-08','completed':True}}
+        response = self.call(self.a, 'POST', f'/api/children/{child_id}/operations', body)
+        self.assertEqual(response.status_code, 409)
+        self.assertIn('取消', response.json()['error'])
+
+    def test_completion_reads_one_occurrence_and_replays_without_duplicate_points(self):
+        from lele_growth.child_store import ChildStore
+        child = self.seed_recurring_child()
+        body = self.operation(child)
+        path = f"/api/children/{child['id']}/operations"
+        def send(revision, day, completed=True):
+            request = {**body, 'operationId':str(uuid.uuid4()), 'expectedRevision':revision, 'kind':'completion.set',
+                       'payload':{'occurrenceKey':'repeat@'+day,'completed':completed}}
+            response = self.call(self.a, 'POST', path, request)
+            self.assertEqual(response.status_code, 200, response.text)
+            return request, response.json()
+        with patch.object(ChildStore, 'read', side_effect=AssertionError('completion loaded the entire child')):
+            original, first = send(body['expectedRevision'], '2026-10-08')
+            self.assertEqual(first['changes']['ledger'][0]['taskDate'], '2026-10-09')
+            self.assertEqual(first['changes']['ledger'][0]['amount'], 11)
+            self.assertEqual(first['changes']['completion']['snapshot']['title'], '补课')
+            _, noop = send(first['revision'], '2026-10-08')
+            self.assertEqual(noop['revision'], first['revision']); self.assertEqual(noop['changes']['ledger'], [])
+            self.assertNotIn('operation', noop['changes'])
+            _, early = send(noop['revision'], '2026-10-10')
+            self.assertEqual(early['changes']['ledger'][0]['amount'], 2)
+            _, later = send(early['revision'], '2026-10-16')
+            self.assertEqual(later['changes']['ledger'][0]['amount'], 3)
+            self.assertTrue(later['changes']['completion']['snapshot']['recurring'])
+            stale = {**original, 'operationId':str(uuid.uuid4())}
+            self.assertEqual(self.call(self.a, 'POST', path, stale).json()['kind'], 'revision_conflict')
+        def remove_series(cur):
+            current = self.service.store.read(cur, child['id'], locked=True)
+            data = {**current['data'], 'series':[], 'exceptions':[]}
+            return self.service.save(cur, child['id'], current, data)['revision']
+        revision = self.service.transaction(remove_series)
+        with patch.object(ChildStore, 'read', side_effect=AssertionError('undo loaded the entire child')):
+            _, undone = send(revision, '2026-10-08', False)
+            _, again = send(undone['revision'], '2026-10-08', False)
+        self.assertEqual(again['revision'], undone['revision']); self.assertEqual(again['changes']['ledger'], [])
+        self.assertEqual(undone['changes']['ledger'][0]['amount'], -11)
+        self.assertEqual(undone['changes']['ledger'][0]['taskDate'], '2026-10-09')
+        replay = self.call(self.a, 'POST', path, original).json()
+        self.assertEqual(replay, self.data(child))
+        self.assertEqual([entry['amount'] for entry in replay['data']['ledger']], [11,2,3,-11])
+        self.assertEqual(len(replay['data']['operationLog']), 4)
+
+    def test_full_log_appends_without_rewriting_retained_rows_for_all_writers(self):
+        from lele_growth.course_sync_host import _commit
+        child = self.seed_recurring_child(full_log=True)
+        child_id = child['id']
+        def versions():
+            return self.service.transaction(lambda cur: cur.execute('SELECT id,sort_order,xmin::text,ctid::text FROM lele.business_operations WHERE child_id=%s ORDER BY sort_order', (child_id,)).fetchall())
+        before = versions()
+        for writer in ('completion.set', 'ledger.manual', 'course.sync'):
+            if writer == 'course.sync':
+                def sync(cur):
+                    current = self.service.store.read(cur, child_id, locked=True)
+                    data = copy.deepcopy(current['data'])
+                    data['series'][0]['title'] = '同步更新'
+                    return _commit(self.service, cur, child_id, current, data, self.au['id'], writer)
+                self.service.transaction(sync)
+            else:
+                body = self.operation(child)
+                if writer == 'completion.set':
+                    body.update(kind=writer, payload={'occurrenceKey':'repeat@2026-10-16','completed':True})
+                response = self.call(self.a, 'POST', f'/api/children/{child_id}/operations', body)
+                self.assertEqual(response.status_code, 200, response.text)
+            after = versions()
+            self.assertEqual(len(after), 500)
+            self.assertEqual(after[:-1], before[1:])
+            self.assertEqual(after[-1][1], before[-1][1]+1)
+            self.assertEqual(self.data(child)['data']['operationLog'][-1]['action'], writer)
+            before = after
 
     def test_admin_built_assets_are_surface_scoped(self):
         parent_page=self.a.get('/')
@@ -611,6 +736,17 @@ class ChildBackendTests(unittest.TestCase):
         def snapshots(cur):
             cur.execute('SELECT snapshot_json FROM lele.data_snapshots WHERE child_id=%s',(child['id'],));return cur.fetchall()
         self.assertEqual(self.service.transaction(snapshots)[0][0],{key:value for key,value in current.items() if key!='context'})
+        before_completion=self.data(child)
+        category=before_completion['data']['categories'][0]['id']
+        created=self.call(self.a,'POST',root+'/operations',{**self.operation(child,before_completion),'kind':'task.create','payload':{'task':dict(title='快照边界',startDate='2026-10-17',startTime='18:00',endTime='18:30',categoryId=category,points=1,note='',recurrence=None)}})
+        self.assertEqual(created.status_code,200,created.text)
+        occurrence=created.json()['data']['series'][-1]['id']+'@2026-10-17'
+        completed=self.call(self.a,'POST',root+'/operations',{**self.operation(child),'kind':'completion.set','payload':{'occurrenceKey':occurrence,'completed':True}})
+        self.assertEqual(completed.status_code,200,completed.text)
+        def snapshot_count(cur):
+            cur.execute('SELECT count(*) FROM lele.data_snapshots WHERE child_id=%s',(child['id'],));return cur.fetchone()[0]
+        self.assertEqual(self.service.transaction(snapshot_count),2)
+        self.assertEqual(self.data(child)['data']['completions'][-1]['occurrenceKey'],occurrence)
 
     def test_received_invitation_shows_associated_child_current_avatar(self):
         child=self.child(); invite=self.invite(child)

@@ -21,7 +21,7 @@ async function call(page, url, method = "GET", body) {
 }
 async function exerciseParallelCompletions({ browser, dad, origin, out, axe, stage }) {
   stage(
-    "parallel completion and confirmed undo: spinners, conflicts, failures, recovery and exact ledger entries",
+    "queued completions and undo with immediate spinners, ordered writes and lost-response recovery",
   )
   for (const [width, height, touch] of [
     [1135, 789, false],
@@ -62,7 +62,9 @@ async function exerciseParallelCompletions({ browser, dad, origin, out, axe, sta
       })
       keys.push(result.data.series.at(-1).id + "@" + date)
     }
-    await operation("completion.set", { occurrenceKey: keys[2], completed: true })
+    const seeded = await operation("completion.set", { occurrenceKey: keys[2], completed: true })
+    assert.equal(seeded.changes.completion.completed, true)
+    assert.equal(seeded.changes.ledger.length, 1)
     const context = await browser.newContext({
       storageState: await dad.context().storageState(),
       viewport: { width, height },
@@ -77,18 +79,22 @@ async function exerciseParallelCompletions({ browser, dad, origin, out, axe, sta
     page.on("pageerror", (error) => errors.push(error.message))
     let phase = "parallel"
     const gates = new Map(keys.map((key) => [key, deferred()]))
-    const allInitial = deferred(),
+    const firstPost = deferred(),
       unknownCaptured = deferred(),
       unknownGates = new Map(keys.slice(0, 2).map((key) => [key, deferred()]))
     let failedOnce = false,
-      dropped = false
+      dropped = false,
+      dataReads = 0
+    page.on("request", (request) => {
+      if (new URL(request.url()).pathname === base + "/data") dataReads++
+    })
     await context.route("**/operations", async (route) => {
       const body = route.request().postDataJSON(),
         key = body.payload.occurrenceKey
       requests.push(structuredClone(body))
       assert.equal(body.kind, "completion.set")
       if (phase === "parallel") {
-        if (new Set(requests.map((r) => r.payload.occurrenceKey)).size === 3) allInitial.resolve()
+        firstPost.resolve()
         await gates.get(key).promise
       }
       if (phase === "failure" && key === keys[3] && !failedOnce) {
@@ -142,6 +148,7 @@ async function exerciseParallelCompletions({ browser, dad, origin, out, axe, sta
     try {
       await page.goto(`${origin}/children/${child.id}`)
       await button(keys[0]).scrollIntoViewIfNeeded()
+      const initialReads = dataReads
       const before = await button(keys[0]).boundingBox()
       await button(keys[0]).evaluate((button) => {
         button.click()
@@ -149,10 +156,17 @@ async function exerciseParallelCompletions({ browser, dad, origin, out, axe, sta
       })
       assert.equal(await button(keys[1]).isEnabled(), true)
       await button(keys[1]).click()
+      await firstPost.promise
+      await page.locator("[data-mode=week]").click()
+      await page.locator("#todayBtn").click()
+      await button(keys[0]).scrollIntoViewIfNeeded()
+      for (const key of keys.slice(0, 2))
+        assert.equal(await button(key).locator("svg.animate-spin").count(), 1)
+      await shot("week-pending")
+      await page.locator("[data-mode=month]").click()
       await button(keys[2]).click()
       await page.locator("#undoTaskCompletionDialog").getByRole("button",{name:"确认撤销",exact:true}).click()
-      await allInitial.promise
-      assert.equal(requests.length, 3, "All three requests are in flight before any response")
+      assert.equal(requests.length, 1)
       for (const key of keys.slice(0, 3)) {
         assert.equal(await button(key).getAttribute("aria-busy"), "true")
         assert.equal(await button(key).locator("svg.animate-spin").count(), 1)
@@ -165,26 +179,19 @@ async function exerciseParallelCompletions({ browser, dad, origin, out, axe, sta
       assert.equal(after.height, before.height)
       await shot("month-pending")
       if (width === 1135 || width === 820) await axe(page, `parallel-month-pending-${width}`)
-      gates.get(keys[2]).resolve()
-      await page.locator("#undoTaskCompletionDialog").waitFor({state:"hidden"})
-      await idle(keys[2],false)
-      await page.locator("[data-mode=week]").click()
-      await page.locator("#todayBtn").click()
-      await button(keys[0]).scrollIntoViewIfNeeded()
-      for (const key of keys.slice(0, 2))
-        assert.equal(await button(key).locator("svg.animate-spin").count(), 1)
-      await shot("week-pending")
-      await page.locator("[data-mode=month]").click()
+      gates.get(keys[0]).resolve()
+      await idle(keys[0], true)
+      assert.equal(await button(keys[1]).getAttribute("aria-busy"), "true")
       gates.get(keys[1]).resolve()
       await idle(keys[1], true)
-      assert.equal(await button(keys[0]).getAttribute("aria-busy"), "true")
-      gates.get(keys[0]).resolve()
+      assert.equal(await button(keys[2]).getAttribute("aria-busy"), "true")
       gates.get(keys[2]).resolve()
-      await Promise.all([idle(keys[0], true), idle(keys[2], false)])
-      assert.ok(
-        responses.filter((r) => r.status === 409).length >= 2,
-        "Concurrent stale revisions really exercised the conflict handler",
-      )
+      await page.locator("#undoTaskCompletionDialog").waitFor({state:"hidden"})
+      await idle(keys[2], false)
+      assert.deepEqual(requests.map((request) => request.payload.occurrenceKey), keys.slice(0, 3))
+      assert.deepEqual(requests.map((request) => request.expectedRevision), [0, 1, 2].map((offset) => seeded.revision + offset))
+      assert.deepEqual(responses.map((response) => response.status), [200, 200, 200])
+      assert.equal(dataReads, initialReads)
       let stored = await call(dad, base + "/data")
       assert.equal(stored.data.ledger.length, 4)
       assert.equal(

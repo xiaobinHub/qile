@@ -911,6 +911,7 @@ async function jobsAndEvents() {
   assert.ok(series)
   const key = series.id + "@" + today
   const completed = await coreOperation("completion.set", { occurrenceKey: key, completed: true })
+  assert.equal(completed.result.changes.completion.occurrenceKey, key)
   ok(await api(dad, `/api/children/${state.childId}/operations`, "POST", completed.body))
   await eventually(
     "core outbox delivered to both real workers",

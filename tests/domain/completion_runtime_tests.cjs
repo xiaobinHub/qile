@@ -25,7 +25,7 @@ const child = { id: "child1", name: "甲", role: "owner", archived: false, membe
 const other = { ...child, id: "child2", name: "乙" }
 const date = "2026-10-24"
 function pkg(revision = 1, completed = [], changed = false) {
-  const series = ["a", "b"].map((id, index) => ({
+  const series = ["a", "b", "c"].map((id, index) => ({
     id,
     title: id,
     startDate: date,
@@ -89,31 +89,38 @@ function setup() {
 const conflict = () =>
   Response.json({ error: "数据已更新", kind: "revision_conflict" }, { status: 409 })
 async function run() {
-  // Actual overlap, same-row deduplication and reverse response order.
   {
     const {
         r,
-        tasks: [a, b],
+        tasks: [a, b, c],
       } = setup(),
       requests = []
     global.fetch = (path, options) =>
       new Promise((resolve) => requests.push({ body: JSON.parse(options.body), resolve }))
     const first = r.setCompletion(a, true),
       duplicate = r.setCompletion(a, true),
-      second = r.setCompletion(b, true)
+      second = r.setCompletion(b, true),
+      third = r.setCompletion(c, true)
     assert.equal(first, duplicate)
     await assert.rejects(() => r.setCompletion(a, false), /正在保存/)
-    assert.equal(requests.length, 2)
-    assert.notEqual(requests[0].body.operationId, requests[1].body.operationId)
-    assert.deepEqual(r.getSnapshot().completionPending, [a.occurrenceKey, b.occurrenceKey])
+    assert.equal(requests.length, 1)
+    assert.deepEqual(r.getSnapshot().completionPending, [a.occurrenceKey, b.occurrenceKey, c.occurrenceKey])
     await assert.rejects(() => r.command("ledger.manual", { amount: 5 }), /正在保存/)
-    requests[1].resolve(Response.json(pkg(3, ["a", "b"])))
-    await second
-    assert.equal(r.getSnapshot().busy, true)
-    assert.deepEqual(r.getSnapshot().completionPending, [a.occurrenceKey])
-    requests[0].resolve(Response.json(pkg(2, ["a"])))
-    await first
-    assert.equal(r.getSnapshot().revision, 3)
+    for (const [index, pending] of [first, second, third].entries()) {
+      assert.equal(requests.length, index + 1)
+      assert.equal(requests[index].body.expectedRevision, index + 1)
+      const id = ["a", "b", "c"][index]
+      const result = pkg(index + 2, [id])
+      const { completions, ledger } = result.data
+      delete result.data
+      result.changes = { completion: completions[0], ledger, operation: {id} }
+      requests[index].resolve(Response.json(result))
+      await pending
+    }
+    assert.equal(new Set(requests.map(({body}) => body.operationId)).size, 3)
+    assert.equal(r.getSnapshot().revision, 4)
+    assert.equal(r.getSnapshot().data.ledger.length, 3)
+    assert.equal(r.getSnapshot().data.operationLog.length, 3)
     assert.equal(isDone(r.getSnapshot().data, b), true)
     assert.equal(r.getSnapshot().busy, false)
   }
@@ -121,20 +128,19 @@ async function run() {
   {
     const {
         r,
-        tasks: [a, b],
+        tasks: [, b],
       } = setup(),
       posts = []
     global.fetch = async (path, options) => {
       if (options.method === "GET") return Response.json(pkg(2, ["a"]))
       const body = JSON.parse(options.body)
       posts.push(body)
-      if (body.payload.occurrenceKey === a.occurrenceKey) return Response.json(pkg(2, ["a"]))
       return body.expectedRevision === 1 ? conflict() : Response.json(pkg(3, ["a", "b"]))
     }
-    await Promise.all([r.setCompletion(a, true), r.setCompletion(b, true)])
-    assert.equal(posts.length, 3)
-    assert.equal(posts[1].operationId, posts[2].operationId)
-    assert.equal(posts[2].expectedRevision, 2)
+    await r.setCompletion(b, true)
+    assert.equal(posts.length, 2)
+    assert.equal(posts[0].operationId, posts[1].operationId)
+    assert.equal(posts[1].expectedRevision, 2)
     assert.equal(r.getSnapshot().revision, 3)
     assert.equal(r.getSnapshot().unconfirmed, false)
   }
@@ -155,32 +161,28 @@ async function run() {
     assert.equal(r.getSnapshot().unconfirmed, false)
     assert.deepEqual(r.getSnapshot().completionPending, [])
   }
-  // One failed response cannot be cleared by another operation succeeding.
-  // Refresh is read-only, navigation is guarded, and retry uses the exact old body.
   {
     const {
         r,
         tasks: [a, b],
       } = setup(),
       posts = []
-    let resolveB
     global.fetch = async (path, options) => {
-      if (options.method === "GET") return Response.json(pkg(3, ["a", "b"]))
+      if (options.method === "GET") return Response.json(pkg(2, ["a"]))
       const body = JSON.parse(options.body)
       posts.push(body)
       if (body.payload.occurrenceKey === a.occurrenceKey) throw Error("committed response lost")
-      return new Promise((resolve) => (resolveB = resolve))
+      assert.fail("Queued request sent before recovery")
     }
     const first = r.setCompletion(a, true),
       second = r.setCompletion(b, true)
     await assert.rejects(() => first, /未确认/)
     assert.equal(r.getSnapshot().unconfirmed, true)
-    resolveB(Response.json(pkg(3, ["a", "b"])))
-    await second
-    assert.equal(r.getSnapshot().unconfirmed, true)
+    assert.equal(r.getSnapshot().busy, false)
+    assert.deepEqual(r.getSnapshot().completionPending, [b.occurrenceKey])
     await r.refresh()
     assert.match(r.getSnapshot().message, /原操作编号仍保留/)
-    assert.equal(posts.length, 2)
+    assert.equal(posts.length, 1)
     await assert.rejects(() => r.selectChild(other.id), /刷新核对/)
     await r.enter()
     assert.equal(r.getSnapshot().child.id, child.id)
@@ -188,14 +190,15 @@ async function run() {
     await assert.rejects(() => r.command("ledger.manual", { amount: 5 }), /尚未确认/)
     global.fetch = async (path, options) => {
       posts.push(JSON.parse(options.body))
-      return Response.json(pkg(3, ["a", "b"]))
+      return Response.json(posts.length === 2 ? pkg(2, ["a"]) : pkg(3, ["a", "b"]))
     }
     await r.retryPending()
-    assert.deepEqual(posts[0], posts[2])
+    await second
+    assert.deepEqual(posts[0], posts[1])
+    assert.equal(posts[2].expectedRevision, 2)
     assert.equal(r.getSnapshot().unconfirmed, false)
     assert.equal(r.getSnapshot().data.ledger.length, 2)
   }
-  // Several lost responses retain distinct original requests for concurrent recovery.
   {
     const {
         r,
@@ -206,16 +209,21 @@ async function run() {
       posts.push(JSON.parse(options.body))
       throw Error("lost")
     }
-    await Promise.allSettled([r.setCompletion(a, true), r.setCompletion(b, true)])
+    const first = r.setCompletion(a, true)
+    const second = r.setCompletion(b, true)
+    await assert.rejects(first, /未确认/)
     assert.equal(r.getSnapshot().unconfirmed, true)
     global.fetch = async (path, options) => {
-      posts.push(JSON.parse(options.body))
-      return Response.json(pkg(3, ["a", "b"]))
+      if (options.method === "GET") return Response.json(pkg(2, [], true))
+      const body = JSON.parse(options.body)
+      posts.push(body)
+      return body.expectedRevision === 1 ? conflict() : Response.json(pkg(3, ["a"], true))
     }
     await r.retryPending()
-    assert.equal(posts.length, 4)
-    assert.deepEqual(posts[0], posts[2])
-    assert.deepEqual(posts[1], posts[3])
+    await assert.rejects(second, (error) => error.code === "task_changed")
+    assert.equal(posts.length, 3)
+    assert.deepEqual(posts[0], posts[1])
+    assert.deepEqual(posts[2], {...posts[0], expectedRevision: 2})
     assert.equal(r.getSnapshot().unconfirmed, false)
   }
   // Membership changes and HTTP errors do not silently retry.
@@ -258,13 +266,11 @@ async function run() {
     let resolve
     global.fetch = async () => new Promise((done) => (resolve = done))
     const pending = r.setCompletion(a, true)
+    const queued = r.setCompletion(occurrences(r.getSnapshot().data, date, date)[1], true)
     r.reset()
     r.patch({ child: other, data: pkg().data, loading: false })
     resolve(Response.json(pkg(2, ["a"])))
-    await assert.rejects(
-      () => pending,
-      (e) => e.kind === "stale",
-    )
+    await Promise.all([pending, queued].map((job) => assert.rejects(job, (error) => error.kind === "stale")))
     assert.equal(r.getSnapshot().child.id, other.id)
     assert.equal(r.getSnapshot().unconfirmed, false)
     assert.deepEqual(r.getSnapshot().completionPending, [])
@@ -286,14 +292,14 @@ async function run() {
     JSON.stringify({
       passed: true,
       checks: [
-        "parallel requests",
+        "three immediate spinners, FIFO posts",
         "same-task deduplication",
-        "reverse-order replies",
+        "incremental ledger and operation log",
         "confirmed-conflict retry",
         "changed-task guard",
         "mixed failure retention",
         "original-body recovery",
-        "multiple uncertain operations",
+        "queued task rechecked after recovery",
         "membership guard",
         "desired-state no-op",
         "stale child response",

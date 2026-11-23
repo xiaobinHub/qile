@@ -124,3 +124,15 @@ export type DataPackage = {
   context: { childId: string; membershipVersion: string }
   data: BusinessData
 }
+export type CompletionChange = {
+  format: string
+  version: number
+  revision: number
+  updatedAt: string | null
+  context: { childId: string; membershipVersion: string }
+  changes: {
+    completion: BusinessData["completions"][number] | null
+    ledger: Ledger[]
+    operation?: BusinessData["operationLog"][number]
+  }
+}

@@ -37,6 +37,7 @@ import {
   Modal,
   Confirm,
   ErrorText,
+  SaveResolution,
   useAsync,
 } from "./ui"
 import { useToast } from "@shared/components/ui/toast"
@@ -428,7 +429,9 @@ export function CalendarPage({
           label="确认撤销"
           onClose={() => setUndoOccurrence(null)}
           work={() => runtime.setCompletion(undoOccurrence, false)}
-        />
+        >
+          {snapshot.unconfirmed && <SaveResolution />}
+        </Confirm>
       )}
     </section>
   )

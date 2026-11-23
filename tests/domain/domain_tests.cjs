@@ -35,3 +35,16 @@ assert.deepEqual(d.occurrences(make([resumed]),'2026-10-01','2026-10-10').map(o=
 const singleThenRepeated={...resumed,revisions:[{...stopped.revisions[0],recurrence:null},resumed.revisions[1]]};
 assert.deepEqual(d.occurrences(make([singleThenRepeated]),'2026-10-01','2026-10-10').map(o=>o.date),['2026-10-01','2026-10-05','2026-10-06']);
 console.log('Independent recurrence history, stop/resume, completion reversal and print expectations passed.');
+
+const exceptionHistory = make([task]);
+const original = d.makeOcc(task, task.startDate);
+const movedDate = d.addDays(original.date, 1);
+const cancel = {id: 'named', seriesId: task.id, originalDate: original.date, action: 'cancel'};
+const override = {seriesId: task.id, originalDate: original.date, action: 'override',
+  data: {...original, date: movedDate, title: '补课', points: 11}};
+exceptionHistory.exceptions = [override, cancel];
+assert.deepEqual(d.occurrences(exceptionHistory, original.date, original.date), []);
+assert.deepEqual(d.occurrences(exceptionHistory, movedDate, movedDate), [{...override.data, recurring: true}]);
+exceptionHistory.exceptions = [cancel, override];
+assert.deepEqual(d.occurrences(exceptionHistory, original.date, movedDate), []);
+console.log('Legacy same-day exceptions use the first stored record for both rescheduling and cancellation.');

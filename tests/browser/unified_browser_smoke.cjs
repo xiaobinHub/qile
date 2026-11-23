@@ -75,6 +75,11 @@ async function deleteChild(page,id,{failure=false}={}){await settings(page,'open
  await require('./account_avatar_acceptance.cjs').exerciseAccountAvatar({dad,api,axe,stage,out});
  await dad.locator('#editAccountNickname').click();await dad.locator('#profileNickname').fill('取消昵称');await dad.locator('#accountNicknameDialog').getByRole('button',{name:'取消',exact:true}).click();await dad.locator('#accountNicknameDialog').waitFor({state:'hidden'});assert.equal((await api(dad,'/api/auth/me')).user.nickname,'测试爸爸');
  await dad.locator('#editAccountNickname').click();await dad.locator('#profileNickname').fill('测试爸爸更新');await dad.route('**/api/account/profile',route=>route.fulfill({status:503,json:{error:'昵称暂时无法保存'}}),{times:1});await dad.locator('#profileForm button[type="submit"]').click();await dad.locator('#profileError').getByText('昵称暂时无法保存',{exact:true}).waitFor();assert.equal(await dad.locator('#profileNickname').inputValue(),'测试爸爸更新');await axe(dad,'account-nickname-error');await dad.locator('#profileForm button[type="submit"]').click();assert.equal((await api(dad,'/api/auth/me')).user.nickname,'测试爸爸更新');await dad.locator('#accountNicknameDialog').waitFor({state:'hidden'});await dad.waitForFunction(()=>document.activeElement?.id==='editAccountNickname');assert.equal(await dad.locator('.account-profile-name strong').innerText(),'测试爸爸更新');await dad.locator('#backToOnboarding').click();await dad.locator('#newChildName').fill('测试哥哥');await dad.locator('#createChildForm').getByRole('radio',{name:'男孩',exact:true}).check();await dad.locator('#createChildForm button[type="submit"]').click();await dad.locator('#calendarTitle').waitFor();const firstId=new URL(dad.url()).pathname.split('/').at(-1);assert.ok(firstId);await axe(dad,'calendar');
+ if(process.argv.includes('--completion-only')){
+   await require('./parallel_completion_acceptance.cjs').exerciseParallelCompletions({browser,dad,origin,out,axe,stage});
+   assert.deepEqual(errors,[]);assert.deepEqual(a11y.flatMap(a=>a.violations),[]);
+   console.log('Completion and undo checks passed on four viewports');return;
+ }
  if(process.argv.includes('--quick-edit-only')){
    await require('./calendar_quick_edit_acceptance.cjs').exerciseQuickEdit({browser,dad,origin,firstId,out,api,data,axe,stage});
    assert.deepEqual(errors,[]);assert.deepEqual(a11y.flatMap(a=>a.violations),[]);

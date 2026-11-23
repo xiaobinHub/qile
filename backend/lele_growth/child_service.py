@@ -564,15 +564,42 @@ class ChildService:
         self.audit(cur,user[0],'invitation.'+answer,child_id,{'invitationId':invite})
         return {'ok':True,'childId':child_id}
 
-    def save(self,cur,child,current,data):
+    def save(self,cur,child,current,data,*,snapshot=True):
         self.media.require_external(data)
         self.media.require_external(current)
         validate_data(data)
         updated={**current,'data':data,'revision':current['revision']+1,'updatedAt':now_iso()}
-        cur.execute('INSERT INTO lele.data_snapshots(child_id,revision,captured_at,snapshot_json,content_sha256) VALUES(%s,%s,now(),%s,%s)',(child,current['revision'],Jsonb(current),canonical_sha256(current)))
-        self.store.replace(cur,child,data); self.store.metadata(cur,child,updated)
-        cur.execute('DELETE FROM lele.data_snapshots WHERE child_id=%s AND id NOT IN (SELECT id FROM lele.data_snapshots WHERE child_id=%s ORDER BY captured_at DESC,id DESC LIMIT %s)',(child,child,BACKUP_LIMIT))
+        if snapshot:
+            cur.execute('INSERT INTO lele.data_snapshots(child_id,revision,captured_at,snapshot_json,content_sha256) VALUES(%s,%s,now(),%s,%s)',(child,current['revision'],Jsonb(current),canonical_sha256(current)))
+        self.store.apply_changes(cur,child,current['data'],data); self.store.metadata(cur,child,updated)
+        if snapshot:
+            cur.execute('DELETE FROM lele.data_snapshots WHERE child_id=%s AND id NOT IN (SELECT id FROM lele.data_snapshots WHERE child_id=%s ORDER BY captured_at DESC,id DESC LIMIT %s)',(child,child,BACKUP_LIMIT))
         return updated
+
+    def complete_task(self, cur, child_id, actor_id, body):
+        from lele_growth.business_operations import operation_clock, operation_event
+        result = self.store.completion_header(cur, child_id)
+        require(result['revision'] == body['expectedRevision'], 409, '数据已更新，请刷新后重试。', 'revision_conflict')
+        updated_at = now_iso()
+        stamp, today = operation_clock(updated_at)
+        completion, ledger = self.store.change_completion(cur, child_id, body['payload'], stamp, today)
+        changes = {'completion': completion, 'ledger': ledger}
+        if ledger:
+            revision = result['revision'] + 1
+            event = operation_event(body['kind'], body['payload'], actor_id, revision, stamp)
+            self.store.append_event(cur, child_id, event)
+            changes['operation'] = event
+            cur.execute('UPDATE lele.app_metadata SET revision=%s,updated_at=%s,updated_at_raw=%s WHERE child_id=%s AND id=1',
+                        (revision, updated_at, updated_at, child_id))
+            result.update(revision=revision, updatedAt=updated_at)
+            if completion['completed']:
+                cur.execute("SELECT to_regclass('lele.plugin_event_outbox') IS NOT NULL")
+                if cur.fetchone()[0]:
+                    from lele_growth.plugins.events import emit_task_completed
+                    snapshot = completion['snapshot']
+                    reference = {field: snapshot[field] for field in ('seriesId', 'date', 'title', 'points') if field in snapshot}
+                    emit_task_completed(cur, child_id, revision, {'occurrenceKey': completion['occurrenceKey'], **reference}, body['operationId'])
+        return {**result, 'changes': changes}
 
     def operation(self,cur,user,child_id,body):
         from lele_growth.business_operations import apply_operation
@@ -585,31 +612,24 @@ class ChildService:
         request_hash=canonical_sha256(body)
         cur.execute('SELECT actor_id,membership_version,payload_sha256 FROM lele.idempotency_records WHERE child_id=%s AND operation_id=%s',(child_id,body['operationId']))
         previous=cur.fetchone()
-        current=self.store.read(cur,child_id,locked=True)
+        context=dict(childId=child_id,membershipVersion=child[4])
         if previous:
             require(previous==(user[0],child[4],request_hash),409,'操作编号已被其他请求使用。','operation_conflict')
-            return {**current,'context':dict(childId=child_id,membershipVersion=child[4])}
-        require(current['revision']==body['expectedRevision'],409,'数据已更新，请刷新后重试。','revision_conflict')
+            return {**self.store.read(cur,child_id,locked=True),'context':context}
         require(isinstance(body['kind'],str) and isinstance(body['payload'],dict))
-        data=apply_operation(copy.deepcopy(current['data']),body['kind'],body['payload'],actor_id=user[0],revision=current['revision']+1,now=now_iso())
-        stored_name=data['settings'].get('childName')
-        require(isinstance(stored_name,str) and stored_name.strip()==child[1],400,'孩子名称请通过资料设置修改。')
-        self.media.attach(cur,user,child_id,data)
-        updated=self.save(cur,child_id,current,data)
-        if body['kind']=='completion.set' and body['payload'].get('completed') is True:
-            key=body['payload'].get('occurrenceKey')
-            previous_completion=next((item for item in current['data']['completions'] if item['occurrenceKey']==key),None)
-            completed=next((item for item in data['completions'] if item['occurrenceKey']==key and item['completed']),None)
-            if completed is not None and not (previous_completion and previous_completion['completed']):
-                cur.execute("SELECT to_regclass('lele.plugin_event_outbox') IS NOT NULL")
-                if cur.fetchone()[0]:
-                    from lele_growth.plugins.events import emit_task_completed
-                    snapshot=completed['snapshot']
-                    event={'occurrenceKey':key,**{field:snapshot[field] for field in ('seriesId','date','title','points') if field in snapshot}}
-                    emit_task_completed(cur,child_id,updated['revision'],event,body['operationId'])
+        if body['kind']=='completion.set':
+            updated=self.complete_task(cur,child_id,user[0],body)
+        else:
+            current=self.store.read(cur,child_id,locked=True)
+            require(current['revision']==body['expectedRevision'],409,'数据已更新，请刷新后重试。','revision_conflict')
+            data=apply_operation(current['data'],body['kind'],body['payload'],actor_id=user[0],revision=current['revision']+1,now=now_iso())
+            stored_name=data['settings'].get('childName')
+            require(isinstance(stored_name,str) and stored_name.strip()==child[1],400,'孩子名称请通过资料设置修改。')
+            self.media.attach(cur,user,child_id,data)
+            updated=self.save(cur,child_id,current,data) if data!=current['data'] else current
         cur.execute('INSERT INTO lele.idempotency_records(child_id,operation_id,actor_id,membership_version,payload_sha256,result_revision) VALUES(%s,%s,%s,%s,%s,%s)',(child_id,body['operationId'],user[0],child[4],request_hash,updated['revision']))
         self.audit(cur,user[0],'operation.'+body['kind'],child_id,{'operationId':body['operationId'],'revision':updated['revision']})
-        return {**updated,'context':dict(childId=child_id,membershipVersion=child[4])}
+        return {**updated,'context':context}
 
 
 def initialize(config_path, *, upgrade_only=False):

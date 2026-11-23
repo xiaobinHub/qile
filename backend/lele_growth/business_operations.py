@@ -145,31 +145,44 @@ def expand(task, start, end):
     return result
 
 
-def occurrence(data, key):
+def occurrence_parts(key):
     if not isinstance(key, str) or "@" not in key:
         fail("任务发生标识不正确。")
     sid, original = key.rsplit("@", 1)
     try:
-        date.fromisoformat(original)
+        if date.fromisoformat(original).isoformat() != original:
+            fail("任务日期不正确。")
     except ValueError:
         fail("任务日期不正确。")
+    return sid, original
+
+
+def resolve_occurrence(series, original, exception, effective, multiple_revisions):
+    if exception:
+        if exception["action"] == "cancel":
+            fail("该次任务已取消。", HTTPStatus.CONFLICT)
+        sid = series["id"]
+        return {**exception["data"], "seriesId": sid, "originalDate": original, "occurrenceKey": f"{sid}@{original}", "recurring": True}
+    if effective:
+        task = {**series, **effective, "id": series["id"], "startDate": effective["effectiveFrom"]}
+        matches = expand(task, original, original)
+        if matches:
+            if multiple_revisions:
+                matches[0]["recurring"] = True
+            return matches[0]
+    fail("该日期没有此任务，请刷新后重试。", HTTPStatus.CONFLICT)
+
+
+def occurrence(data, key):
+    sid, original = occurrence_parts(key)
     completed = next((c for c in data["completions"] if c["occurrenceKey"] == key and c["completed"]), None)
     if completed:
         return {**completed["snapshot"], "occurrenceKey": key}
     series = find(data["series"], sid)
     ex = next((e for e in data["exceptions"] if e["seriesId"] == sid and e["originalDate"] == original), None)
-    if ex:
-        if ex["action"] == "cancel":
-            fail("该次任务已取消。", HTTPStatus.CONFLICT)
-        return {**ex["data"], "seriesId": sid, "originalDate": original, "occurrenceKey": key, "recurring": True}
-    candidates = []
     revs = revisions(series)
-    for i, rev in enumerate(revs):
-        if rev["effectiveFrom"] <= original and (i + 1 == len(revs) or original < revs[i + 1]["effectiveFrom"]):
-            candidates.extend(expand({**series, **rev, "id": series["id"], "startDate": rev["effectiveFrom"]}, original, original))
-    if not candidates:
-        fail("该日期没有此任务，请刷新后重试。", HTTPStatus.CONFLICT)
-    return candidates[0]
+    effective = next((rev for rev in reversed(revs) if rev["effectiveFrom"] <= original), None)
+    return resolve_occurrence(series, original, ex, effective, len(revs) > 1)
 
 
 def sync_series(series):
@@ -188,8 +201,35 @@ def reject_synced(data, key):
         return
     series = next((item for item in data["series"] if item.get("id") == key.rsplit("@", 1)[0]), None)
     completion = next((item for item in data["completions"] if item.get("occurrenceKey") == key), None)
+    require_manual_task(series, completion)
+
+
+def require_manual_task(series, completion):
     if synced_course(series) or synced_course((completion or {}).get("snapshot")):
         fail("美森课程由约课插件同步，不能手动修改、删除或完成。", HTTPStatus.CONFLICT)
+
+
+def completion_key(payload):
+    fields(payload, ("occurrenceKey", "completed"), ("occurrenceKey", "completed"))
+    if type(payload["completed"]) is not bool:
+        fail("完成状态不正确。")
+    key = payload["occurrenceKey"]
+    if not isinstance(key, str) or "\x00" in key:
+        fail("任务发生标识不正确。")
+    return key
+
+
+def completion_change(key, completed, existing, series, resolve, stamp, today):
+    require_manual_task(series, existing)
+    if bool(existing and existing["completed"]) == completed:
+        return existing, None
+    snapshot = resolve() if completed else existing["snapshot"]
+    completion = {**(existing or {}), "occurrenceKey": key, "completed": completed, "snapshot": snapshot, "updatedAt": stamp}
+    entry = {"id": uid(), "kind": "task-complete" if completed else "task-reversal",
+             "amount": snapshot["points"] * (1 if completed else -1), "date": today, "createdAt": stamp,
+             "occurrenceKey": key, "taskDate": snapshot["date"], "source": snapshot["title"],
+             "reason": "完成任务" if completed else "撤销任务完成"}
+    return completion, entry
 
 
 def referenced(data, cid):
@@ -319,26 +359,16 @@ def _apply(data, kind, p, stamp, today):
             sync_series(series)
             series["updatedAt"] = stamp
     elif kind == "completion.set":
-        fields(p, ("occurrenceKey", "completed"), ("occurrenceKey", "completed"))
-        if type(p["completed"]) is not bool:
-            fail("完成状态不正确。")
-        reject_synced(data, p["occurrenceKey"])
-        c = next((c for c in data["completions"] if c["occurrenceKey"] == p["occurrenceKey"]), None)
-        if bool(c and c["completed"]) == p["completed"]:
-            return
-        if p["completed"]:
-            snap = occurrence(data, p["occurrenceKey"])
-            if c is None:
-                c = {"occurrenceKey": p["occurrenceKey"]}
-                data["completions"].append(c)
-            c.update(completed=True, snapshot=snap, updatedAt=stamp)
-        else:
-            c.update(completed=False, updatedAt=stamp)
-        snap = c["snapshot"]
-        data["ledger"].append({"id": uid(), "kind": "task-complete" if p["completed"] else "task-reversal",
-                               "amount": snap["points"] * (1 if p["completed"] else -1), "date": today,
-                               "createdAt": stamp, "occurrenceKey": p["occurrenceKey"], "taskDate": snap["date"], "source": snap["title"],
-                               "reason": "完成任务" if p["completed"] else "撤销任务完成"})
+        key = completion_key(p)
+        existing = next((item for item in data["completions"] if item["occurrenceKey"] == key), None)
+        series = next((item for item in data["series"] if item["id"] == key.rpartition("@")[0]), None)
+        completion, entry = completion_change(key, p["completed"], existing, series, lambda: occurrence(data, key), stamp, today)
+        if entry is not None:
+            if existing is None:
+                data["completions"].append(completion)
+            else:
+                existing.update(completion)
+            data["ledger"].append(entry)
     elif kind == "ledger.manual":
         fields(p, ("amount", "reason", "date"), ("amount", "reason", "date"))
         if type(p["amount"]) is not int or p["amount"] == 0:
@@ -437,26 +467,35 @@ def _apply(data, kind, p, stamp, today):
         fail("不支持的业务操作。")
 
 
+def operation_clock(now):
+    moment = datetime.fromisoformat(now.replace("Z", "+00:00")) if isinstance(now, str) else now
+    if not isinstance(moment, datetime) or moment.tzinfo is None:
+        raise ValueError("timezone-aware operation clock required")
+    return moment.isoformat(timespec="milliseconds"), moment.astimezone(ZoneInfo("Asia/Shanghai")).date().isoformat()
+
+
+def operation_event(kind, payload, actor_id, revision, stamp):
+    event = {"id": uid(), "at": stamp, "action": kind, "revision": revision, "actorUserId": str(actor_id)}
+    if "occurrenceKey" in payload:
+        event.update(occurrenceKey=payload["occurrenceKey"], seriesId=payload["occurrenceKey"].rsplit("@", 1)[0])
+    if kind == "ledger.manual":
+        event.update(amount=payload["amount"], reason=payload["reason"])
+    if "scope" in payload:
+        event["scope"] = payload["scope"]
+    return event
+
+
 def apply_operation(data, kind, payload, *, actor_id, revision, now):
     """Return a new validated object; never mutate input on success or failure."""
     if not isinstance(kind, str) or not isinstance(payload, dict):
         fail("业务操作格式不正确。")
-    moment = datetime.fromisoformat(now.replace("Z", "+00:00")) if isinstance(now, str) else now
-    if not isinstance(moment, datetime) or moment.tzinfo is None:
-        raise ValueError("timezone-aware operation clock required")
-    stamp = moment.isoformat(timespec="milliseconds")
+    stamp, today = operation_clock(now)
     result = copy.deepcopy(data)
     try:
-        _apply(result, kind, payload, stamp, moment.astimezone(ZoneInfo("Asia/Shanghai")).date().isoformat())
+        _apply(result, kind, payload, stamp, today)
         if result == data:
             return result
-        event = {"id": uid(), "at": stamp, "action": kind, "revision": revision, "actorUserId": str(actor_id)}
-        if "occurrenceKey" in payload:
-            event.update(occurrenceKey=payload["occurrenceKey"], seriesId=payload["occurrenceKey"].rsplit("@", 1)[0])
-        if kind == "ledger.manual":
-            event.update(amount=payload["amount"], reason=payload["reason"])
-        if "scope" in payload:
-            event["scope"] = payload["scope"]
+        event = operation_event(kind, payload, actor_id, revision, stamp)
         result["operationLog"] = (result.get("operationLog", []) + [event])[-500:]
         validate_data(result)
         return result
